@@ -1,0 +1,22 @@
+/* crux · spacing, radii, elevation
+   4px base grid. Hover lift is violet-tinted — a small but
+   consistent signature.
+*/
+
+:root {
+  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px;
+  --space-5:20px; --space-6:24px; --space-7:28px;
+
+  --radius-sm:6px; --radius:10px; --radius-lg:12px; --radius-xl:14px; --radius-pill:999px;
+
+  --shadow-card:  0 4px 18px rgba(0,0,0,.04);
+  --shadow-hover: 0 2px 12px rgba(124,58,237,.08);
+  --ring:         0 0 0 3px var(--crux-bg);
+
+  --speed:.15s;
+}
+
+[data-theme="dark"] {
+  --shadow-card:  0 4px 18px rgba(0,0,0,.3);
+  --shadow-hover: 0 2px 12px rgba(167,139,250,.12);
+}

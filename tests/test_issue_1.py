@@ -1,10 +1,7 @@
 """Tests for issue #1: Scaffold FastAPI backend and configure Render deploy."""
-import os
 import re
 from pathlib import Path
 
-import pytest
-from fastapi.testclient import TestClient
 
 REPO_ROOT = Path(__file__).parent.parent
 
@@ -67,7 +64,7 @@ def test_requirements_txt_exists():
 
 def test_requirements_txt_pins_exact_versions():
     content = (REPO_ROOT / "requirements.txt").read_text()
-    lines = [l.strip() for l in content.splitlines() if l.strip() and not l.startswith("#")]
+    lines = [ln.strip() for ln in content.splitlines() if ln.strip() and not ln.startswith("#")]
     for line in lines:
         assert "==" in line, f"Unpinned dependency: {line}"
 

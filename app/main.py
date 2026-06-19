@@ -1,5 +1,8 @@
+from pathlib import Path
+
 from fastapi import FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.auth import (
@@ -10,6 +13,9 @@ from app.auth import (
     verify_session_cookie,
 )
 from app.config import AUTH_SECRET, ENV
+
+_STATIC_DIR = Path(__file__).parent / "static"
+_INDEX_HTML = _STATIC_DIR / "index.html"
 
 _LOGIN_PAGE = """\
 <!DOCTYPE html>
@@ -41,6 +47,8 @@ class _AuthMiddleware(BaseHTTPMiddleware):
 
 app = FastAPI(title="crux", version="0.1.0")
 app.add_middleware(_AuthMiddleware)
+
+app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
 
 @app.get("/healthz")
@@ -90,5 +98,20 @@ def logout():
 
 
 @app.get("/")
-def index(request: Request):
-    return HTMLResponse("<html><body><h1>Crux</h1><a href='/logout'>Logout</a></body></html>")
+def index():
+    return FileResponse(_INDEX_HTML)
+
+
+@app.get("/cases")
+def cases():
+    return FileResponse(_INDEX_HTML)
+
+
+@app.get("/probes")
+def probes():
+    return FileResponse(_INDEX_HTML)
+
+
+@app.get("/verdicts")
+def verdicts():
+    return FileResponse(_INDEX_HTML)

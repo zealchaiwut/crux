@@ -1,0 +1,10 @@
+/* crux · styles.css
+   Single entry point. @import chain only — no rules live here.
+   Order: fonts → colors → typography → spacing → base → primitives
+*/
+@import url('./styles/tokens/fonts.css');
+@import url('./styles/tokens/colors.css');
+@import url('./styles/tokens/typography.css');
+@import url('./styles/tokens/spacing.css');
+@import url('./styles/base.css');
+@import url('./styles/primitives.css');
