@@ -217,7 +217,13 @@ function App() {
   } else if (route === 'probes') {
     main = <PlaceholderScreen title="Probes" />;
   } else if (route === 'verdicts') {
-    main = <PlaceholderScreen title="Verdicts" />;
+    main = (
+      <VerdictScreen
+        onOpenCase={handleCaseOpened}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+      />
+    );
   } else {
     main = (
       <CasesScreen
