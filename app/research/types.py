@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+from typing import Literal, Protocol, runtime_checkable
+
+SourceKind = Literal["book", "article", "youtube"]
 
 EMPTY_CONTENT_THRESHOLD = 100
 
@@ -34,6 +36,27 @@ class ArticleDocument:
     url: str
     title: str
     text: str
+
+
+@dataclass
+class SourceDocument:
+    """A fetched document with its metadata, ready for claim extraction."""
+
+    kind: SourceKind
+    title: str
+    url: str
+    text: str
+
+
+@dataclass
+class Source:
+    """A single evidence row matching the `source` DB table schema."""
+
+    kind: SourceKind
+    title: str
+    url: str
+    claim: str
+    citation: str
 
 
 class FetchTimeoutError(Exception):
