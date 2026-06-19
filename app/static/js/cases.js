@@ -613,6 +613,99 @@ async function _postBakeOff(caseId) {
   return resp.json();
 }
 
+async function _postProbe(caseId) {
+  const resp = await fetch(`/api/cases/${caseId}/probe`, { method: 'POST' });
+  if (!resp.ok) {
+    const data = await resp.json().catch(() => ({}));
+    throw new Error(data.detail || `API error ${resp.status}`);
+  }
+  return resp.json();
+}
+
+// ---------------------------------------------------------------------------
+// ProbeCard — renders the probe design (type, targetMetric, cost, time, note)
+// ---------------------------------------------------------------------------
+
+function ProbeCard({ probe, loading, error }) {
+  const TYPE_LABELS = {
+    'measurement':           'Measurement',
+    'lab-test':              'Lab test',
+    'behaviour-experiment':  'Behaviour experiment',
+    'prototype':             'Prototype',
+  };
+
+  if (loading) {
+    return (
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 'var(--space-5)', marginBottom: 'var(--space-6)', textAlign: 'center', color: 'var(--text-muted)' }}>
+        <i className="ti ti-loader-2 crux-spin" aria-hidden="true" style={{ fontSize: 20, color: 'var(--crux)' }}></i>
+        <p style={{ fontSize: 'var(--text-base)', marginTop: 'var(--space-2)' }}>Designing probe…</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--red)', borderRadius: 'var(--radius)', padding: 'var(--space-5)', marginBottom: 'var(--space-6)' }}>
+        <p role="alert" style={{ color: 'var(--red)', fontSize: 'var(--text-sm)' }}>{error}</p>
+      </div>
+    );
+  }
+
+  if (!probe) {
+    return (
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 'var(--space-5)', marginBottom: 'var(--space-6)', textAlign: 'center', color: 'var(--text-muted)' }}>
+        <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 'var(--space-2)' }}>
+          STAGE 4 — PROBE
+        </div>
+        <p style={{ fontSize: 'var(--text-base)' }}>No probe designed yet.</p>
+      </div>
+    );
+  }
+
+  const isPrototype = probe.type === 'prototype';
+  const typeLabel = TYPE_LABELS[probe.type] || probe.type;
+
+  return (
+    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 'var(--space-5)', marginBottom: 'var(--space-6)' }}>
+      {/* Type badge */}
+      <div style={{ marginBottom: 'var(--space-4)' }}>
+        <span className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, letterSpacing: '.05em', color: 'var(--crux)', background: 'var(--crux-bg)', border: '1px solid var(--crux)', borderRadius: 'var(--radius-pill)', padding: '3px 10px' }}>
+          {typeLabel}
+        </span>
+      </div>
+
+      {/* Target metric — large monospace */}
+      <div className="mono" style={{ fontSize: 'var(--text-xl)', fontWeight: 700, color: 'var(--text)', fontFamily: 'var(--font-mono)', marginBottom: 'var(--space-4)', lineHeight: 1.3 }}>
+        {probe.target_metric}
+      </div>
+
+      {/* Cost + time foot line */}
+      <div style={{ display: 'flex', gap: 'var(--space-5)', marginBottom: 'var(--space-3)' }}>
+        <div>
+          <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 2 }}>COST</div>
+          <div className="mono" style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--text)' }}>{probe.cost}</div>
+        </div>
+        <div>
+          <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 2 }}>TIME</div>
+          <div className="mono" style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--text)' }}>{probe.time}</div>
+        </div>
+      </div>
+
+      {/* Note */}
+      <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', lineHeight: 1.55, margin: '0 0 var(--space-4)' }}>
+        {probe.note}
+      </p>
+
+      {/* Send to commander — only for prototype type; disabled (M3 stub) */}
+      {isPrototype && (
+        <button className="btn" disabled aria-disabled="true" title="Commander handoff coming in M3">
+          <i className="ti ti-send" aria-hidden="true"></i> Send to commander
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // WeighPanel — Stage 3 re-rank UI: textarea + "Re-rank for me" button
 // ---------------------------------------------------------------------------
@@ -771,6 +864,8 @@ function CaseDetailScreen({ caseId, onBack, theme, onToggleTheme }) {
   const [notFound, setNotFound] = React.useState(false);
   const [bakeOffState, setBakeOffState] = React.useState('idle'); // 'idle'|'loading'|'error'
   const [bakeOffError, setBakeOffError] = React.useState('');
+  const [probeState, setProbeState] = React.useState('idle'); // 'idle'|'loading'|'error'
+  const [probeError, setProbeError] = React.useState('');
 
   function loadCase() {
     fetch(`/api/cases/${caseId}`)
@@ -783,6 +878,25 @@ function CaseDetailScreen({ caseId, onBack, theme, onToggleTheme }) {
   }
 
   React.useEffect(() => { loadCase(); }, [caseId]);
+
+  // Auto-trigger probe design when stage >= 4 and no probe exists
+  React.useEffect(() => {
+    if (!caseData) return;
+    const stage = typeof caseData.stage === 'number' ? caseData.stage : 0;
+    if (stage >= 4 && !caseData.probe && probeState === 'idle') {
+      setProbeState('loading');
+      setProbeError('');
+      _postProbe(caseId)
+        .then(() => {
+          loadCase();
+          setProbeState('idle');
+        })
+        .catch((err) => {
+          setProbeError(err.message || 'Probe design failed. Please try again.');
+          setProbeState('error');
+        });
+    }
+  }, [caseData]);
 
   async function handleGeneratePlans() {
     setBakeOffState('loading');
@@ -951,9 +1065,17 @@ function CaseDetailScreen({ caseId, onBack, theme, onToggleTheme }) {
           </>
         )}
 
-        {/* THE PROBE empty-state */}
+        {/* THE PROBE · CHEAPEST DECISIVE TEST — auto-triggers at stage >= 4 */}
         <SectionLabel>THE PROBE · CHEAPEST DECISIVE TEST</SectionLabel>
-        <EmptySection label="STAGE 4 — PROBE" message="Probe design coming in M1." />
+        {stage >= 4 ? (
+          <ProbeCard
+            probe={caseData.probe || null}
+            loading={probeState === 'loading'}
+            error={probeError}
+          />
+        ) : (
+          <EmptySection label="STAGE 4 — PROBE" message="Complete the Weigh stage first." />
+        )}
 
         {/* ACTION PLAN (locked) */}
         <SectionLabel>ACTION PLAN</SectionLabel>

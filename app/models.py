@@ -82,6 +82,9 @@ class Probe(Base):
     case_id = Column(String(36), ForeignKey("case.id", ondelete="CASCADE"), nullable=False)
     type = Column(Enum(*_PROBE_TYPE, name="probe_type_enum"), nullable=False)
     target_metric = Column(Text)
+    cost = Column(Text)
+    time = Column(Text)
+    note = Column(Text)
     status = Column(
         Enum(*_PROBE_STATUS, name="probe_status_enum"),
         nullable=False,
