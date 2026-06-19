@@ -312,8 +312,80 @@ function NewCaseModal({ onClose, onCaseCreated }) {
 }
 
 // ---------------------------------------------------------------------------
-// CaseDetailScreen — shows sharpened statement + not_investigating chips
+// StageBar — horizontal 5-step pipeline header
 // ---------------------------------------------------------------------------
+
+const STAGE_BAR_NAMES = ['Sharpen', 'Bake-off', 'Gather', 'Weigh', 'Probe'];
+
+function StageBar({ stage = 0 }) {
+  const closed = stage >= 5;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center' }}>
+      {STAGE_BAR_NAMES.map((name, i) => {
+        const done = closed || i < stage;
+        const now  = !closed && i === stage;
+        const color = done ? 'var(--st-3)' : now ? 'var(--crux)' : 'var(--border)';
+        return (
+          <React.Fragment key={name}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+              <div
+                aria-current={now ? 'step' : undefined}
+                style={{
+                  width: 22, height: 22, borderRadius: '50%',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: done ? 'var(--st-3)' : now ? 'var(--crux)' : 'var(--surface-2)',
+                  border: `1px solid ${color}`,
+                  color: done || now ? '#fff' : 'var(--text-sub)',
+                  fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
+                }}
+              >
+                {done
+                  ? <i className="ti ti-check" aria-hidden="true" style={{ fontSize: 10 }}></i>
+                  : i + 1
+                }
+              </div>
+              <span
+                className="mono"
+                style={{
+                  fontSize: 'var(--text-2xs)', fontWeight: 700, whiteSpace: 'nowrap',
+                  color: now ? 'var(--crux)' : done ? 'var(--text)' : 'var(--text-sub)',
+                }}
+              >
+                {name}
+              </span>
+            </div>
+            {i < STAGE_BAR_NAMES.length - 1 && (
+              <div style={{ flex: 1, height: 2, margin: '0 8px', marginBottom: 22, background: i < stage ? 'var(--st-3)' : 'var(--border)' }}></div>
+            )}
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// CaseDetailScreen — case detail page scaffold with StageBar
+// ---------------------------------------------------------------------------
+
+function SectionLabel({ children }) {
+  return (
+    <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', margin: '0 0 var(--space-3)' }}>
+      {children}
+    </div>
+  );
+}
+
+function EmptySection({ label, message }) {
+  return (
+    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 'var(--space-5)', textAlign: 'center', color: 'var(--text-muted)', marginBottom: 'var(--space-6)' }}>
+      <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 'var(--space-2)' }}>
+        {label}
+      </div>
+      <p style={{ fontSize: 'var(--text-base)' }}>{message}</p>
+    </div>
+  );
+}
 
 function CaseDetailScreen({ caseId, onBack, theme, onToggleTheme }) {
   const [caseData, setCaseData] = React.useState(null);
@@ -349,6 +421,7 @@ function CaseDetailScreen({ caseId, onBack, theme, onToggleTheme }) {
   }
 
   const notInvestigating = caseData.not_investigating || [];
+  const stage = typeof caseData.stage === 'number' ? caseData.stage : 0;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
@@ -367,33 +440,55 @@ function CaseDetailScreen({ caseId, onBack, theme, onToggleTheme }) {
 
       {/* Content */}
       <div style={{ flex: 1, overflowY: 'auto', padding: 'var(--space-6)', maxWidth: 820, width: '100%', margin: '0 auto' }}>
-        {/* Sharpened statement (primary problem statement, AC9) */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 'var(--space-4)', marginBottom: 'var(--space-4)' }}>
+
+        {/* Title + Pill */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 'var(--space-4)', marginBottom: 'var(--space-5)' }}>
           <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 800, letterSpacing: '-.01em', lineHeight: 1.25, color: 'var(--text)', textWrap: 'pretty' }}>
-            {caseData.sharpened}
+            {caseData.sharpened || caseData.raw_problem}
           </h1>
           <Pill state={caseData.verdict} />
         </div>
 
-        {/* Not investigating chips (AC10) */}
-        {notInvestigating.length > 0 && (
-          <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', marginBottom: 'var(--space-6)' }}>
+        {/* StageBar in bordered card */}
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 'var(--space-5)', marginBottom: 'var(--space-6)' }}>
+          <StageBar stage={stage} />
+        </div>
+
+        {/* SHARPENED STATEMENT */}
+        <SectionLabel>SHARPENED STATEMENT</SectionLabel>
+        <p style={{ fontSize: 'var(--text-lg)', color: 'var(--text)', lineHeight: 1.55, marginBottom: 'var(--space-3)' }}>
+          {caseData.sharpened || <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>No sharpened statement yet.</span>}
+        </p>
+
+        {/* NOT INVESTIGATING chips */}
+        <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', marginBottom: 'var(--space-6)', minHeight: 'var(--space-4)' }}>
+          {notInvestigating.length > 0 && (
             <span className="mono" style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-sub)', fontWeight: 700, alignSelf: 'center' }}>
               NOT INVESTIGATING:
             </span>
-            {notInvestigating.map((item) => (
-              <NotInvestigatingChip key={item} label={item} />
-            ))}
-          </div>
-        )}
-
-        {/* Placeholder for future stages */}
-        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 'var(--space-5)', textAlign: 'center', color: 'var(--text-muted)' }}>
-          <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 'var(--space-2)' }}>
-            STAGE 1 — BAKE-OFF
-          </div>
-          <p style={{ fontSize: 'var(--text-base)' }}>Competing hypotheses coming in M1.</p>
+          )}
+          {notInvestigating.map((item) => (
+            <NotInvestigatingChip key={item} label={item} />
+          ))}
         </div>
+
+        {/* BAKE-OFF empty-state */}
+        <SectionLabel>BAKE-OFF · COMPETING PLANS</SectionLabel>
+        <EmptySection label="STAGE 1 — BAKE-OFF" message="Competing hypotheses coming in M1." />
+
+        {/* THE PROBE empty-state */}
+        <SectionLabel>THE PROBE · CHEAPEST DECISIVE TEST</SectionLabel>
+        <EmptySection label="STAGE 4 — PROBE" message="Probe design coming in M1." />
+
+        {/* ACTION PLAN (locked) */}
+        <SectionLabel>ACTION PLAN</SectionLabel>
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 'var(--space-5)', marginBottom: 'var(--space-6)', textAlign: 'center', color: 'var(--text-muted)' }}>
+          <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 'var(--space-2)' }}>
+            LOCKED
+          </div>
+          <p style={{ fontSize: 'var(--text-base)' }}>Locked until you log a verdict.</p>
+        </div>
+
       </div>
     </div>
   );
