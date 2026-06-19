@@ -56,6 +56,7 @@ class Plan(Base):
     current_rank = Column(Integer)
 
     case = relationship("Case", back_populates="plans")
+    sources = relationship("Source", back_populates="plan", cascade="all, delete-orphan")
 
 
 class Source(Base):
@@ -68,6 +69,8 @@ class Source(Base):
     url = Column(Text)
     claim = Column(Text)
     citation = Column(Text)
+
+    plan = relationship("Plan", back_populates="sources")
 
 
 class Probe(Base):

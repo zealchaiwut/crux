@@ -315,8 +315,18 @@ function NewCaseModal({ onClose, onCaseCreated }) {
 // PlanCard — displays one Plan (A/B/C) with lead style for the highest prior
 // ---------------------------------------------------------------------------
 
-function PlanCard({ label, name, mechanism, prior, sources, isLead }) {
+function PlanCard({ planId, label, name, mechanism, prior, sources: initialSources, isLead }) {
   const priorNum = parseFloat(prior) || 0;
+  const [sources, setSources] = React.useState(initialSources || []);
+  const [showForm, setShowForm] = React.useState(false);
+
+  // Sync if parent re-renders with new sources (e.g. after page reload)
+  React.useEffect(() => { setSources(initialSources || []); }, [initialSources]);
+
+  function handleAdded(newSource) {
+    setSources((prev) => [...prev, newSource]);
+  }
+
   return (
     <div
       className={isLead ? 'lead' : undefined}
@@ -366,20 +376,208 @@ function PlanCard({ label, name, mechanism, prior, sources, isLead }) {
         {mechanism}
       </p>
 
-      {/* Sources section (empty at Stage 1) */}
+      {/* Sources section */}
       <div>
-        <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 'var(--space-2)' }}>
-          SOURCES
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-2)' }}>
+          <span className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)' }}>
+            SOURCES {sources.length > 0 && `· ${sources.length}`}
+          </span>
+          <button
+            className="btn btn-sm"
+            onClick={() => setShowForm(true)}
+            style={{ padding: '3px 9px', fontSize: 'var(--text-2xs)' }}
+          >
+            <i className="ti ti-plus" aria-hidden="true"></i> Add source
+          </button>
         </div>
-        {sources && sources.length > 0 ? (
+        {sources.length > 0 ? (
           <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
-            {sources.map((s, i) => (
-              <span key={i} className="src">{s.title}</span>
+            {sources.map((s) => (
+              <SourceChip key={s.id || s.title} kind={s.kind} title={s.title} url={s.url} />
             ))}
           </div>
         ) : (
           <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-sub)' }}>No sources yet.</span>
         )}
+      </div>
+
+      {showForm && (
+        <SourceForm
+          planId={planId}
+          onClose={() => setShowForm(false)}
+          onAdded={handleAdded}
+        />
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// SourceChip — colour-coded chip per source kind; link when URL present
+// ---------------------------------------------------------------------------
+
+function SourceChip({ kind, title, url }) {
+  const iconMap = { book: 'ti-book', article: 'ti-article', youtube: 'ti-brand-youtube' };
+  const icon = iconMap[kind] || 'ti-file';
+  const inner = (
+    <>
+      <i className={`ti ${icon}`} aria-hidden="true"></i>
+      {title}
+    </>
+  );
+  if (url) {
+    return (
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`src ${kind}`}
+        title={title}
+      >
+        {inner}
+      </a>
+    );
+  }
+  return (
+    <span className={`src ${kind}`} title={title}>
+      {inner}
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// SourceForm — inline modal for adding a source to a plan
+// ---------------------------------------------------------------------------
+
+function SourceForm({ planId, onClose, onAdded }) {
+  const [kind, setKind] = React.useState('article');
+  const [title, setTitle] = React.useState('');
+  const [url, setUrl] = React.useState('');
+  const [claim, setClaim] = React.useState('');
+  const [citation, setCitation] = React.useState('');
+  const [errors, setErrors] = React.useState({});
+  const [submitting, setSubmitting] = React.useState(false);
+
+  React.useEffect(() => {
+    function onKey(e) { if (e.key === 'Escape') onClose(); }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  function validate() {
+    const errs = {};
+    if (!title.trim()) errs.title = 'Title is required.';
+    if (!claim.trim()) errs.claim = 'Claim is required.';
+    if (!citation.trim()) errs.citation = 'Citation is required.';
+    if (url.trim() && !/^https?:\/\/\S+$/.test(url.trim())) errs.url = 'URL must start with http:// or https://.';
+    return errs;
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    const errs = validate();
+    if (Object.keys(errs).length > 0) { setErrors(errs); return; }
+    setSubmitting(true);
+    setErrors({});
+    try {
+      const resp = await fetch('/api/sources', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ plan_id: planId, kind, title: title.trim(), url: url.trim() || null, claim: claim.trim(), citation: citation.trim() }),
+      });
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        throw new Error(data.detail || `Error ${resp.status}`);
+      }
+      const data = await resp.json();
+      onAdded(data);
+      onClose();
+    } catch (err) {
+      setErrors({ submit: err.message || 'Could not save source.' });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const fieldStyle = {
+    width: '100%', padding: 'var(--space-2) var(--space-3)',
+    fontSize: 'var(--text-sm)', color: 'var(--text)', background: 'var(--surface-2)',
+    border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
+    boxSizing: 'border-box',
+  };
+  const labelStyle = { display: 'block', fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 'var(--space-1)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '.05em' };
+  const errStyle = { color: 'var(--red)', fontSize: 'var(--text-2xs)', marginTop: 2 };
+
+  return (
+    <div
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Add source"
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--space-5)', zIndex: 50 }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{ width: 480, maxWidth: '100%', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-xl)', boxShadow: 'var(--shadow-card)', padding: 'var(--space-6)' }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-4)' }}>
+          <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 800, color: 'var(--text)' }}>Add source</h2>
+          <button className="btn btn-sm" onClick={onClose} aria-label="Close" style={{ padding: '6px 8px' }}>
+            <i className="ti ti-x" aria-hidden="true"></i>
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} noValidate>
+          {/* Kind */}
+          <div style={{ marginBottom: 'var(--space-3)' }}>
+            <label style={labelStyle}>Kind</label>
+            <select value={kind} onChange={(e) => setKind(e.target.value)} style={fieldStyle} disabled={submitting}>
+              <option value="article">Article</option>
+              <option value="book">Book</option>
+              <option value="youtube">YouTube</option>
+            </select>
+          </div>
+
+          {/* Title */}
+          <div style={{ marginBottom: 'var(--space-3)' }}>
+            <label style={labelStyle}>Title <span style={{ color: 'var(--red)' }}>*</span></label>
+            <input type="text" value={title} onChange={(e) => { setTitle(e.target.value); setErrors((p) => ({ ...p, title: '' })); }} style={{ ...fieldStyle, borderColor: errors.title ? 'var(--red)' : 'var(--border)' }} disabled={submitting} />
+            {errors.title && <p role="alert" style={errStyle}>{errors.title}</p>}
+          </div>
+
+          {/* URL */}
+          <div style={{ marginBottom: 'var(--space-3)' }}>
+            <label style={labelStyle}>URL <span style={{ color: 'var(--text-sub)' }}>(optional)</span></label>
+            <input type="url" value={url} onChange={(e) => { setUrl(e.target.value); setErrors((p) => ({ ...p, url: '' })); }} placeholder="https://…" style={{ ...fieldStyle, borderColor: errors.url ? 'var(--red)' : 'var(--border)' }} disabled={submitting} />
+            {errors.url && <p role="alert" style={errStyle}>{errors.url}</p>}
+          </div>
+
+          {/* Claim */}
+          <div style={{ marginBottom: 'var(--space-3)' }}>
+            <label style={labelStyle}>Claim <span style={{ color: 'var(--red)' }}>*</span></label>
+            <textarea rows={2} value={claim} onChange={(e) => { setClaim(e.target.value); setErrors((p) => ({ ...p, claim: '' })); }} placeholder="The assertion this source supports…" style={{ ...fieldStyle, resize: 'vertical', borderColor: errors.claim ? 'var(--red)' : 'var(--border)' }} disabled={submitting} />
+            {errors.claim && <p role="alert" style={errStyle}>{errors.claim}</p>}
+          </div>
+
+          {/* Citation */}
+          <div style={{ marginBottom: 'var(--space-4)' }}>
+            <label style={labelStyle}>Citation <span style={{ color: 'var(--red)' }}>*</span></label>
+            <input type="text" value={citation} onChange={(e) => { setCitation(e.target.value); setErrors((p) => ({ ...p, citation: '' })); }} placeholder="Smith 2024 / APA string…" style={{ ...fieldStyle, fontFamily: 'var(--font-mono)', borderColor: errors.citation ? 'var(--red)' : 'var(--border)' }} disabled={submitting} />
+            {errors.citation && <p role="alert" style={errStyle}>{errors.citation}</p>}
+          </div>
+
+          {errors.submit && <p role="alert" style={{ ...errStyle, marginBottom: 'var(--space-3)' }}>{errors.submit}</p>}
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)' }}>
+            <button type="button" className="btn" onClick={onClose} disabled={submitting}>Cancel</button>
+            <button type="submit" className="btn btn-crux" disabled={submitting} aria-busy={submitting}>
+              {submitting
+                ? <><i className="ti ti-loader-2 crux-spin" aria-hidden="true"></i> Saving…</>
+                : <><i className="ti ti-plus" aria-hidden="true"></i> Add source</>
+              }
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
@@ -597,11 +795,12 @@ function CaseDetailScreen({ caseId, onBack, theme, onToggleTheme }) {
                 {plans.map((p) => (
                   <PlanCard
                     key={p.label}
+                    planId={p.id}
                     label={p.label}
                     name={p.name}
                     mechanism={p.mechanism}
                     prior={p.prior}
-                    sources={[]}
+                    sources={p.sources || []}
                     isLead={(parseFloat(p.prior) || 0) === maxPrior}
                   />
                 ))}
