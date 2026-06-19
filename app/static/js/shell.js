@@ -182,6 +182,7 @@ function PlaceholderScreen({ title }) {
 function App() {
   const [theme, setTheme] = React.useState('light');
   const [route, setRoute] = React.useState('cases');
+  const [activeCaseId, setActiveCaseId] = React.useState(null);
 
   React.useEffect(() => {
     if (theme === 'dark') {
@@ -193,6 +194,15 @@ function App() {
 
   const toggleTheme = () => setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
 
+  function openCase(id) {
+    setActiveCaseId(id);
+    setRoute('case');
+  }
+  function goToCases() {
+    setActiveCaseId(null);
+    setRoute('cases');
+  }
+
   const counts = { cases: 0, probes: 0, verdicts: 0 };
 
   const showRail = route !== 'case';
@@ -202,8 +212,23 @@ function App() {
     main = <PlaceholderScreen title="Probes" />;
   } else if (route === 'verdicts') {
     main = <PlaceholderScreen title="Verdicts" />;
+  } else if (route === 'case' && activeCaseId) {
+    main = (
+      <CaseDetailScreen
+        caseId={activeCaseId}
+        onBack={goToCases}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+      />
+    );
   } else {
-    main = <PlaceholderScreen title="Cases" />;
+    main = (
+      <CasesScreen
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        onCaseCreated={openCase}
+      />
+    );
   }
 
   return (
@@ -212,9 +237,7 @@ function App() {
       <main style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
         {main}
       </main>
-      {showRail && <RightRail onNew={() => {}} />}
+      {showRail && <RightRail onNew={() => setRoute('cases')} />}
     </div>
   );
 }
-
-ReactDOM.createRoot(document.getElementById('app')).render(<App />);
