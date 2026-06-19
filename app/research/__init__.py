@@ -1,5 +1,5 @@
 from .config import ResearchConfig
-from .fetchers import ArticleReaderFetcher, DuckDuckGoSearchProvider, StubFetcher, WebSearchFetcher
+from .fetchers import ArticleReaderFetcher, DuckDuckGoSearchProvider, StubFetcher, WebSearchFetcher, YouTubeTranscriptFetcher
 from .loop import runResearchLoop
 from .planner import LLMQueryPlanner
 from .types import (
@@ -42,5 +42,6 @@ __all__ = [
     "WebSearchFetcher",
     "ArticleReaderFetcher",
     "DuckDuckGoSearchProvider",
+    "YouTubeTranscriptFetcher",
     "runResearchLoop",
 ]
