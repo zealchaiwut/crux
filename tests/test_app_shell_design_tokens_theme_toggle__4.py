@@ -1,6 +1,5 @@
 """Tests for issue #4: Build app shell with design tokens and theme toggle (runs against UAT)"""
 import os
-import sys
 import pytest
 import httpx
 from pathlib import Path

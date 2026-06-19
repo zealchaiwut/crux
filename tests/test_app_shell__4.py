@@ -25,8 +25,8 @@ def test_app_shell__styles_css_imported_with_correct_token_order():
     # fonts → colors → typography → spacing → base → primitives
     content = (STATIC / "styles.css").read_text()
     # Extract @import lines in order
-    import_lines = [l.strip() for l in content.splitlines()
-                    if l.strip().lower().startswith("@import")]
+    import_lines = [ln.strip() for ln in content.splitlines()
+                    if ln.strip().lower().startswith("@import")]
     joined = "\n".join(import_lines)
     fonts_pos = joined.lower().find("fonts")
     colors_pos = joined.lower().find("colors")

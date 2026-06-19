@@ -31,9 +31,9 @@ def test_styles_css_exists():
 def test_styles_css_imports_partials_in_order():
     content = (STATIC / "styles.css").read_text()
     # Extract only @import lines (ignore comments)
-    import_lines = [l.strip() for l in content.splitlines()
-                    if l.strip().lower().startswith("@import")]
-    urls = [l for l in import_lines]
+    import_lines = [ln.strip() for ln in content.splitlines()
+                    if ln.strip().lower().startswith("@import")]
+    urls = list(import_lines)
     # Build a string of just the urls in order to check relative order
     joined = "\n".join(urls)
     font_pos = joined.lower().find("fonts")

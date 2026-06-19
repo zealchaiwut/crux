@@ -90,7 +90,6 @@ def test_issue_3__protected_route_accessible_with_session(client):
         pytest.skip("AUTH_SECRET not set in UAT environment")
     # Login first
     r = client.post("/login", data={"password": secret}, follow_redirects=False)
-    cookies = client.cookies
     # Now access a protected route — should get 200, not redirect
     r = client.get("/healthz")
     assert r.status_code == 200

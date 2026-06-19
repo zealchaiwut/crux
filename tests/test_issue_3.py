@@ -4,7 +4,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
 from fastapi.testclient import TestClient
 
 REPO_ROOT = Path(__file__).parent.parent
