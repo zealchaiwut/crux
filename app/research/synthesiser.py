@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any
 
 from .types import Plan, Source
@@ -180,8 +181,6 @@ class CitationSynthesiser:
 # Helpers
 # ---------------------------------------------------------------------------
 
-import re as _re
-
 
 def _is_valid_url(url: str) -> bool:
-    return bool(_re.match(r"^https?://\S+", url or ""))
+    return bool(re.match(r"^https?://\S+", url or ""))

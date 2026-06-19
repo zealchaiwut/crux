@@ -149,7 +149,6 @@ def test_extractor_youtube_claims_drawn_from_source_text():
 def test_extractor_requires_no_live_api_call(monkeypatch):
     """AC6: ClaimExtractor works without any network or API access."""
     import socket
-    original_connect = socket.socket.connect
 
     def _blocked_connect(self, *args, **kwargs):
         raise RuntimeError("Network access not allowed in extractor tests")
