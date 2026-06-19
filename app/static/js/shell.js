@@ -203,7 +203,7 @@ function App() {
   } else if (route === 'verdicts') {
     main = <PlaceholderScreen title="Verdicts" />;
   } else {
-    main = <PlaceholderScreen title="Cases" />;
+    main = <CasesScreen theme={theme} onToggleTheme={toggleTheme} />;
   }
 
   return (
