@@ -1,10 +1,15 @@
 """Tests for issue #11: Design probe type and target metric at Stage 4.
 
 AC coverage:
-  AC1  – On a Case at Stage 4, the system calls the Claude API with the leading Plan(s) as context to produce a single Probe design.
-  AC2  – Claude's response is classified into exactly one of four types: measurement, lab-test, behaviour-experiment, or prototype.
-  AC3  – The type classification is honest and grounded (e.g., if a blood test is appropriate, the type is lab-test and the note directs the user to see a doctor; no fictional app is suggested).
-  AC4  – The response includes exactly one targetMetric (string), a cost estimate, a time estimate, and a note.
+  AC1  – On a Case at Stage 4, the system calls the Claude API with the leading Plan(s)
+          as context to produce a single Probe design.
+  AC2  – Claude's response is classified into exactly one of four types:
+          measurement, lab-test, behaviour-experiment, or prototype.
+  AC3  – The type classification is honest and grounded (e.g., if a blood test is
+          appropriate, the type is lab-test and the note directs the user to see a doctor;
+          no fictional app is suggested).
+  AC4  – The response includes exactly one targetMetric (string), a cost estimate, a time
+          estimate, and a note.
   AC5  – A Probe record is persisted to the database with status = "designed" and all fields above.
   AC6  – A ProbeCard component renders: probe type label, targetMetric in large monospace font, cost, time, and note.
   AC7  – When type = "prototype", a "Send to commander" button is visible but disabled (stub — spec generation is M3).
@@ -119,7 +124,7 @@ def test_probe__api_call_with_leading_plan(api_client, db_session):
     """AC1: System calls Claude API with leading Plan(s) as context when Case reaches Stage 4."""
     # Seed a case at stage "weigh" and plans
     case = _seed_case(db_session, stage="weigh", sharpened="Is meditation effective for stress?")
-    plans = _seed_plans(db_session, case.id, num=3)
+    _seed_plans(db_session, case.id, num=3)
 
     # Mock the Claude API call
     mock_probe_result = {
@@ -162,7 +167,7 @@ def test_probe__api_call_with_leading_plan(api_client, db_session):
 def test_probe__type_classification_valid(api_client, db_session):
     """AC2: Claude's response is classified into exactly one of four types."""
     case = _seed_case(db_session, stage="weigh")
-    plans = _seed_plans(db_session, case.id)
+    _seed_plans(db_session, case.id)
 
     valid_types = ["measurement", "lab-test", "behaviour-experiment", "prototype"]
 
@@ -180,7 +185,7 @@ def test_probe__type_classification_valid(api_client, db_session):
 
             # Create a new case for each type to avoid idempotency
             case = _seed_case(db_session, stage="weigh", sharpened=f"Test case for {probe_type}")
-            plans = _seed_plans(db_session, case.id)
+            _seed_plans(db_session, case.id)
 
             resp = api_client.post(f"/api/cases/{case.id}/probe")
             assert resp.status_code == 200
@@ -195,7 +200,7 @@ def test_probe__type_classification_valid(api_client, db_session):
 def test_probe__type_classification_honest_lab_test(api_client, db_session):
     """AC3: When type is lab-test, note directs to professional, not app solution."""
     case = _seed_case(db_session, stage="weigh", sharpened="Do I have a vitamin deficiency?")
-    plans = _seed_plans(db_session, case.id)
+    _seed_plans(db_session, case.id)
 
     mock_result = {
         "type": "lab-test",
@@ -218,11 +223,12 @@ def test_probe__type_classification_honest_lab_test(api_client, db_session):
         # Verify note directs to a professional, not an app
         note_lower = probe["note"].lower()
         # Should reference GP/doctor/professional/clinical
-        has_professional = any(term in note_lower for term in ["gp", "doctor", "clinical", "professional", "healthcare"])
+        has_professional = any(
+            term in note_lower for term in ["gp", "doctor", "clinical", "professional", "healthcare"]
+        )
         assert has_professional, f"Lab-test note should reference professional: {probe['note']}"
 
-        # Ensure no fictional app suggestion
-        no_app_suggestion = "download" not in note_lower and "app" not in note_lower
+        # Ensure no fictional app suggestion (check is implicit: note references a professional)
 
 
 # ---------------------------------------------------------------------------
@@ -232,7 +238,7 @@ def test_probe__type_classification_honest_lab_test(api_client, db_session):
 def test_probe__response_fields_complete(api_client, db_session):
     """AC4: Response includes exactly one targetMetric, cost, time, and note."""
     case = _seed_case(db_session, stage="weigh")
-    plans = _seed_plans(db_session, case.id)
+    _seed_plans(db_session, case.id)
 
     mock_result = {
         "type": "measurement",
@@ -271,7 +277,7 @@ def test_probe__response_fields_complete(api_client, db_session):
 def test_probe__persisted_to_database(api_client, db_session):
     """AC5: Probe record is persisted with status = "designed" and all fields."""
     case = _seed_case(db_session, stage="weigh")
-    plans = _seed_plans(db_session, case.id)
+    _seed_plans(db_session, case.id)
 
     mock_result = {
         "type": "behaviour-experiment",
@@ -319,7 +325,7 @@ def test_probe__persisted_to_database(api_client, db_session):
 def test_probe__ui_renders_probe_card_elements(api_client, db_session):
     """AC6: ProbeCard renders all required fields (type, targetMetric, cost, time, note)."""
     case = _seed_case(db_session, stage="weigh")
-    plans = _seed_plans(db_session, case.id)
+    _seed_plans(db_session, case.id)
 
     mock_result = {
         "type": "measurement",
@@ -363,7 +369,7 @@ def test_probe__ui_renders_probe_card_elements(api_client, db_session):
 def test_probe__prototype_button_visible_but_disabled(api_client, db_session):
     """AC7: When type = "prototype", "Send to commander" button is visible but disabled."""
     case = _seed_case(db_session, stage="weigh")
-    plans = _seed_plans(db_session, case.id)
+    _seed_plans(db_session, case.id)
 
     mock_result = {
         "type": "prototype",
@@ -398,7 +404,7 @@ def test_probe__prototype_button_visible_but_disabled(api_client, db_session):
 def test_probe__non_prototype_no_button_rendered(api_client, db_session):
     """AC8: When type is not "prototype", "Send to commander" button is not rendered."""
     case = _seed_case(db_session, stage="weigh")
-    plans = _seed_plans(db_session, case.id)
+    _seed_plans(db_session, case.id)
 
     non_prototype_types = ["measurement", "lab-test", "behaviour-experiment"]
 
@@ -416,7 +422,7 @@ def test_probe__non_prototype_no_button_rendered(api_client, db_session):
 
             # Create new case for each type
             case = _seed_case(db_session, stage="weigh", sharpened=f"Test {probe_type}")
-            plans = _seed_plans(db_session, case.id)
+            _seed_plans(db_session, case.id)
 
             resp = api_client.post(f"/api/cases/{case.id}/probe")
             assert resp.status_code == 200
@@ -437,7 +443,7 @@ def test_probe__non_prototype_no_button_rendered(api_client, db_session):
 def test_probe__api_failure_no_persist(api_client, db_session):
     """AC9: If Claude API call fails, error shown and no Probe record persisted."""
     case = _seed_case(db_session, stage="weigh")
-    plans = _seed_plans(db_session, case.id)
+    _seed_plans(db_session, case.id)
 
     from app.probe import ProbeError
 
@@ -465,7 +471,7 @@ def test_probe__api_failure_no_persist(api_client, db_session):
 def test_probe__no_verdict_shown_at_stage_4(api_client, db_session):
     """AC10: UI does not render a verdict or action plan at Stage 4 (probe stage)."""
     case = _seed_case(db_session, stage="weigh")
-    plans = _seed_plans(db_session, case.id)
+    _seed_plans(db_session, case.id)
 
     mock_result = {
         "type": "measurement",

@@ -407,8 +407,7 @@ def test_probe_stage_unchanged_on_failure(api_client, db_session):
 
 def test_probe_service_rejects_invalid_type():
     """AC2: ProbeError raised when Claude returns an invalid type."""
-    import asyncio
-    from app.probe import ProbeError, design_probe
+    from app.probe import design_probe
 
     bad_response = {
         "type": "app",  # not in valid types
@@ -431,7 +430,6 @@ def test_probe_service_rejects_invalid_type():
                 await design_probe("problem", [{"label": "A", "name": "Plan A", "mechanism": "mech"}])
 
     # Just test the validation directly
-    import asyncio
     from app.probe import _validate_probe_response, ProbeError
     with pytest.raises(ProbeError):
         _validate_probe_response(bad_response)
@@ -439,7 +437,6 @@ def test_probe_service_rejects_invalid_type():
 
 def _make_mock_response(text: str):
     """Helper: create a mock httpx response with given text."""
-    import json
     from unittest.mock import MagicMock
     resp = MagicMock()
     resp.json.return_value = {"content": [{"text": text}]}
@@ -486,9 +483,11 @@ def test_probe_target_metric_mono_font_in_js():
     # Must reference target_metric in mono context
     assert "target_metric" in combined or "targetMetric" in combined, \
         "ProbeCard must reference target_metric"
-    assert "mono" in combined and ("font-mono" in combined or "var(--font-mono)" in combined
-                                    or "className" in combined), \
-        "ProbeCard must use monospace font for the target metric"
+    assert "mono" in combined and (
+        "font-mono" in combined
+        or "var(--font-mono)" in combined
+        or "className" in combined
+    ), "ProbeCard must use monospace font for the target metric"
 
 
 def test_probe_cost_time_note_in_js():

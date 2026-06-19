@@ -60,7 +60,10 @@ async def generate_plans(sharpened: str) -> list[dict]:
         text = resp.json()["content"][0]["text"]
         plans = json.loads(text)
         if not isinstance(plans, list) or len(plans) != 3:
-            raise ValueError(f"expected list of 3 plans, got {type(plans).__name__} len={len(plans) if isinstance(plans, list) else '?'}")
+            raise ValueError(
+                f"expected list of 3 plans, got {type(plans).__name__} "
+                f"len={len(plans) if isinstance(plans, list) else '?'}"
+            )
         for p in plans:
             if not all(k in p for k in ("label", "name", "mechanism", "prior")):
                 raise ValueError(f"plan missing required fields: {p}")
