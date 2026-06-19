@@ -327,7 +327,8 @@ def test_stagebar_in_bordered_card():
 
 
 def test_section_order_in_case_detail():
-    """AC9: Sections appear in reference order: header → StageBar → Sharpened → Not Investigating → Bake-off → Probe → Action Plan."""
+    """AC9: Sections appear in reference order:
+    header → StageBar → Sharpened → Not Investigating → Bake-off → Probe → Action Plan."""
     combined = _read_combined_js()
     # Find positions of key identifiers within the CaseDetailScreen function body
     detail_start = combined.find("function CaseDetailScreen")
@@ -336,9 +337,14 @@ def test_section_order_in_case_detail():
 
     stage_bar_pos = block.find("StageBar")
     # Search for the section label, not any property access like caseData.sharpened
-    sharpened_pos = block.upper().find("SHARPENED STATEMENT") if "SHARPENED STATEMENT" in block.upper() else block.upper().find("SHARPENED PROBLEM")
-    bakeoff_pos = block.upper().find("BAKE-OFF") if "BAKE-OFF" in block.upper() else block.upper().find("BAKEOFF")
-    probe_pos = block.upper().find("THE PROBE") if "THE PROBE" in block.upper() else block.upper().find("PROBE")
+    block_upper = block.upper()
+    sharpened_pos = (block_upper.find("SHARPENED STATEMENT")
+                     if "SHARPENED STATEMENT" in block_upper
+                     else block_upper.find("SHARPENED PROBLEM"))
+    bakeoff_pos = (block_upper.find("BAKE-OFF")
+                   if "BAKE-OFF" in block_upper else block_upper.find("BAKEOFF"))
+    probe_pos = (block_upper.find("THE PROBE")
+                 if "THE PROBE" in block_upper else block_upper.find("PROBE"))
     action_pos = block.upper().find("ACTION PLAN")
 
     assert stage_bar_pos != -1, "StageBar must appear in CaseDetailScreen"

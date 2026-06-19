@@ -168,6 +168,14 @@ def get_case(case_id: str, db: Session = Depends(get_db)):
             "status": probe.status,
         }
 
+    verdict_log = None
+    if verdict_obj:
+        verdict_log = {
+            "outcome": verdict_obj.outcome,
+            "notes": verdict_obj.notes or "",
+            "decided_at": str(verdict_obj.decided_at) if verdict_obj.decided_at else None,
+        }
+
     return {
         "id": case.id,
         "raw_problem": case.raw_problem,
@@ -176,6 +184,7 @@ def get_case(case_id: str, db: Session = Depends(get_db)):
         "stage": _STAGE_ORDER.get(case.stage, 0),
         "verdict": (verdict_obj.outcome if verdict_obj else
                     ("progress" if probe and probe.status == "running" else "awaiting")),
+        "verdict_log": verdict_log,
         "created_at": str(case.created_at) if case.created_at else None,
         "weigh_context": case.weigh_context or "",
         "plans": plans_out,
@@ -464,4 +473,67 @@ async def design_probe_for_case(case_id: str, db: Session = Depends(get_db)):
         "time": probe.time or "",
         "note": probe.note or "",
         "status": probe.status,
+    }
+
+
+# ---------------------------------------------------------------------------
+# POST /api/cases/{id}/verdict
+# ---------------------------------------------------------------------------
+
+_VERDICT_OUTCOMES = {"confirmed", "killed", "inconclusive"}
+
+
+class LogVerdictRequest(BaseModel):
+    outcome: str
+    notes: str
+
+    @field_validator("outcome")
+    @classmethod
+    def outcome_valid(cls, v: str) -> str:
+        if v not in _VERDICT_OUTCOMES:
+            raise ValueError(f"outcome must be one of {sorted(_VERDICT_OUTCOMES)}")
+        return v
+
+    @field_validator("notes")
+    @classmethod
+    def notes_not_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("notes must not be empty")
+        return v
+
+
+@router.post("/cases/{case_id}/verdict")
+def log_verdict(case_id: str, body: LogVerdictRequest, db: Session = Depends(get_db)):
+    case = (
+        db.query(models.Case)
+        .options(joinedload(models.Case.probes).joinedload(models.Probe.verdicts))
+        .filter(models.Case.id == case_id)
+        .first()
+    )
+    if case is None:
+        raise HTTPException(status_code=404, detail="Case not found")
+
+    probe = case.probes[0] if case.probes else None
+    if probe is None:
+        raise HTTPException(status_code=422, detail="Case has no probe; cannot log a verdict")
+
+    verdict = models.Verdict(
+        id=str(_uuid_mod.uuid4()),
+        probe_id=probe.id,
+        outcome=body.outcome,
+        notes=body.notes,
+        decided_at=datetime.now(tz=timezone.utc),
+    )
+    db.add(verdict)
+
+    probe.status = body.outcome
+    case.stage = "verdict"
+    db.commit()
+    db.refresh(verdict)
+
+    return {
+        "id": verdict.id,
+        "outcome": verdict.outcome,
+        "notes": verdict.notes,
+        "decided_at": str(verdict.decided_at),
     }

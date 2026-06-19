@@ -32,7 +32,6 @@ def _read_combined_js():
 
 
 def _read_combined_css():
-    import pathlib
     styles_dir = STATIC / "styles"
     pieces = []
     # primitives.css at root static level
@@ -229,7 +228,8 @@ def test_get_sources_for_plan(api_client, db_session):
     sources_payload = [
         {"kind": "article", "title": "Article 1", "url": None, "claim": "Claim 1", "citation": "Cite 1"},
         {"kind": "book",    "title": "Book 1",    "url": None, "claim": "Claim 2", "citation": "Cite 2"},
-        {"kind": "youtube", "title": "Video 1",   "url": "https://youtube.com/watch?v=xyz", "claim": "Claim 3", "citation": "Cite 3"},
+        {"kind": "youtube", "title": "Video 1", "url": "https://youtube.com/watch?v=xyz",
+         "claim": "Claim 3", "citation": "Cite 3"},
     ]
     for payload in sources_payload:
         r = api_client.post("/api/sources", json={**payload, "plan_id": plan.id})

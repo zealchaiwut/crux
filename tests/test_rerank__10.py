@@ -259,7 +259,6 @@ def test_rerank_persists_weigh_context(api_client, db_session):
 
 def test_get_case_includes_weigh_context(api_client, db_session):
     """AC6: GET /api/cases/{id} returns weigh_context field (populated after rerank)."""
-    from app import models
     c, _ = _seed_case_with_plans(db_session, stage="weigh")
     ctx = "My personal numbers and constraints."
     with patch("app.routers.cases.rerank_plans", new_callable=AsyncMock,
