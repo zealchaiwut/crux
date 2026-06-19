@@ -1,0 +1,5 @@
+/* crux · fonts
+   Sans is a deliberate system stack (see DESIGN.md §3).
+   JetBrains Mono stands in for SF Mono on non-Apple platforms.
+*/
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap');
