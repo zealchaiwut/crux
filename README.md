@@ -55,6 +55,10 @@ POST /api/cases/{id}/verdict          — record verdict outcome, advance to Sta
 
 GET  /api/sources?plan_id=<id>        — list sources for a plan
 POST /api/sources                     — add a source to a plan
+
+GET  /api/cases/{id}/related          — list prior cases with verdicts ranked by semantic similarity
+POST /api/cases/related-text          — find related cases by raw text (used pre-Case creation, before a Case is persisted)
+POST /api/cases/{id}/probe/commander-spec  — generate (or return cached) commander spec for a prototype probe; add ?force=true to regenerate
 ```
 
 ## Running tests

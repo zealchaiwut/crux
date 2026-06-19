@@ -3,6 +3,13 @@
 Per-sprint changelog for crux. Entries are written by the documentor when a
 sprint finishes. Dated per-sprint files live under [docs/changelog/](docs/changelog/).
 
+## Sprint 4 (2026-06-19)
+
+- #26: Generate Commander Spec for Prototype Probes via Claude API
+- #27: Wire 'Send to commander' on ProbeCard to display spec
+- #28: Build related-case matching service over Verdicts
+- #29: Surface prior learnings on new Cases
+
 ## Sprint 2 (2026-06-19)
 
 - #5: Build Cases List screen with CaseCard rows
