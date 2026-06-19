@@ -548,11 +548,17 @@ def log_verdict(case_id: str, body: LogVerdictRequest, db: Session = Depends(get
 # ---------------------------------------------------------------------------
 
 @router.post("/cases/{case_id}/probe/commander-spec")
-async def generate_probe_commander_spec(case_id: str, db: Session = Depends(get_db)):
+async def generate_probe_commander_spec(
+    case_id: str,
+    force: bool = False,
+    db: Session = Depends(get_db),
+):
     """Generate and persist a commander spec for a prototype Probe.
 
     Only applies to Probes with type='prototype'. Returns 422 for other types.
     Returns 502 if the Claude API call fails; Probe.commander_spec is not written.
+
+    Pass ?force=true to regenerate even when a spec already exists.
     """
     case = (
         db.query(models.Case)
@@ -579,8 +585,8 @@ async def generate_probe_commander_spec(case_id: str, db: Session = Depends(get_
             ),
         )
 
-    # Idempotency: if spec already generated, return it
-    if probe.commander_spec:
+    # Idempotency: if spec already generated and not forcing, return cached
+    if probe.commander_spec and not force:
         return {"commander_spec": probe.commander_spec}
 
     plans = sorted(case.plans, key=lambda p: p.current_rank or 99)

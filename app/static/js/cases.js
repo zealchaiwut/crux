@@ -623,10 +623,139 @@ async function _postProbe(caseId) {
 }
 
 // ---------------------------------------------------------------------------
+// CommanderSpecModal — displays and manages the commander spec for a prototype probe
+// ---------------------------------------------------------------------------
+
+function CommanderSpecModal({ caseId, initialSpec, onClose, onSpecUpdated }) {
+  const [spec, setSpec] = React.useState(initialSpec || null);
+  const [copyState, setCopyState] = React.useState('idle'); // 'idle'|'copied'
+  const [regenState, setRegenState] = React.useState('idle'); // 'idle'|'loading'|'error'
+  const [regenError, setRegenError] = React.useState('');
+
+  React.useEffect(() => {
+    function onKey(e) { if (e.key === 'Escape') onClose(); }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  async function handleRegenerate() {
+    setRegenState('loading');
+    setRegenError('');
+    try {
+      const resp = await fetch(`/api/cases/${caseId}/probe/commander-spec?force=true`, { method: 'POST' });
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        throw new Error(data.detail || `Error ${resp.status}`);
+      }
+      const data = await resp.json();
+      setSpec(data.commander_spec);
+      setRegenState('idle');
+      if (onSpecUpdated) onSpecUpdated(data.commander_spec);
+    } catch (err) {
+      setRegenError(err.message || 'Regeneration failed. Please try again.');
+      setRegenState('idle');
+    }
+  }
+
+  async function handleCopy() {
+    if (!spec) return;
+    try {
+      await navigator.clipboard.writeText(spec);
+    } catch (_) {
+      const el = document.createElement('textarea');
+      el.value = spec;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+    }
+    setCopyState('copied');
+    setTimeout(() => setCopyState('idle'), 2000);
+  }
+
+  const isRegening = regenState === 'loading';
+
+  return (
+    <div
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Commander spec"
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--space-5)', zIndex: 50 }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{ width: 640, maxWidth: '100%', maxHeight: '80vh', display: 'flex', flexDirection: 'column', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-xl)', boxShadow: 'var(--shadow-card)', padding: 'var(--space-6)' }}
+      >
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-4)', flexShrink: 0 }}>
+          <div>
+            <span className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', display: 'block', marginBottom: 2 }}>COMMANDER SPEC</span>
+            <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 800, color: 'var(--text)', margin: 0 }}>Send to commander</h2>
+          </div>
+          <button className="btn btn-sm" onClick={onClose} aria-label="Close" style={{ padding: '6px 8px', flexShrink: 0 }}>
+            <i className="ti ti-x" aria-hidden="true"></i>
+          </button>
+        </div>
+
+        {/* Spec content or empty state */}
+        <div style={{ flex: 1, overflow: 'auto', marginBottom: 'var(--space-4)' }}>
+          {spec ? (
+            <pre style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)', color: 'var(--text)', background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 'var(--space-4)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.6 }}>
+              {spec}
+            </pre>
+          ) : (
+            <div style={{ textAlign: 'center', padding: 'var(--space-6) var(--space-4)', color: 'var(--text-muted)' }}>
+              <i className="ti ti-file-description" aria-hidden="true" style={{ fontSize: 28, display: 'block', marginBottom: 'var(--space-3)', color: 'var(--text-sub)' }}></i>
+              <p style={{ fontSize: 'var(--text-sm)', margin: 0 }}>No spec generated yet — click Regenerate to create one</p>
+            </div>
+          )}
+        </div>
+
+        {/* Inline error */}
+        {regenError && (
+          <p role="alert" style={{ fontSize: 'var(--text-sm)', color: 'var(--red)', marginBottom: 'var(--space-3)', flexShrink: 0 }}>
+            {regenError}
+          </p>
+        )}
+
+        {/* Actions */}
+        <div style={{ display: 'flex', gap: 'var(--space-3)', flexShrink: 0 }}>
+          <button
+            className="btn btn-crux"
+            onClick={handleCopy}
+            disabled={!spec}
+            style={{ flex: 1 }}
+            aria-label="Copy spec to clipboard"
+          >
+            <i className={`ti ${copyState === 'copied' ? 'ti-check' : 'ti-clipboard'}`} aria-hidden="true"></i>
+            {copyState === 'copied' ? ' Copied!' : ' Copy to clipboard'}
+          </button>
+          <button
+            className="btn"
+            onClick={handleRegenerate}
+            disabled={isRegening}
+            aria-label="Regenerate commander spec"
+            aria-busy={isRegening}
+          >
+            {isRegening
+              ? <><i className="ti ti-loader-2 crux-spin" aria-hidden="true"></i> Regenerating…</>
+              : <><i className="ti ti-refresh" aria-hidden="true"></i> Regenerate</>
+            }
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // ProbeCard — renders the probe design (type, targetMetric, cost, time, note)
 // ---------------------------------------------------------------------------
 
-function ProbeCard({ probe, loading, error }) {
+function ProbeCard({ probe, loading, error, caseId, onProbeSpecUpdated }) {
+  const [showSpecModal, setShowSpecModal] = React.useState(false);
+
   const TYPE_LABELS = {
     'measurement':           'Measurement',
     'lab-test':              'Lab test',
@@ -696,11 +825,25 @@ function ProbeCard({ probe, loading, error }) {
         {probe.note}
       </p>
 
-      {/* Send to commander — only for prototype type; disabled (M3 stub) */}
+      {/* Send to commander — only for prototype type */}
       {isPrototype && (
-        <button className="btn" disabled aria-disabled="true" title="Commander handoff coming in M3">
-          <i className="ti ti-send" aria-hidden="true"></i> Send to commander
-        </button>
+        <>
+          <button
+            className="btn"
+            onClick={() => setShowSpecModal(true)}
+            aria-haspopup="dialog"
+          >
+            <i className="ti ti-send" aria-hidden="true"></i> Send to commander
+          </button>
+          {showSpecModal && (
+            <CommanderSpecModal
+              caseId={caseId}
+              initialSpec={probe.commander_spec || null}
+              onClose={() => setShowSpecModal(false)}
+              onSpecUpdated={(newSpec) => { if (onProbeSpecUpdated) onProbeSpecUpdated(newSpec); }}
+            />
+          )}
+        </>
       )}
     </div>
   );
@@ -1258,6 +1401,8 @@ function CaseDetailScreen({ caseId, onBack, theme, onToggleTheme }) {
             probe={caseData.probe || null}
             loading={probeState === 'loading'}
             error={probeError}
+            caseId={caseId}
+            onProbeSpecUpdated={loadCase}
           />
         ) : (
           <EmptySection label="STAGE 4 — PROBE" message="Complete the Weigh stage first." />
