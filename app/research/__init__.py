@@ -1,14 +1,22 @@
 from .config import ResearchConfig
-from .fetchers import StubFetcher
+from .fetchers import ArticleReaderFetcher, DuckDuckGoSearchProvider, StubFetcher, WebSearchFetcher
 from .loop import runResearchLoop
 from .planner import LLMQueryPlanner
 from .types import (
+    ArticleDocument,
+    BudgetExhaustedError,
+    EMPTY_CONTENT_THRESHOLD,
     Extractor,
+    FetchBlockedError,
+    FetchEmptyContentError,
     FetchResult,
     Fetcher,
+    FetchTimeoutError,
     Plan,
     QueryPlanner,
+    ResearchFetcher,
     SearchQuery,
+    SearchResult,
     Synthesiser,
 )
 
@@ -16,6 +24,14 @@ __all__ = [
     "Plan",
     "SearchQuery",
     "FetchResult",
+    "SearchResult",
+    "ArticleDocument",
+    "FetchTimeoutError",
+    "FetchBlockedError",
+    "FetchEmptyContentError",
+    "BudgetExhaustedError",
+    "EMPTY_CONTENT_THRESHOLD",
+    "ResearchFetcher",
     "QueryPlanner",
     "Fetcher",
     "Extractor",
@@ -23,5 +39,8 @@ __all__ = [
     "ResearchConfig",
     "LLMQueryPlanner",
     "StubFetcher",
+    "WebSearchFetcher",
+    "ArticleReaderFetcher",
+    "DuckDuckGoSearchProvider",
     "runResearchLoop",
 ]

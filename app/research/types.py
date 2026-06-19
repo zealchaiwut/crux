@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
+EMPTY_CONTENT_THRESHOLD = 100
+
 
 @dataclass
 class Plan:
@@ -19,6 +21,40 @@ class SearchQuery:
 class FetchResult:
     query: SearchQuery
     content: str
+
+
+@dataclass
+class SearchResult:
+    url: str
+    title: str
+
+
+@dataclass
+class ArticleDocument:
+    url: str
+    title: str
+    text: str
+
+
+class FetchTimeoutError(Exception):
+    pass
+
+
+class FetchBlockedError(Exception):
+    pass
+
+
+class FetchEmptyContentError(Exception):
+    pass
+
+
+class BudgetExhaustedError(Exception):
+    pass
+
+
+@runtime_checkable
+class ResearchFetcher(Protocol):
+    budget: int
 
 
 @runtime_checkable

@@ -1,7 +1,23 @@
 from __future__ import annotations
 
+import logging
+
 from .config import ResearchConfig
-from .types import Extractor, FetchResult, Fetcher, Plan, QueryPlanner, SearchQuery, Synthesiser
+from .types import (
+    BudgetExhaustedError,
+    Extractor,
+    FetchBlockedError,
+    FetchEmptyContentError,
+    FetchResult,
+    Fetcher,
+    FetchTimeoutError,
+    Plan,
+    QueryPlanner,
+    SearchQuery,
+    Synthesiser,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class _NoopExtractor:
@@ -31,8 +47,15 @@ def runResearchLoop(
     results: list[FetchResult] = []
 
     for query in queries[: config.max_fetches]:
-        result = fetcher.fetch(query)
-        results.append(result)
+        try:
+            result = fetcher.fetch(query)
+            results.append(result)
+        except BudgetExhaustedError as exc:
+            logger.warning("Fetch budget exhausted, stopping loop: %s", exc)
+            break
+        except (FetchTimeoutError, FetchBlockedError, FetchEmptyContentError) as exc:
+            logger.warning("Fetch error, continuing with remaining budget: %s", exc)
+            continue
 
     extracts = [_extractor.extract(r) for r in results]
     synthesis = _synthesiser.synthesise(extracts)
