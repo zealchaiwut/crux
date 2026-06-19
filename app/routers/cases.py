@@ -18,6 +18,7 @@ from app import models
 from app.bake_off import BakeOffError, generate_plans
 from app.db import get_db
 from app.sharpen import SharpenError, sharpen_problem
+from app.weigh import WeighError, rerank_plans
 
 router = APIRouter(prefix="/api")
 
@@ -137,7 +138,9 @@ def get_case(case_id: str, db: Session = Depends(get_db)):
             "name": plan.name or f"Plan {plan.label}",
             "mechanism": plan.mechanism or "",
             "prior": plan.prior or "0",
-            "standing": _STANDING_BY_RANK.get(rank, 0.15),
+            "bar_weight": _STANDING_BY_RANK.get(rank, 0.15),
+            "standing": plan.standing,
+            "current_rank": plan.current_rank,
             "state": _plan_state(plan, probe, verdict_obj),
             "sources": [
                 {
@@ -161,6 +164,7 @@ def get_case(case_id: str, db: Session = Depends(get_db)):
         "verdict": (verdict_obj.outcome if verdict_obj else
                     ("progress" if probe and probe.status == "running" else "awaiting")),
         "created_at": str(case.created_at) if case.created_at else None,
+        "weigh_context": case.weigh_context or "",
         "plans": plans_out,
     }
 
@@ -283,9 +287,85 @@ async def run_bake_off(case_id: str, db: Session = Depends(get_db)):
             "name": p["name"],
             "mechanism": p["mechanism"],
             "prior": str(p["prior"]),
-            "standing": _STANDING_BY_RANK.get(rank, 0.15),
+            "bar_weight": _STANDING_BY_RANK.get(rank, 0.15),
+            "standing": None,
+            "current_rank": rank,
             "state": "leading" if rank == 1 else None,
         }
         for rank, p in enumerate(sorted_plans, start=1)
     ]
     return {"plans": plans_out}
+
+
+# ---------------------------------------------------------------------------
+# POST /api/cases/{id}/rerank
+# ---------------------------------------------------------------------------
+
+class RerankRequest(BaseModel):
+    context: str
+
+    @field_validator("context")
+    @classmethod
+    def not_blank(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("context must not be blank")
+        return v
+
+
+@router.post("/cases/{case_id}/rerank")
+async def rerank_case(case_id: str, body: RerankRequest, db: Session = Depends(get_db)):
+    case = (
+        db.query(models.Case)
+        .options(joinedload(models.Case.plans))
+        .filter(models.Case.id == case_id)
+        .first()
+    )
+    if case is None:
+        raise HTTPException(status_code=404, detail="Case not found")
+
+    plans = sorted(case.plans, key=lambda p: p.current_rank or 99)
+    if not plans:
+        raise HTTPException(status_code=422, detail="Case has no plans to re-rank")
+
+    plans_input = [
+        {"label": p.label, "name": p.name or f"Plan {p.label}", "mechanism": p.mechanism or ""}
+        for p in plans
+    ]
+
+    try:
+        result = await rerank_plans(
+            sharpened=case.sharpened or case.raw_problem,
+            plans=plans_input,
+            context=body.context,
+        )
+    except WeighError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    # Persist updated rank and standing on each plan
+    rank_map = {item["label"]: item for item in result}
+    for plan in plans:
+        item = rank_map.get(plan.label)
+        if item:
+            plan.current_rank = item["rank"]
+            plan.standing = item["standing"]
+
+    # Persist user context on case
+    case.weigh_context = body.context
+    db.commit()
+
+    db.refresh(case)
+    updated_plans = sorted(case.plans, key=lambda p: p.current_rank or 99)
+    plans_out = [
+        {
+            "id": p.id,
+            "label": p.label,
+            "name": p.name or f"Plan {p.label}",
+            "mechanism": p.mechanism or "",
+            "prior": p.prior or "0",
+            "bar_weight": _STANDING_BY_RANK.get(p.current_rank or 99, 0.15),
+            "standing": p.standing,
+            "current_rank": p.current_rank,
+        }
+        for p in updated_plans
+    ]
+    return {"plans": plans_out, "weigh_context": case.weigh_context}

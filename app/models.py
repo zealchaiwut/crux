@@ -39,6 +39,7 @@ class Case(Base):
     not_investigating = Column(Text)
     stage = Column(Enum(*_STAGE, name="stage_enum"), nullable=False)
     created_at = Column(TIMESTAMP(timezone=True))
+    weigh_context = Column(Text)
 
     plans = relationship("Plan", back_populates="case", cascade="all, delete-orphan")
     probes = relationship("Probe", back_populates="case", cascade="all, delete-orphan")
@@ -54,6 +55,7 @@ class Plan(Base):
     mechanism = Column(Text)
     prior = Column(Text)
     current_rank = Column(Integer)
+    standing = Column(Text)
 
     case = relationship("Case", back_populates="plans")
     sources = relationship("Source", back_populates="plan", cascade="all, delete-orphan")
