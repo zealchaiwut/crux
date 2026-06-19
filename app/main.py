@@ -13,7 +13,7 @@ from app.auth import (
     verify_session_cookie,
 )
 from app.config import AUTH_SECRET, ENV
-from app.routers import cases_router, sources_router
+from app.routers import cases_router, related_cases_router, sources_router
 
 _STATIC_DIR = Path(__file__).parent / "static"
 _INDEX_HTML = _STATIC_DIR / "index.html"
@@ -51,6 +51,7 @@ app.add_middleware(_AuthMiddleware)
 
 app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 app.include_router(cases_router)
+app.include_router(related_cases_router)
 app.include_router(sources_router)
 
 
@@ -69,16 +70,18 @@ async def login(request: Request, password: str = Form(...)):
     ip = request.client.host if request.client else "unknown"
 
     if is_rate_limited(ip):
+        msg = '<p style="color:red">Too many attempts. Try again later.</p>'
         return HTMLResponse(
-            _LOGIN_PAGE.format(error='<p style="color:red">Too many attempts. Try again later.</p>'),
+            _LOGIN_PAGE.format(error=msg),
             status_code=429,
         )
 
     record_attempt(ip)
 
     if not check_password(password, AUTH_SECRET):
+        msg = '<p style="color:red">Invalid password.</p>'
         return HTMLResponse(
-            _LOGIN_PAGE.format(error='<p style="color:red">Invalid password.</p>'),
+            _LOGIN_PAGE.format(error=msg),
             status_code=401,
         )
 
