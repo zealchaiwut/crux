@@ -109,7 +109,7 @@ def get_case(case_id: str, db: Session = Depends(get_db)):
     case = (
         db.query(models.Case)
         .options(
-            joinedload(models.Case.plans),
+            joinedload(models.Case.plans).joinedload(models.Plan.sources),
             joinedload(models.Case.probes).joinedload(models.Probe.verdicts),
         )
         .filter(models.Case.id == case_id)
@@ -132,12 +132,24 @@ def get_case(case_id: str, db: Session = Depends(get_db)):
     for plan in sorted(case.plans, key=lambda p: p.current_rank or 99):
         rank = plan.current_rank or 99
         plans_out.append({
+            "id": plan.id,
             "label": plan.label,
             "name": plan.name or f"Plan {plan.label}",
             "mechanism": plan.mechanism or "",
             "prior": plan.prior or "0",
             "standing": _STANDING_BY_RANK.get(rank, 0.15),
             "state": _plan_state(plan, probe, verdict_obj),
+            "sources": [
+                {
+                    "id": s.id,
+                    "kind": s.kind,
+                    "title": s.title,
+                    "url": s.url,
+                    "claim": s.claim,
+                    "citation": s.citation,
+                }
+                for s in (plan.sources or [])
+            ],
         })
 
     return {
