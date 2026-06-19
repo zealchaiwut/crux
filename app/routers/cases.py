@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app import models
 from app.bake_off import BakeOffError, generate_plans
+from app.commander_spec import CommanderSpecError, generate_commander_spec
 from app.db import get_db
 from app.probe import ProbeError, design_probe
 from app.sharpen import SharpenError, sharpen_problem
@@ -166,6 +167,7 @@ def get_case(case_id: str, db: Session = Depends(get_db)):
             "time": probe.time or "",
             "note": probe.note or "",
             "status": probe.status,
+            "commander_spec": probe.commander_spec,
         }
 
     verdict_log = None
@@ -427,6 +429,7 @@ async def design_probe_for_case(case_id: str, db: Session = Depends(get_db)):
             "time": probe.time or "",
             "note": probe.note or "",
             "status": probe.status,
+            "commander_spec": probe.commander_spec,
         }
 
     # Call Claude to design the probe
@@ -473,6 +476,7 @@ async def design_probe_for_case(case_id: str, db: Session = Depends(get_db)):
         "time": probe.time or "",
         "note": probe.note or "",
         "status": probe.status,
+        "commander_spec": probe.commander_spec,
     }
 
 
@@ -537,3 +541,72 @@ def log_verdict(case_id: str, body: LogVerdictRequest, db: Session = Depends(get
         "notes": verdict.notes,
         "decided_at": str(verdict.decided_at),
     }
+
+
+# ---------------------------------------------------------------------------
+# POST /api/cases/{id}/probe/commander-spec
+# ---------------------------------------------------------------------------
+
+@router.post("/cases/{case_id}/probe/commander-spec")
+async def generate_probe_commander_spec(case_id: str, db: Session = Depends(get_db)):
+    """Generate and persist a commander spec for a prototype Probe.
+
+    Only applies to Probes with type='prototype'. Returns 422 for other types.
+    Returns 502 if the Claude API call fails; Probe.commander_spec is not written.
+    """
+    case = (
+        db.query(models.Case)
+        .options(
+            joinedload(models.Case.plans),
+            joinedload(models.Case.probes),
+        )
+        .filter(models.Case.id == case_id)
+        .first()
+    )
+    if case is None:
+        raise HTTPException(status_code=404, detail="Case not found")
+
+    probe = case.probes[0] if case.probes else None
+    if probe is None:
+        raise HTTPException(status_code=422, detail="Case has no probe; design one first")
+
+    if probe.type != "prototype":
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Commander spec only applies to prototype probes; "
+                f"this probe has type={probe.type!r}"
+            ),
+        )
+
+    # Idempotency: if spec already generated, return it
+    if probe.commander_spec:
+        return {"commander_spec": probe.commander_spec}
+
+    plans = sorted(case.plans, key=lambda p: p.current_rank or 99)
+    plans_input = [
+        {
+            "label": p.label,
+            "name": p.name or f"Plan {p.label}",
+            "mechanism": p.mechanism or "",
+            "current_rank": p.current_rank,
+        }
+        for p in plans
+    ]
+
+    spec_input = {
+        "target_metric": probe.target_metric or "",
+        "note": probe.note or "",
+        "sharpened": case.sharpened or case.raw_problem,
+        "plans": plans_input,
+    }
+    try:
+        spec = await generate_commander_spec(spec_input)
+    except CommanderSpecError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    probe.commander_spec = spec
+    db.commit()
+    db.refresh(probe)
+
+    return {"commander_spec": probe.commander_spec}
