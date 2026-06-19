@@ -1,6 +1,6 @@
 # Schema
 
-Database: Neon Postgres. Migrations managed by Alembic (revision `a1b2c3d4e5f6`).
+Database: Neon Postgres. Migrations managed by Alembic (revision `e5f6g7h8i9j0`).
 
 ## Enum types
 
@@ -25,7 +25,7 @@ Database: Neon Postgres. Migrations managed by Alembic (revision `a1b2c3d4e5f6`)
 | `not_investigating` | text | |
 | `stage` | stage_enum | NOT NULL |
 | `created_at` | timestamptz | NOT NULL, default `now()` |
-| `weigh_context` | text | |
+| `weigh_context` | text | Persisted user context from Stage 3 re-rank (issue #10) |
 
 ### `plan`
 
@@ -38,7 +38,7 @@ Database: Neon Postgres. Migrations managed by Alembic (revision `a1b2c3d4e5f6`)
 | `mechanism` | text | |
 | `prior` | text | |
 | `current_rank` | integer | |
-| `standing` | text | |
+| `standing` | text | Qualitative re-rank status: `ruled-in`, `ruled-out`, or null (issue #10) |
 
 ### `source`
 

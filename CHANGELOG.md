@@ -11,6 +11,17 @@ sprint finishes. Dated per-sprint files live under [docs/changelog/](docs/change
 - #20: Implement claim extractor and citation-aware synthesiser
 - #21: Automate Stage 2 source gathering via research loop
 
+## Sprint 2 (2026-06-19)
+
+- #5: Build Cases List screen with CaseCard rows
+- #6: Add New Case modal with Sharpen (Stage 0)
+- #7: Build Case detail page scaffold with StageBar
+- #8: Generate and display Plan A/B/C bake-off at Stage 1
+- #9: Add manual source attachment form to Plan cards
+- #10: Re-rank Plans Against User Data at Stage 3
+- #11: Design probe type and target metric at Stage 4
+- #12: Enforce verdict gate and log verdict action (Stage 5)
+
 ## Sprint 1 (2026-06-19)
 
 - #1: Scaffold FastAPI backend and configure Render deploy

@@ -1,4 +1,8 @@
-"""Stage 4 probe service — calls Claude API to design the cheapest decisive test."""
+"""Stage 4 probe service — calls Claude API to design the cheapest decisive test.
+
+PRODUCT.md §9: "LLM: Claude API for the stage prompts (sharpen, plans, weigh, probe design)."
+Stage 4 (probe): leading Plan(s) → single probe design with type, target_metric, cost, time, note.
+"""
 import json
 import os
 
@@ -40,6 +44,7 @@ class ProbeError(Exception):
 
 
 def _validate_probe_response(data: dict) -> dict:
+    """Validate the Claude response dict; raise ProbeError if invalid."""
     required = ("type", "target_metric", "cost", "time", "note")
     missing = [f for f in required if not data.get(f)]
     if missing:
@@ -52,10 +57,14 @@ def _validate_probe_response(data: dict) -> dict:
 
 
 async def design_probe(sharpened: str, plans: list[dict]) -> dict:
-    """Call Claude API to design the cheapest decisive probe for the leading Plan(s)."""
+    """Call Claude API to design the cheapest decisive probe for the leading Plan(s).
+
+    Returns dict with keys: type, target_metric, cost, time, note.
+    """
     if not ANTHROPIC_API_KEY:
         raise ProbeError("ANTHROPIC_API_KEY is not configured")
 
+    # Build context from plans ordered by current rank
     plans_text = "\n".join(
         f"Plan {p['label']} (rank {p.get('current_rank', '?')}): "
         f"{p.get('name') or p['label']} — {p.get('mechanism', '')}"

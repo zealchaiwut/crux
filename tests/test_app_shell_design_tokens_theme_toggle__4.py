@@ -27,7 +27,8 @@ def client():
 # --- Acceptance Criteria ---
 
 def test_app_shell_design_tokens_theme_toggle__styles_css_imported_once_in_order():
-    # AC: styles.css is imported once at the app root and loads token partials in order: fonts → colors → typography → spacing → base → primitives
+    # AC: styles.css is imported once at the app root and loads token partials in order:
+    # fonts → colors → typography → spacing → base → primitives
     styles_file = STATIC_DIR / "styles.css"
     assert styles_file.exists(), "styles.css not found"
     content = styles_file.read_text()
@@ -147,7 +148,8 @@ def test_app_shell_design_tokens_theme_toggle__tabler_icons_wired():
 
 
 def test_app_shell_design_tokens_theme_toggle__all_styles_use_css_custom_properties():
-    # AC: Every style rule reads from CSS custom properties — no hard-coded color, spacing, or typography values anywhere in shell code
+    # AC: Every style rule reads from CSS custom properties — no hard-coded color,
+    # spacing, or typography values anywhere in shell code
     shell_js = STATIC_DIR / "js" / "shell.js"
     assert shell_js.exists(), "shell.js not found"
     content = shell_js.read_text()

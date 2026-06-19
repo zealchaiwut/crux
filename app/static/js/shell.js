@@ -181,6 +181,7 @@ function PlaceholderScreen({ title }) {
 
 function App() {
   const [theme, setTheme] = React.useState('light');
+  // route is either 'cases' | 'probes' | 'verdicts' | 'case/<id>'
   const [route, setRoute] = React.useState('cases');
   const [activeCaseId, setActiveCaseId] = React.useState(null);
 
@@ -205,10 +206,25 @@ function App() {
 
   const counts = { cases: 0, probes: 0, verdicts: 0 };
 
-  const showRail = route !== 'case';
+  const isCaseDetail = route.startsWith('case/');
+  const showRail = !isCaseDetail;
+
+  function handleCaseOpened(id) {
+    setRoute(`case/${id}`);
+  }
 
   let main;
-  if (route === 'probes') {
+  if (isCaseDetail) {
+    const caseId = route.slice('case/'.length);
+    main = (
+      <CaseDetailScreen
+        caseId={caseId}
+        onBack={() => setRoute('cases')}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+      />
+    );
+  } else if (route === 'probes') {
     main = <PlaceholderScreen title="Probes" />;
   } else if (route === 'verdicts') {
     main = <PlaceholderScreen title="Verdicts" />;

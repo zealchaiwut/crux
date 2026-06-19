@@ -1,4 +1,8 @@
-"""Stage 3 weigh service — calls Claude API to re-rank Plans against user context."""
+"""Stage 3 weigh service — calls Claude API to re-rank Plans against user context.
+
+PRODUCT.md §9: "LLM: Claude API for the stage prompts (sharpen, plans, weigh, probe design)."
+Stage 3 (weigh): plans + user context → re-ranked plans with ruled-in/ruled-out flags.
+"""
 import json
 import os
 
@@ -31,7 +35,10 @@ class WeighError(Exception):
 
 
 async def rerank_plans(sharpened: str, plans: list[dict], context: str) -> list[dict]:
-    """Call Claude API to re-rank plans against user context."""
+    """Call Claude API to re-rank plans against user context.
+
+    Returns list of dicts with keys: label, rank, standing (null|"ruled-in"|"ruled-out").
+    """
     if not ANTHROPIC_API_KEY:
         raise WeighError("ANTHROPIC_API_KEY is not configured")
 

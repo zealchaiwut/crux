@@ -101,7 +101,8 @@ def test_login_form_has_password_field():
 def test_login_form_posts_to_login():
     client = fresh_client()
     body = client.get("/login").text
-    assert 'action="/login"' in body or "action='/login'" in body or 'method="post"' in body.lower() or "method='post'" in body.lower()
+    assert ('action="/login"' in body or "action='/login'" in body
+            or 'method="post"' in body.lower() or "method='post'" in body.lower())
 
 
 # AC4 — POST /login validates password with constant-time comparison

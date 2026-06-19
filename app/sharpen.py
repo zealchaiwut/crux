@@ -1,4 +1,8 @@
-"""Stage 0 sharpen service — calls Claude API to produce a falsifiable problem statement."""
+"""Stage 0 sharpen service — calls Claude API to produce a falsifiable problem statement.
+
+PRODUCT.md §9: "LLM: Claude API for the stage prompts (sharpen, plans, weigh, probe design)."
+Stage 0 (sharpen): raw problem → sharpened statement + not_investigating list.
+"""
 import json
 import os
 

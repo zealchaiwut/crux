@@ -1,4 +1,8 @@
-"""Stage 1 bake-off service — calls Claude API to generate Plan A/B/C."""
+"""Stage 1 bake-off service — calls Claude API to generate Plan A/B/C.
+
+PRODUCT.md §9: "LLM: Claude API for the stage prompts (sharpen, plans, weigh, probe design)."
+Stage 1 (bake-off): sharpened problem → Plan A/B/C each with label, name, mechanism, prior.
+"""
 import json
 import os
 
