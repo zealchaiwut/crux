@@ -50,6 +50,7 @@ class Plan(Base):
     id = Column(String(36), primary_key=True, default=_uuid)
     case_id = Column(String(36), ForeignKey("case.id", ondelete="CASCADE"), nullable=False)
     label = Column(Enum(*_PLAN_LABEL, name="plan_label_enum"), nullable=False)
+    name = Column(Text)
     mechanism = Column(Text)
     prior = Column(Text)
     current_rank = Column(Integer)

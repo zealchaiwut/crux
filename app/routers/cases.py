@@ -1,9 +1,10 @@
 """Cases API router.
 
-GET  /api/cases         — all cases with plans, stage number, verdict state.
-GET  /api/cases/{id}    — single case detail.
-POST /api/cases/sharpen — call Claude to produce sharpened statement + not_investigating.
-POST /api/cases         — create a Case record at stage 0 (sharpened).
+GET  /api/cases                   — all cases with plans, stage number, verdict state.
+GET  /api/cases/{id}              — single case detail including plans.
+POST /api/cases/sharpen           — call Claude to produce sharpened statement + not_investigating.
+POST /api/cases                   — create a Case record at stage 0 (sharpened).
+POST /api/cases/{id}/bake-off     — generate Plan A/B/C via Claude, persist, advance stage.
 """
 import json
 import uuid as _uuid_mod
@@ -14,6 +15,7 @@ from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session, joinedload
 
 from app import models
+from app.bake_off import BakeOffError, generate_plans
 from app.db import get_db
 from app.sharpen import SharpenError, sharpen_problem
 
@@ -126,6 +128,18 @@ def get_case(case_id: str, db: Session = Depends(get_db)):
         except (ValueError, TypeError):
             not_investigating = []
 
+    plans_out = []
+    for plan in sorted(case.plans, key=lambda p: p.current_rank or 99):
+        rank = plan.current_rank or 99
+        plans_out.append({
+            "label": plan.label,
+            "name": plan.name or f"Plan {plan.label}",
+            "mechanism": plan.mechanism or "",
+            "prior": plan.prior or "0",
+            "standing": _STANDING_BY_RANK.get(rank, 0.15),
+            "state": _plan_state(plan, probe, verdict_obj),
+        })
+
     return {
         "id": case.id,
         "raw_problem": case.raw_problem,
@@ -135,6 +149,7 @@ def get_case(case_id: str, db: Session = Depends(get_db)):
         "verdict": (verdict_obj.outcome if verdict_obj else
                     ("progress" if probe and probe.status == "running" else "awaiting")),
         "created_at": str(case.created_at) if case.created_at else None,
+        "plans": plans_out,
     }
 
 
@@ -193,3 +208,72 @@ def create_case(body: CreateCaseRequest, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(case)
     return {"id": case.id}
+
+
+# ---------------------------------------------------------------------------
+# POST /api/cases/{id}/bake-off
+# ---------------------------------------------------------------------------
+
+@router.post("/cases/{case_id}/bake-off")
+async def run_bake_off(case_id: str, db: Session = Depends(get_db)):
+    case = (
+        db.query(models.Case)
+        .options(joinedload(models.Case.plans))
+        .filter(models.Case.id == case_id)
+        .first()
+    )
+    if case is None:
+        raise HTTPException(status_code=404, detail="Case not found")
+
+    # Idempotency: if plans already exist, return them without calling Claude
+    existing = sorted(case.plans, key=lambda p: p.current_rank or 99)
+    if existing:
+        plans_out = [
+            {
+                "label": p.label,
+                "name": p.name or f"Plan {p.label}",
+                "mechanism": p.mechanism or "",
+                "prior": p.prior or "0",
+                "standing": _STANDING_BY_RANK.get(p.current_rank or 99, 0.15),
+                "state": None,
+            }
+            for p in existing
+        ]
+        return {"plans": plans_out}
+
+    # Generate plans via Claude API
+    try:
+        plans_data = await generate_plans(case.sharpened or case.raw_problem)
+    except BakeOffError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    # Persist plans ordered by prior (rank 1 = highest prior)
+    sorted_plans = sorted(plans_data, key=lambda p: float(p["prior"]), reverse=True)
+    for rank, plan_dict in enumerate(sorted_plans, start=1):
+        plan = models.Plan(
+            id=str(_uuid_mod.uuid4()),
+            case_id=case.id,
+            label=plan_dict["label"],
+            name=plan_dict["name"],
+            mechanism=plan_dict["mechanism"],
+            prior=str(plan_dict["prior"]),
+            current_rank=rank,
+        )
+        db.add(plan)
+
+    # Advance stage from bake_off to gather
+    case.stage = "gather"
+    db.commit()
+
+    plans_out = [
+        {
+            "label": p["label"],
+            "name": p["name"],
+            "mechanism": p["mechanism"],
+            "prior": str(p["prior"]),
+            "standing": _STANDING_BY_RANK.get(rank, 0.15),
+            "state": "leading" if rank == 1 else None,
+        }
+        for rank, p in enumerate(sorted_plans, start=1)
+    ]
+    return {"plans": plans_out}
