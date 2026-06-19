@@ -28,9 +28,11 @@ function BakeOffStrip({ plans }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       {plans.map((p) => {
-        const won     = p.state === 'won';
-        const lead    = p.state === 'leading' || won;
-        const ruledOut = p.state === 'ruled-out';
+        const won      = p.state === 'won';
+        const lead     = p.state === 'leading' || won || p.current_rank === 1;
+        // rankStanding is the qualitative re-rank status; state handles pre-rerank flags
+        const ruledOut = p.state === 'ruled-out' || p.rankStanding === 'ruled-out';
+        const ruledIn  = p.rankStanding === 'ruled-in';
         const pct = Math.round((p.standing || 0) * 100);
         return (
           <div key={p.key} style={{ display: 'flex', alignItems: 'center', gap: 10, opacity: ruledOut ? 0.5 : 1 }}>
@@ -43,9 +45,16 @@ function BakeOffStrip({ plans }) {
                 {p.name}
               </span>
             </div>
-            <span className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, width: 52, textAlign: 'right', flex: 'none', color: won ? 'var(--green)' : 'var(--text-sub)' }}>
-              {won ? '✓ WON' : `${pct}%`}
-            </span>
+            {ruledIn && (
+              <span className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, width: 52, textAlign: 'right', flex: 'none', color: 'var(--green)' }}>
+                ✓ FIT
+              </span>
+            )}
+            {!ruledIn && (
+              <span className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, width: 52, textAlign: 'right', flex: 'none', color: won ? 'var(--green)' : 'var(--text-sub)' }}>
+                {won ? '✓ WON' : `${pct}%`}
+              </span>
+            )}
           </div>
         );
       })}
@@ -315,10 +324,12 @@ function NewCaseModal({ onClose, onCaseCreated }) {
 // PlanCard — displays one Plan (A/B/C) with lead style for the highest prior
 // ---------------------------------------------------------------------------
 
-function PlanCard({ planId, label, name, mechanism, prior, sources: initialSources, isLead }) {
+function PlanCard({ planId, label, name, mechanism, prior, sources: initialSources, isLead, standing }) {
   const priorNum = parseFloat(prior) || 0;
   const [sources, setSources] = React.useState(initialSources || []);
   const [showForm, setShowForm] = React.useState(false);
+  const ruledOut = standing === 'ruled-out';
+  const ruledIn  = standing === 'ruled-in';
 
   // Sync if parent re-renders with new sources (e.g. after page reload)
   React.useEffect(() => { setSources(initialSources || []); }, [initialSources]);
@@ -337,9 +348,11 @@ function PlanCard({ planId, label, name, mechanism, prior, sources: initialSourc
         padding: 'var(--space-4)',
         marginBottom: 'var(--space-3)',
         boxShadow: isLead ? 'var(--shadow-hover)' : 'var(--shadow-card)',
+        opacity: ruledOut ? 0.5 : 1,
+        transition: 'opacity var(--speed)',
       }}
     >
-      {/* Header row: label key + name + prior chip */}
+      {/* Header row: label key + name + prior chip + standing badge */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-2)' }}>
         <span
           className="mono plan-key"
@@ -353,9 +366,15 @@ function PlanCard({ planId, label, name, mechanism, prior, sources: initialSourc
         >
           {label}
         </span>
-        <span style={{ flex: 1, fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--text)' }}>
+        <span style={{ flex: 1, fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--text)', textDecoration: ruledOut ? 'line-through' : 'none' }}>
           {name}
         </span>
+        {/* ruled-in badge */}
+        {ruledIn && (
+          <span className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--green)', background: 'var(--green-bg)', border: '1px solid var(--green)', borderRadius: 'var(--radius-pill)', padding: '2px 8px', flex: 'none' }}>
+            ✓ Ruled in
+          </span>
+        )}
         {/* Prior chip */}
         <span
           className="mono"
@@ -595,6 +614,83 @@ async function _postBakeOff(caseId) {
 }
 
 // ---------------------------------------------------------------------------
+// WeighPanel — Stage 3 re-rank UI: textarea + "Re-rank for me" button
+// ---------------------------------------------------------------------------
+
+function WeighPanel({ caseId, initialContext, onRerankDone }) {
+  const [context, setContext] = React.useState(initialContext || '');
+  const [state, setState] = React.useState('idle'); // 'idle'|'loading'|'error'
+  const [error, setError] = React.useState('');
+
+  // Sync initial context if case data loads after mount
+  React.useEffect(() => { setContext(initialContext || ''); }, [initialContext]);
+
+  async function handleRerank() {
+    if (!context.trim()) return;
+    setState('loading');
+    setError('');
+    try {
+      const resp = await fetch(`/api/cases/${caseId}/rerank`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ context }),
+      });
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        throw new Error(data.detail || `API error ${resp.status}`);
+      }
+      setState('idle');
+      if (onRerankDone) onRerankDone();
+    } catch (err) {
+      setError(err.message || 'Re-rank failed. Please try again.');
+      setState('error');
+    }
+  }
+
+  const isLoading = state === 'loading';
+
+  return (
+    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 'var(--space-5)', marginBottom: 'var(--space-6)' }}>
+      <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 'var(--space-3)' }}>
+        YOUR CONTEXT
+      </div>
+      <textarea
+        value={context}
+        onChange={(e) => { setContext(e.target.value); setError(''); }}
+        placeholder="Paste your numbers, constraints, or situation — e.g. Annual income £45k, risk tolerance low, need access within 2 years…"
+        rows={4}
+        disabled={isLoading}
+        aria-label="Your Context"
+        style={{
+          width: '100%', resize: 'vertical', padding: 'var(--space-3)',
+          fontSize: 'var(--text-base)', color: 'var(--text)', background: 'var(--surface-2)',
+          border: '1px solid var(--border)', borderRadius: 'var(--radius)', lineHeight: 1.55,
+          boxSizing: 'border-box', opacity: isLoading ? 0.6 : 1,
+        }}
+      />
+      {error && (
+        <p role="alert" style={{ color: 'var(--red)', fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}>
+          {error}
+        </p>
+      )}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'var(--space-3)' }}>
+        <button
+          className="btn btn-crux"
+          onClick={handleRerank}
+          disabled={!context.trim() || isLoading}
+          aria-busy={isLoading}
+        >
+          {isLoading
+            ? <><i className="ti ti-loader-2 crux-spin" aria-hidden="true"></i> Re-ranking…</>
+            : <><i className="ti ti-arrows-sort" aria-hidden="true"></i> Re-rank for me</>
+          }
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // StageBar — horizontal 5-step pipeline header
 // ---------------------------------------------------------------------------
 
@@ -778,21 +874,23 @@ function CaseDetailScreen({ caseId, onBack, theme, onToggleTheme }) {
         {(() => {
           const plans = caseData.plans || [];
           if (plans.length > 0) {
-            // Find highest prior to determine lead
-            const maxPrior = Math.max(...plans.map((p) => parseFloat(p.prior) || 0));
+            // Plans are sorted by current_rank from the API; rank-1 plan is the lead
+            const sortedPlans = [...plans].sort((a, b) => (a.current_rank || 99) - (b.current_rank || 99));
             return (
               <div style={{ marginBottom: 'var(--space-6)' }}>
-                {/* BakeOffStrip racing bars */}
+                {/* BakeOffStrip racing bars ordered by current_rank */}
                 <div style={{ marginBottom: 'var(--space-4)' }}>
-                  <BakeOffStrip plans={plans.map((p) => ({
+                  <BakeOffStrip plans={sortedPlans.map((p) => ({
                     key: p.label,
                     name: p.name,
-                    standing: parseFloat(p.prior) || 0,
+                    standing: p.bar_weight != null ? p.bar_weight : (parseFloat(p.prior) || 0),
+                    rankStanding: p.standing,
+                    current_rank: p.current_rank,
                     state: p.state,
                   }))} />
                 </div>
-                {/* PlanCard for each plan */}
-                {plans.map((p) => (
+                {/* PlanCard for each plan; lead is determined by current_rank === 1 */}
+                {sortedPlans.map((p) => (
                   <PlanCard
                     key={p.label}
                     planId={p.id}
@@ -801,7 +899,8 @@ function CaseDetailScreen({ caseId, onBack, theme, onToggleTheme }) {
                     mechanism={p.mechanism}
                     prior={p.prior}
                     sources={p.sources || []}
-                    isLead={(parseFloat(p.prior) || 0) === maxPrior}
+                    isLead={p.current_rank === 1}
+                    standing={p.standing}
                   />
                 ))}
               </div>
@@ -839,6 +938,18 @@ function CaseDetailScreen({ caseId, onBack, theme, onToggleTheme }) {
             </div>
           );
         })()}
+
+        {/* WEIGH · RE-RANK AGAINST YOUR DATA — only visible at stage >= 3 */}
+        {stage >= 3 && (
+          <>
+            <SectionLabel>WEIGH · RE-RANK AGAINST YOUR DATA</SectionLabel>
+            <WeighPanel
+              caseId={caseId}
+              initialContext={caseData.weigh_context || ''}
+              onRerankDone={loadCase}
+            />
+          </>
+        )}
 
         {/* THE PROBE empty-state */}
         <SectionLabel>THE PROBE · CHEAPEST DECISIVE TEST</SectionLabel>
