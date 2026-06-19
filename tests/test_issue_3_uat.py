@@ -1,6 +1,5 @@
 """Tests for issue #3: Single-user password auth with session cookies (UAT environment)."""
 import os
-import time
 
 import httpx
 import pytest
