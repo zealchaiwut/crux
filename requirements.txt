@@ -5,6 +5,8 @@ python-dotenv==1.2.2
 alembic==1.18.4
 sqlalchemy==2.0.51
 psycopg2-binary==2.9.12
+itsdangerous==2.2.0
+python-multipart==0.0.32
 
 # Transitive dependencies
 annotated-types==0.7.0
