@@ -80,6 +80,72 @@ def _snippet(sharpened: str) -> str:
     return sharpened[:_SNIPPET_MAX_LEN].rsplit(" ", 1)[0] + "…"
 
 
+def find_related_by_text(
+    sharpened: str,
+    mechanisms: list[str],
+    db: Session,
+    threshold: float | None = None,
+) -> list[dict]:
+    """Return ranked related cases given sharpened text and mechanisms.
+
+    Used by the New Case flow before a case is persisted.
+    Returns [] if sharpened is empty or no candidates score above threshold.
+    """
+    if threshold is None:
+        threshold = SIMILARITY_THRESHOLD
+
+    if not sharpened or not sharpened.strip():
+        return []
+
+    query_text = _build_text(sharpened, mechanisms or [])
+    query_vec = _tf_vector(_tokenize(query_text))
+
+    candidates = (
+        db.query(models.Case)
+        .join(models.Probe, models.Probe.case_id == models.Case.id)
+        .join(models.Verdict, models.Verdict.probe_id == models.Probe.id)
+        .options(
+            joinedload(models.Case.plans),
+            joinedload(models.Case.probes).joinedload(models.Probe.verdicts),
+        )
+        .all()
+    )
+
+    seen: set[str] = set()
+    results: list[dict] = []
+
+    for case in candidates:
+        if case.id in seen:
+            continue
+        if not case.sharpened or not case.sharpened.strip():
+            continue
+
+        probe = case.probes[0] if case.probes else None
+        if probe is None:
+            continue
+        verdict = probe.verdicts[0] if probe.verdicts else None
+        if verdict is None:
+            continue
+
+        mechs = [p.mechanism or "" for p in case.plans if p.mechanism]
+        cand_text = _build_text(case.sharpened, mechs)
+        cand_vec = _tf_vector(_tokenize(cand_text))
+        score = _cosine(query_vec, cand_vec)
+
+        if score >= threshold:
+            results.append({
+                "case_id": case.id,
+                "sharpened_snippet": _snippet(case.sharpened),
+                "verdict_outcome": verdict.outcome,
+                "deciding_metric": probe.target_metric or "",
+                "similarity_score": round(score, 6),
+            })
+        seen.add(case.id)
+
+    results.sort(key=lambda r: r["similarity_score"], reverse=True)
+    return results
+
+
 def find_related_cases(
     case_id: str,
     db: Session,

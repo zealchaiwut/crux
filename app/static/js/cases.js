@@ -144,6 +144,7 @@ function NewCaseModal({ onClose, onCaseCreated }) {
   const [sharpened, setSharpened] = React.useState('');
   const [notInvestigating, setNotInvestigating] = React.useState([]);
   const [error, setError] = React.useState('');
+  const [priorLearnings, setPriorLearnings] = React.useState([]);
 
   // Escape key closes modal (AC12)
   React.useEffect(() => {
@@ -158,6 +159,7 @@ function NewCaseModal({ onClose, onCaseCreated }) {
     if (!raw.trim()) return;
     setStep('loading');
     setError('');
+    setPriorLearnings([]);
     try {
       const resp = await fetch('/api/cases/sharpen', {
         method: 'POST',
@@ -171,6 +173,20 @@ function NewCaseModal({ onClose, onCaseCreated }) {
       const data = await resp.json();
       setSharpened(data.sharpened);
       setNotInvestigating(data.not_investigating || []);
+      // Fetch prior learnings silently; failures do not block the flow
+      try {
+        const relResp = await fetch('/api/cases/related-text', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ sharpened: data.sharpened, mechanisms: [] }),
+        });
+        if (relResp.ok) {
+          const relData = await relResp.json();
+          setPriorLearnings(relData.matches || []);
+        }
+      } catch (_) {
+        // silent failure — prior learnings are advisory only
+      }
       setStep('confirm');
     } catch (err) {
       setError(err.message || 'Sharpen failed. Please try again.');
@@ -290,6 +306,8 @@ function NewCaseModal({ onClose, onCaseCreated }) {
                 </div>
               </div>
             )}
+
+            <PriorLearnings matches={priorLearnings} onNavigate={null} />
 
             {error && (
               <p role="alert" style={{ color: 'var(--red)', fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}>
@@ -597,6 +615,85 @@ function SourceForm({ planId, onClose, onAdded }) {
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// PriorLearnings — read-only section showing related confirmed/killed priors
+// ---------------------------------------------------------------------------
+
+const _PRIOR_PILL_STYLES = {
+  confirmed: {
+    label: 'Confirmed Cause',
+    color: 'var(--green)',
+    bg: 'var(--green-bg)',
+    border: 'var(--green)',
+  },
+  killed: {
+    label: 'Killed Hypothesis',
+    color: 'var(--red)',
+    bg: 'var(--red-bg)',
+    border: 'var(--red)',
+  },
+  inconclusive: {
+    label: 'Inconclusive',
+    color: 'var(--amber)',
+    bg: 'var(--amber-bg)',
+    border: 'var(--amber)',
+  },
+};
+
+function PriorLearnings({ matches, onNavigate }) {
+  if (!matches || matches.length === 0) return null;
+
+  return (
+    <div style={{ marginBottom: 'var(--space-5)' }}>
+      <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 'var(--space-3)' }}>
+        PRIOR LEARNINGS
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+        {matches.map((m) => {
+          const pill = _PRIOR_PILL_STYLES[m.verdict_outcome] || _PRIOR_PILL_STYLES.inconclusive;
+          return (
+            <div
+              key={m.case_id}
+              style={{
+                display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+                gap: 'var(--space-3)',
+                background: 'var(--surface)', border: '1px solid var(--border)',
+                borderRadius: 'var(--radius)', padding: 'var(--space-3) var(--space-4)',
+              }}
+            >
+              <span style={{ flex: 1, fontSize: 'var(--text-sm)', color: 'var(--text)', lineHeight: 1.5 }}>
+                {m.sharpened_snippet}
+              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flex: 'none' }}>
+                <span
+                  className="mono"
+                  style={{
+                    fontSize: 'var(--text-2xs)', fontWeight: 700,
+                    color: pill.color, background: pill.bg,
+                    border: `1px solid ${pill.border}`,
+                    borderRadius: 'var(--radius-pill)', padding: '2px 8px',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {pill.label}
+                </span>
+                <button
+                  className="btn btn-sm"
+                  onClick={() => onNavigate && onNavigate(m.case_id)}
+                  aria-label={`View source case for: ${m.sharpened_snippet}`}
+                  style={{ padding: '3px 9px', fontSize: 'var(--text-2xs)' }}
+                >
+                  <i className="ti ti-arrow-right" aria-hidden="true"></i> View
+                </button>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -1187,7 +1284,7 @@ function EmptySection({ label, message }) {
   );
 }
 
-function CaseDetailScreen({ caseId, onBack, theme, onToggleTheme }) {
+function CaseDetailScreen({ caseId, onBack, onNavigateToCase, theme, onToggleTheme }) {
   const [caseData, setCaseData] = React.useState(null);
   const [notFound, setNotFound] = React.useState(false);
   const [bakeOffState, setBakeOffState] = React.useState('idle'); // 'idle'|'loading'|'error'
@@ -1195,6 +1292,7 @@ function CaseDetailScreen({ caseId, onBack, theme, onToggleTheme }) {
   const [probeState, setProbeState] = React.useState('idle'); // 'idle'|'loading'|'error'
   const [probeError, setProbeError] = React.useState('');
   const [showLogVerdictModal, setShowLogVerdictModal] = React.useState(false);
+  const [priorLearnings, setPriorLearnings] = React.useState([]);
 
   function loadCase() {
     fetch(`/api/cases/${caseId}`)
@@ -1207,6 +1305,15 @@ function CaseDetailScreen({ caseId, onBack, theme, onToggleTheme }) {
   }
 
   React.useEffect(() => { loadCase(); }, [caseId]);
+
+  // Fetch prior learnings silently whenever the case loads
+  React.useEffect(() => {
+    if (!caseId) return;
+    fetch(`/api/cases/${caseId}/related`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (data) setPriorLearnings(data.matches || []); })
+      .catch(() => {});
+  }, [caseId]);
 
   // Auto-trigger probe design when stage >= 4 and no probe exists
   React.useEffect(() => {
@@ -1293,6 +1400,12 @@ function CaseDetailScreen({ caseId, onBack, theme, onToggleTheme }) {
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 'var(--space-5)', marginBottom: 'var(--space-6)' }}>
           <StageBar stage={stage} />
         </div>
+
+        {/* PRIOR LEARNINGS — shown when related priors exist */}
+        <PriorLearnings
+          matches={priorLearnings}
+          onNavigate={onNavigateToCase}
+        />
 
         {/* SHARPENED STATEMENT */}
         <SectionLabel>SHARPENED STATEMENT</SectionLabel>
