@@ -20,18 +20,14 @@ def test_app_main_has_fastapi_instance():
     assert "FastAPI" in content
 
 
-# AC2: GET /healthz returns 200 with {"status": "ok"}
-def test_healthz_returns_200():
-    from app.main import app
-    client = TestClient(app)
-    response = client.get("/healthz")
+# AC2: GET /healthz returns 200 with {"status": "ok"} (requires auth — issue #3)
+def test_healthz_returns_200(authed_client):
+    response = authed_client.get("/healthz")
     assert response.status_code == 200
 
 
-def test_healthz_returns_json_with_status():
-    from app.main import app
-    client = TestClient(app)
-    response = client.get("/healthz")
+def test_healthz_returns_json_with_status(authed_client):
+    response = authed_client.get("/healthz")
     body = response.json()
     assert "status" in body
     assert body["status"] == "ok"
