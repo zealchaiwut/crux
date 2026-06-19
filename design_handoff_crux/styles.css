@@ -1,0 +1,12 @@
+/* ============================================================
+   crux · styles.css
+   The single entry point consumers link. @import lines only —
+   no rules live here. Order: fonts → tokens → base → primitives.
+   ============================================================ */
+
+@import url('./tokens/fonts.css');
+@import url('./tokens/colors.css');
+@import url('./tokens/typography.css');
+@import url('./tokens/spacing.css');
+@import url('./base.css');
+@import url('./primitives.css');

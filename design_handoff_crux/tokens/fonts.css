@@ -1,0 +1,10 @@
+/* ============================================================
+   crux · fonts
+   Sans is a deliberate system stack (no novel typeface — see
+   DESIGN.md §3). The only loaded webfont is the mono fallback:
+   SF Mono is Apple-only, so JetBrains Mono stands in elsewhere.
+   ⚠ SUBSTITUTION: JetBrains Mono ≈ SF Mono. Swap in a licensed
+   SF Mono binary here if exact fidelity is required.
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap');
