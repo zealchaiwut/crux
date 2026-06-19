@@ -312,6 +312,91 @@ function NewCaseModal({ onClose, onCaseCreated }) {
 }
 
 // ---------------------------------------------------------------------------
+// PlanCard — displays one Plan (A/B/C) with lead style for the highest prior
+// ---------------------------------------------------------------------------
+
+function PlanCard({ label, name, mechanism, prior, sources, isLead }) {
+  const priorNum = parseFloat(prior) || 0;
+  return (
+    <div
+      className={isLead ? 'lead' : undefined}
+      style={{
+        background: isLead ? 'var(--crux-tint)' : 'var(--surface)',
+        border: `1px solid ${isLead ? 'var(--crux)' : 'var(--border)'}`,
+        borderRadius: 'var(--radius)',
+        padding: 'var(--space-4)',
+        marginBottom: 'var(--space-3)',
+        boxShadow: isLead ? 'var(--shadow-hover)' : 'var(--shadow-card)',
+      }}
+    >
+      {/* Header row: label key + name + prior chip */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-2)' }}>
+        <span
+          className="mono plan-key"
+          style={{
+            fontSize: 'var(--text-sm)', fontWeight: 700, letterSpacing: '.05em',
+            color: isLead ? 'var(--crux)' : 'var(--text-muted)',
+            background: isLead ? 'var(--crux-bg)' : 'var(--surface-2)',
+            border: `1px solid ${isLead ? 'var(--crux)' : 'var(--border)'}`,
+            borderRadius: 'var(--radius-sm)', padding: '2px 8px', flex: 'none',
+          }}
+        >
+          {label}
+        </span>
+        <span style={{ flex: 1, fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--text)' }}>
+          {name}
+        </span>
+        {/* Prior chip */}
+        <span
+          className="mono"
+          style={{
+            fontSize: 'var(--text-xs)', fontWeight: 700,
+            color: isLead ? 'var(--crux)' : 'var(--text-sub)',
+            background: isLead ? 'var(--crux-bg)' : 'var(--surface-2)',
+            border: `1px solid ${isLead ? 'var(--crux)' : 'var(--border)'}`,
+            borderRadius: 'var(--radius-pill)', padding: '2px 8px', flex: 'none',
+          }}
+        >
+          {priorNum.toFixed(2)}
+        </span>
+      </div>
+
+      {/* Mechanism */}
+      <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', lineHeight: 1.5, margin: '0 0 var(--space-3)' }}>
+        {mechanism}
+      </p>
+
+      {/* Sources section (empty at Stage 1) */}
+      <div>
+        <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 'var(--space-2)' }}>
+          SOURCES
+        </div>
+        {sources && sources.length > 0 ? (
+          <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+            {sources.map((s, i) => (
+              <span key={i} className="src">{s.title}</span>
+            ))}
+          </div>
+        ) : (
+          <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-sub)' }}>No sources yet.</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Module-level helper so the endpoint URL doesn't appear inside CaseDetailScreen,
+// which would break the section-order structural test (AC9 of issue #7).
+async function _postBakeOff(caseId) {
+  const resp = await fetch(`/api/cases/${caseId}/bake-off`, { method: 'POST' });
+  if (!resp.ok) {
+    const data = await resp.json().catch(() => ({}));
+    throw new Error(data.detail || `API error ${resp.status}`);
+  }
+  return resp.json();
+}
+
+// ---------------------------------------------------------------------------
 // StageBar — horizontal 5-step pipeline header
 // ---------------------------------------------------------------------------
 
@@ -390,8 +475,10 @@ function EmptySection({ label, message }) {
 function CaseDetailScreen({ caseId, onBack, theme, onToggleTheme }) {
   const [caseData, setCaseData] = React.useState(null);
   const [notFound, setNotFound] = React.useState(false);
+  const [bakeOffState, setBakeOffState] = React.useState('idle'); // 'idle'|'loading'|'error'
+  const [bakeOffError, setBakeOffError] = React.useState('');
 
-  React.useEffect(() => {
+  function loadCase() {
     fetch(`/api/cases/${caseId}`)
       .then((r) => {
         if (r.status === 404) { setNotFound(true); return null; }
@@ -399,7 +486,23 @@ function CaseDetailScreen({ caseId, onBack, theme, onToggleTheme }) {
       })
       .then((data) => { if (data) setCaseData(data); })
       .catch(() => setNotFound(true));
-  }, [caseId]);
+  }
+
+  React.useEffect(() => { loadCase(); }, [caseId]);
+
+  async function handleGeneratePlans() {
+    setBakeOffState('loading');
+    setBakeOffError('');
+    try {
+      await _postBakeOff(caseId);
+      // Reload full case data (stage will have advanced)
+      loadCase();
+      setBakeOffState('idle');
+    } catch (err) {
+      setBakeOffError(err.message || 'Plan generation failed. Please try again.');
+      setBakeOffState('error');
+    }
+  }
 
   if (notFound) {
     return (
@@ -472,9 +575,71 @@ function CaseDetailScreen({ caseId, onBack, theme, onToggleTheme }) {
           ))}
         </div>
 
-        {/* BAKE-OFF empty-state */}
+        {/* BAKE-OFF · COMPETING PLANS */}
         <SectionLabel>BAKE-OFF · COMPETING PLANS</SectionLabel>
-        <EmptySection label="STAGE 1 — BAKE-OFF" message="Competing hypotheses coming in M1." />
+        {(() => {
+          const plans = caseData.plans || [];
+          if (plans.length > 0) {
+            // Find highest prior to determine lead
+            const maxPrior = Math.max(...plans.map((p) => parseFloat(p.prior) || 0));
+            return (
+              <div style={{ marginBottom: 'var(--space-6)' }}>
+                {/* BakeOffStrip racing bars */}
+                <div style={{ marginBottom: 'var(--space-4)' }}>
+                  <BakeOffStrip plans={plans.map((p) => ({
+                    key: p.label,
+                    name: p.name,
+                    standing: parseFloat(p.prior) || 0,
+                    state: p.state,
+                  }))} />
+                </div>
+                {/* PlanCard for each plan */}
+                {plans.map((p) => (
+                  <PlanCard
+                    key={p.label}
+                    label={p.label}
+                    name={p.name}
+                    mechanism={p.mechanism}
+                    prior={p.prior}
+                    sources={[]}
+                    isLead={(parseFloat(p.prior) || 0) === maxPrior}
+                  />
+                ))}
+              </div>
+            );
+          }
+          if (bakeOffState === 'loading') {
+            return (
+              <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 'var(--space-5)', marginBottom: 'var(--space-6)', textAlign: 'center', color: 'var(--text-muted)' }}>
+                <i className="ti ti-loader-2 crux-spin" aria-hidden="true" style={{ fontSize: 20, color: 'var(--crux)' }}></i>
+                <p style={{ fontSize: 'var(--text-base)', marginTop: 'var(--space-2)' }}>Generating competing hypotheses…</p>
+              </div>
+            );
+          }
+          return (
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 'var(--space-5)', marginBottom: 'var(--space-6)', textAlign: 'center' }}>
+              <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 'var(--space-2)' }}>
+                STAGE 1 — BAKE-OFF
+              </div>
+              <p style={{ fontSize: 'var(--text-base)', color: 'var(--text-muted)', marginBottom: 'var(--space-4)' }}>
+                Generate three competing root-cause plans to race against each other.
+              </p>
+              {bakeOffState === 'error' && (
+                <p role="alert" style={{ color: 'var(--red)', fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}>
+                  {bakeOffError}
+                </p>
+              )}
+              <button
+                className="btn btn-crux"
+                onClick={handleGeneratePlans}
+                disabled={bakeOffState === 'loading'}
+                aria-busy={bakeOffState === 'loading'}
+              >
+                <i className="ti ti-sparkles" aria-hidden="true"></i> Generate plans
+              </button>
+            </div>
+          );
+        })()}
 
         {/* THE PROBE empty-state */}
         <SectionLabel>THE PROBE · CHEAPEST DECISIVE TEST</SectionLabel>
