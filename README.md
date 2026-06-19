@@ -41,6 +41,22 @@ alembic upgrade head
 alembic revision --autogenerate -m "description"
 ```
 
+## API routes
+
+```
+GET  /api/cases                       — list all cases (with plans, stage, verdict state)
+GET  /api/cases/{id}                  — case detail including plans
+POST /api/cases/sharpen               — call Claude to sharpen a raw problem statement
+POST /api/cases                       — create a case at Stage 0 (sharpened)
+POST /api/cases/{id}/bake-off         — generate Plan A/B/C via Claude and advance to Stage 1
+POST /api/cases/{id}/rerank           — re-rank plans with user context, advance to Stage 3
+POST /api/cases/{id}/probe            — design a probe via Claude, advance to Stage 4
+POST /api/cases/{id}/verdict          — record verdict outcome, advance to Stage 5
+
+GET  /api/sources?plan_id=<id>        — list sources for a plan
+POST /api/sources                     — add a source to a plan
+```
+
 ## Running tests
 
 ```bash
