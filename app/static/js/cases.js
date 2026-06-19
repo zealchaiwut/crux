@@ -1,5 +1,5 @@
 /* crux · Cases list screen components
-   CaseCard, BakeOffStrip, Pill, CasesScreen, NewCaseModal
+   CaseCard, BakeOffStrip, Pill, CasesScreen, NewCaseModal, CaseDetailScreen
    Adapted from design_handoff_crux/components/case/ and reference_screens/screens.jsx
 */
 
@@ -125,34 +125,301 @@ function CaseCard({ id, title, stage, verdict, plans, onClick }) {
   );
 }
 
-function NewCaseModal({ onClose }) {
+// ---------------------------------------------------------------------------
+// NewCaseModal — full 2-step flow: input → confirm
+// ---------------------------------------------------------------------------
+
+function NewCaseModal({ onClose, onCaseCreated }) {
+  const [step, setStep] = React.useState('input'); // 'input' | 'loading' | 'confirm' | 'creating'
+  const [raw, setRaw] = React.useState('');
+  const [sharpened, setSharpened] = React.useState('');
+  const [notInvestigating, setNotInvestigating] = React.useState([]);
+  const [error, setError] = React.useState('');
+
+  // Escape key closes modal (AC12)
+  React.useEffect(() => {
+    function onKeyDown(e) {
+      if (e.key === 'Escape') onClose();
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
+
+  async function handleSharpen() {
+    if (!raw.trim()) return;
+    setStep('loading');
+    setError('');
+    try {
+      const resp = await fetch('/api/cases/sharpen', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ raw_problem: raw }),
+      });
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        throw new Error(data.detail || `API error ${resp.status}`);
+      }
+      const data = await resp.json();
+      setSharpened(data.sharpened);
+      setNotInvestigating(data.not_investigating || []);
+      setStep('confirm');
+    } catch (err) {
+      setError(err.message || 'Sharpen failed. Please try again.');
+      setStep('input');
+    }
+  }
+
+  async function handleCreate() {
+    setStep('creating');
+    setError('');
+    try {
+      const resp = await fetch('/api/cases', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          raw_problem: raw,
+          sharpened,
+          not_investigating: notInvestigating,
+        }),
+      });
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        throw new Error(data.detail || `Create failed ${resp.status}`);
+      }
+      const data = await resp.json();
+      onClose();
+      if (onCaseCreated) onCaseCreated(data.id);
+    } catch (err) {
+      setError(err.message || 'Could not create case. Please try again.');
+      setStep('confirm');
+    }
+  }
+
+  const isLoading  = step === 'loading';
+  const isCreating = step === 'creating';
+
   return (
     <div
       onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="New case"
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--space-5)', zIndex: 50 }}
     >
       <div
         onClick={(e) => e.stopPropagation()}
         style={{ width: 560, maxWidth: '100%', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-xl)', boxShadow: 'var(--shadow-card)', padding: 'var(--space-6)' }}
       >
+        {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-4)' }}>
           <h2 style={{ fontSize: 'var(--text-xl)', fontWeight: 800, color: 'var(--text)' }}>New case</h2>
           <button className="btn btn-sm" onClick={onClose} aria-label="Close" style={{ padding: '6px 8px' }}>
             <i className="ti ti-x" aria-hidden="true"></i>
           </button>
         </div>
-        <p style={{ fontSize: 'var(--text-base)', color: 'var(--text-muted)', lineHeight: 1.55 }}>
-          New case creation coming soon.
-        </p>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'var(--space-5)' }}>
-          <button className="btn" onClick={onClose}>Close</button>
+
+        {/* Step: input or loading */}
+        {(step === 'input' || step === 'loading') && (
+          <div>
+            <label style={{ display: 'block', fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 'var(--space-2)' }}>
+              Paste the messy problem
+            </label>
+            <textarea
+              value={raw}
+              onChange={(e) => { setRaw(e.target.value); setError(''); }}
+              placeholder="Dump everything you know — symptoms, timeline, what you've tried…"
+              rows={6}
+              disabled={isLoading}
+              style={{
+                width: '100%', resize: 'vertical', padding: 'var(--space-3)',
+                fontSize: 'var(--text-base)', color: 'var(--text)', background: 'var(--surface-2)',
+                border: '1px solid var(--border)', borderRadius: 'var(--radius)', lineHeight: 1.55,
+                boxSizing: 'border-box', opacity: isLoading ? 0.6 : 1,
+              }}
+            />
+            {error && (
+              <p role="alert" style={{ color: 'var(--red)', fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}>
+                {error}
+              </p>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)', marginTop: 'var(--space-5)' }}>
+              <button className="btn" onClick={onClose} disabled={isLoading}>Cancel</button>
+              <button
+                className="btn btn-crux"
+                onClick={handleSharpen}
+                disabled={!raw.trim() || isLoading}
+                aria-busy={isLoading}
+              >
+                {isLoading
+                  ? <><i className="ti ti-loader-2 crux-spin" aria-hidden="true"></i> Sharpening…</>
+                  : <><i className="ti ti-arrow-right" aria-hidden="true"></i> Sharpen</>
+                }
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Step: confirm */}
+        {(step === 'confirm' || step === 'creating') && (
+          <div>
+            <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--crux)', marginBottom: 'var(--space-2)' }}>
+              SHARPENED STATEMENT
+            </div>
+            <div style={{ background: 'var(--crux-tint)', border: '1px solid var(--crux)', borderRadius: 'var(--radius)', padding: 'var(--space-4)', fontSize: 'var(--text-lg)', color: 'var(--text)', lineHeight: 1.5, marginBottom: 'var(--space-4)' }}>
+              {sharpened}
+            </div>
+
+            {notInvestigating.length > 0 && (
+              <div style={{ marginBottom: 'var(--space-4)' }}>
+                <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 'var(--space-2)' }}>
+                  NOT INVESTIGATING
+                </div>
+                <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+                  {notInvestigating.map((item) => (
+                    <span key={item} className="src" style={{ textDecoration: 'line-through' }}>{item}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {error && (
+              <p role="alert" style={{ color: 'var(--red)', fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}>
+                {error}
+              </p>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--space-2)', marginTop: 'var(--space-5)' }}>
+              <button className="btn" onClick={() => setStep('input')} disabled={isCreating}>
+                <i className="ti ti-arrow-left" aria-hidden="true"></i> Back
+              </button>
+              <button
+                className="btn btn-crux"
+                onClick={handleCreate}
+                disabled={isCreating}
+                aria-busy={isCreating}
+              >
+                {isCreating
+                  ? <><i className="ti ti-loader-2 crux-spin" aria-hidden="true"></i> Creating…</>
+                  : <><i className="ti ti-check" aria-hidden="true"></i> Create case</>
+                }
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// CaseDetailScreen — shows sharpened statement + not_investigating chips
+// ---------------------------------------------------------------------------
+
+function CaseDetailScreen({ caseId, onBack, theme, onToggleTheme }) {
+  const [caseData, setCaseData] = React.useState(null);
+  const [notFound, setNotFound] = React.useState(false);
+
+  React.useEffect(() => {
+    fetch(`/api/cases/${caseId}`)
+      .then((r) => {
+        if (r.status === 404) { setNotFound(true); return null; }
+        return r.json();
+      })
+      .then((data) => { if (data) setCaseData(data); })
+      .catch(() => setNotFound(true));
+  }, [caseId]);
+
+  if (notFound) {
+    return (
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 'var(--text-xl)', fontWeight: 600, color: 'var(--text)', marginBottom: 'var(--space-2)' }}>Case not found</div>
+          <button className="btn" onClick={onBack} style={{ marginTop: 'var(--space-3)' }}>Back to cases</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!caseData) {
+    return (
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
+        Loading…
+      </div>
+    );
+  }
+
+  const notInvestigating = caseData.not_investigating || [];
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+      {/* Top nav */}
+      <header style={{ padding: 'var(--space-4) var(--space-6)', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--space-4)' }}>
+        <button className="btn btn-sm" onClick={onBack}>
+          <i className="ti ti-arrow-left" aria-hidden="true"></i> Cases
+        </button>
+        <span className="mono" style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-sub)', fontWeight: 700 }}>
+          {caseData.id && caseData.id.substring(0, 8).toUpperCase()}
+        </span>
+        <button className="btn btn-sm" onClick={onToggleTheme} aria-label="Toggle theme" style={{ padding: '7px 9px' }}>
+          <i className={`ti ti-${theme === 'dark' ? 'sun' : 'moon'}`} aria-hidden="true"></i>
+        </button>
+      </header>
+
+      {/* Content */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: 'var(--space-6)', maxWidth: 820, width: '100%', margin: '0 auto' }}>
+        {/* Sharpened statement (primary problem statement, AC9) */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 'var(--space-4)', marginBottom: 'var(--space-4)' }}>
+          <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 800, letterSpacing: '-.01em', lineHeight: 1.25, color: 'var(--text)', textWrap: 'pretty' }}>
+            {caseData.sharpened}
+          </h1>
+          <Pill state={caseData.verdict} />
+        </div>
+
+        {/* Not investigating chips (AC10) */}
+        {notInvestigating.length > 0 && (
+          <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', marginBottom: 'var(--space-6)' }}>
+            <span className="mono" style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-sub)', fontWeight: 700, alignSelf: 'center' }}>
+              NOT INVESTIGATING:
+            </span>
+            {notInvestigating.map((item) => (
+              <NotInvestigatingChip key={item} label={item} />
+            ))}
+          </div>
+        )}
+
+        {/* Placeholder for future stages */}
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 'var(--space-5)', textAlign: 'center', color: 'var(--text-muted)' }}>
+          <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 'var(--space-2)' }}>
+            STAGE 1 — BAKE-OFF
+          </div>
+          <p style={{ fontSize: 'var(--text-base)' }}>Competing hypotheses coming in M1.</p>
         </div>
       </div>
     </div>
   );
 }
 
-function CasesScreen({ theme, onToggleTheme }) {
+function NotInvestigatingChip({ label }) {
+  const [dismissed, setDismissed] = React.useState(false);
+  if (dismissed) return null;
+  return (
+    <span
+      className="src"
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 4, textDecoration: 'line-through' }}
+    >
+      {label}
+      <button
+        onClick={() => setDismissed(true)}
+        aria-label={`Dismiss: ${label}`}
+        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', color: 'var(--text-sub)', lineHeight: 1 }}
+      >
+        <i className="ti ti-x" style={{ fontSize: 10 }} aria-hidden="true"></i>
+      </button>
+    </span>
+  );
+}
+
+function CasesScreen({ theme, onToggleTheme, onCaseCreated }) {
   const [cases, setCases] = React.useState(null);
   const [showModal, setShowModal] = React.useState(false);
 
@@ -212,7 +479,7 @@ function CasesScreen({ theme, onToggleTheme }) {
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', marginBottom: 'var(--space-6)' }}>
                   {open.map((c) => (
-                    <CaseCard key={c.id} {...c} />
+                    <CaseCard key={c.id} {...c} onClick={() => onCaseCreated && onCaseCreated(c.id)} />
                   ))}
                 </div>
               </>
@@ -225,7 +492,7 @@ function CasesScreen({ theme, onToggleTheme }) {
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
                   {closed.map((c) => (
-                    <CaseCard key={c.id} {...c} />
+                    <CaseCard key={c.id} {...c} onClick={() => onCaseCreated && onCaseCreated(c.id)} />
                   ))}
                 </div>
               </>
@@ -234,7 +501,15 @@ function CasesScreen({ theme, onToggleTheme }) {
         )}
       </div>
 
-      {showModal && <NewCaseModal onClose={() => setShowModal(false)} />}
+      {showModal && (
+        <NewCaseModal
+          onClose={() => setShowModal(false)}
+          onCaseCreated={(id) => {
+            setShowModal(false);
+            if (onCaseCreated) onCaseCreated(id);
+          }}
+        />
+      )}
     </div>
   );
 }
