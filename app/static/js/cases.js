@@ -1,11 +1,9 @@
-/* crux · Cases list screen components
-   CaseCard, BakeOffStrip, Pill, CasesScreen, NewCaseModal, CaseDetailScreen
-   Adapted from design_handoff_crux/components/case/ and reference_screens/screens.jsx
+/* crux · Cases list + detail screen components
+   Includes Stage 2 (Gather) research loop automation with per-plan states:
+   idle → running (spinner) → done (SourceChips) | empty | error (retry).
 */
 
 const STAGE_NAMES = ['Sharpen', 'Bake-off', 'Gather', 'Weigh', 'Probe'];
-
-// Stage ramp: pip at position i uses --st-(i+1)
 const STAGE_COLORS = ['var(--st-1)', 'var(--st-2)', 'var(--st-3)', 'var(--st-4)', 'var(--st-5)'];
 
 function Pill({ state }) {
@@ -30,7 +28,6 @@ function BakeOffStrip({ plans }) {
       {plans.map((p) => {
         const won      = p.state === 'won';
         const lead     = p.state === 'leading' || won || p.current_rank === 1;
-        // rankStanding is the qualitative re-rank status; state handles pre-rerank flags
         const ruledOut = p.state === 'ruled-out' || p.rankStanding === 'ruled-out';
         const ruledIn  = p.rankStanding === 'ruled-in';
         const pct = Math.round((p.standing || 0) * 100);
@@ -66,7 +63,6 @@ function CaseCard({ id, title, stage, verdict, plans, onClick }) {
   const [hovered, setHovered] = React.useState(false);
   const closed = verdict === 'confirmed' || verdict === 'killed' || verdict === 'inconclusive';
 
-  // Verdict tint colours for closed spine
   const spineColor = verdict === 'confirmed'    ? 'var(--green)'
                    : verdict === 'killed'       ? 'var(--red)'
                    : verdict === 'inconclusive' ? 'var(--amber)'
@@ -76,14 +72,11 @@ function CaseCard({ id, title, stage, verdict, plans, onClick }) {
                    : verdict === 'inconclusive' ? 'var(--amber-bg)'
                    : 'var(--surface-2)';
 
-  // 5-pip row: done pips use --st-(i+1) colour; current pip uses --st-(stage+1)
   const safeStage = Math.max(0, Math.min(stage || 0, 4));
   const stagePips = STAGE_NAMES.map((_, i) => {
     const done = closed || i < safeStage;
     const now  = !closed && i === safeStage;
-    const bg   = done ? STAGE_COLORS[i]
-               : now  ? STAGE_COLORS[i]
-               : 'var(--border)';
+    const bg   = done ? STAGE_COLORS[i] : now ? STAGE_COLORS[i] : 'var(--border)';
     return (
       <div key={i} style={{ flex: 1, height: 5, borderRadius: 3, background: bg }}></div>
     );
@@ -106,7 +99,6 @@ function CaseCard({ id, title, stage, verdict, plans, onClick }) {
         transition: 'box-shadow var(--speed), border-color var(--speed)',
       }}
     >
-      {/* Stage spine */}
       <div style={{ width: 118, flex: 'none', background: spineBg, borderRight: '1px solid var(--border)', padding: 'var(--space-3)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
         <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: closed ? spineColor : 'var(--crux)' }}>
           {stageLabel}
@@ -122,7 +114,6 @@ function CaseCard({ id, title, stage, verdict, plans, onClick }) {
         </div>
       </div>
 
-      {/* Body */}
       <div style={{ flex: 1, minWidth: 0, padding: 'var(--space-4)' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 'var(--space-3)', marginBottom: 'var(--space-3)' }}>
           <h3 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--text)', lineHeight: 1.35, textWrap: 'pretty' }}>{title}</h3>
@@ -135,21 +126,18 @@ function CaseCard({ id, title, stage, verdict, plans, onClick }) {
 }
 
 // ---------------------------------------------------------------------------
-// NewCaseModal — full 2-step flow: input → confirm
+// NewCaseModal
 // ---------------------------------------------------------------------------
 
 function NewCaseModal({ onClose, onCaseCreated }) {
-  const [step, setStep] = React.useState('input'); // 'input' | 'loading' | 'confirm' | 'creating'
+  const [step, setStep] = React.useState('input');
   const [raw, setRaw] = React.useState('');
   const [sharpened, setSharpened] = React.useState('');
   const [notInvestigating, setNotInvestigating] = React.useState([]);
   const [error, setError] = React.useState('');
 
-  // Escape key closes modal (AC12)
   React.useEffect(() => {
-    function onKeyDown(e) {
-      if (e.key === 'Escape') onClose();
-    }
+    function onKeyDown(e) { if (e.key === 'Escape') onClose(); }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [onClose]);
@@ -185,11 +173,7 @@ function NewCaseModal({ onClose, onCaseCreated }) {
       const resp = await fetch('/api/cases', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          raw_problem: raw,
-          sharpened,
-          not_investigating: notInvestigating,
-        }),
+        body: JSON.stringify({ raw_problem: raw, sharpened, not_investigating: notInvestigating }),
       });
       if (!resp.ok) {
         const data = await resp.json().catch(() => ({}));
@@ -219,7 +203,6 @@ function NewCaseModal({ onClose, onCaseCreated }) {
         onClick={(e) => e.stopPropagation()}
         style={{ width: 560, maxWidth: '100%', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-xl)', boxShadow: 'var(--shadow-card)', padding: 'var(--space-6)' }}
       >
-        {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-4)' }}>
           <h2 style={{ fontSize: 'var(--text-xl)', fontWeight: 800, color: 'var(--text)' }}>New case</h2>
           <button className="btn btn-sm" onClick={onClose} aria-label="Close" style={{ padding: '6px 8px' }}>
@@ -227,7 +210,6 @@ function NewCaseModal({ onClose, onCaseCreated }) {
           </button>
         </div>
 
-        {/* Step: input or loading */}
         {(step === 'input' || step === 'loading') && (
           <div>
             <label style={{ display: 'block', fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 'var(--space-2)' }}>
@@ -246,29 +228,16 @@ function NewCaseModal({ onClose, onCaseCreated }) {
                 boxSizing: 'border-box', opacity: isLoading ? 0.6 : 1,
               }}
             />
-            {error && (
-              <p role="alert" style={{ color: 'var(--red)', fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}>
-                {error}
-              </p>
-            )}
+            {error && <p role="alert" style={{ color: 'var(--red)', fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}>{error}</p>}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)', marginTop: 'var(--space-5)' }}>
               <button className="btn" onClick={onClose} disabled={isLoading}>Cancel</button>
-              <button
-                className="btn btn-crux"
-                onClick={handleSharpen}
-                disabled={!raw.trim() || isLoading}
-                aria-busy={isLoading}
-              >
-                {isLoading
-                  ? <><i className="ti ti-loader-2 crux-spin" aria-hidden="true"></i> Sharpening…</>
-                  : <><i className="ti ti-arrow-right" aria-hidden="true"></i> Sharpen</>
-                }
+              <button className="btn btn-crux" onClick={handleSharpen} disabled={!raw.trim() || isLoading} aria-busy={isLoading}>
+                {isLoading ? <><i className="ti ti-loader-2 crux-spin" aria-hidden="true"></i> Sharpening…</> : <><i className="ti ti-arrow-right" aria-hidden="true"></i> Sharpen</>}
               </button>
             </div>
           </div>
         )}
 
-        {/* Step: confirm */}
         {(step === 'confirm' || step === 'creating') && (
           <div>
             <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--crux)', marginBottom: 'var(--space-2)' }}>
@@ -277,12 +246,9 @@ function NewCaseModal({ onClose, onCaseCreated }) {
             <div style={{ background: 'var(--crux-tint)', border: '1px solid var(--crux)', borderRadius: 'var(--radius)', padding: 'var(--space-4)', fontSize: 'var(--text-lg)', color: 'var(--text)', lineHeight: 1.5, marginBottom: 'var(--space-4)' }}>
               {sharpened}
             </div>
-
             {notInvestigating.length > 0 && (
               <div style={{ marginBottom: 'var(--space-4)' }}>
-                <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 'var(--space-2)' }}>
-                  NOT INVESTIGATING
-                </div>
+                <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 'var(--space-2)' }}>NOT INVESTIGATING</div>
                 <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
                   {notInvestigating.map((item) => (
                     <span key={item} className="src" style={{ textDecoration: 'line-through' }}>{item}</span>
@@ -290,27 +256,11 @@ function NewCaseModal({ onClose, onCaseCreated }) {
                 </div>
               </div>
             )}
-
-            {error && (
-              <p role="alert" style={{ color: 'var(--red)', fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}>
-                {error}
-              </p>
-            )}
-
+            {error && <p role="alert" style={{ color: 'var(--red)', fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}>{error}</p>}
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--space-2)', marginTop: 'var(--space-5)' }}>
-              <button className="btn" onClick={() => setStep('input')} disabled={isCreating}>
-                <i className="ti ti-arrow-left" aria-hidden="true"></i> Back
-              </button>
-              <button
-                className="btn btn-crux"
-                onClick={handleCreate}
-                disabled={isCreating}
-                aria-busy={isCreating}
-              >
-                {isCreating
-                  ? <><i className="ti ti-loader-2 crux-spin" aria-hidden="true"></i> Creating…</>
-                  : <><i className="ti ti-check" aria-hidden="true"></i> Create case</>
-                }
+              <button className="btn" onClick={() => setStep('input')} disabled={isCreating}><i className="ti ti-arrow-left" aria-hidden="true"></i> Back</button>
+              <button className="btn btn-crux" onClick={handleCreate} disabled={isCreating} aria-busy={isCreating}>
+                {isCreating ? <><i className="ti ti-loader-2 crux-spin" aria-hidden="true"></i> Creating…</> : <><i className="ti ti-check" aria-hidden="true"></i> Create case</>}
               </button>
             </div>
           </div>
@@ -321,123 +271,13 @@ function NewCaseModal({ onClose, onCaseCreated }) {
 }
 
 // ---------------------------------------------------------------------------
-// PlanCard — displays one Plan (A/B/C) with lead style for the highest prior
+// SourceChip — colour-coded chip per source kind; link when URL present (AC4)
 // ---------------------------------------------------------------------------
 
-function PlanCard({ planId, label, name, mechanism, prior, sources: initialSources, isLead, standing }) {
-  const priorNum = parseFloat(prior) || 0;
-  const [sources, setSources] = React.useState(initialSources || []);
-  const [showForm, setShowForm] = React.useState(false);
-  const ruledOut = standing === 'ruled-out';
-  const ruledIn  = standing === 'ruled-in';
-
-  // Sync if parent re-renders with new sources (e.g. after page reload)
-  React.useEffect(() => { setSources(initialSources || []); }, [initialSources]);
-
-  function handleAdded(newSource) {
-    setSources((prev) => [...prev, newSource]);
-  }
-
-  return (
-    <div
-      className={isLead ? 'lead' : undefined}
-      style={{
-        background: isLead ? 'var(--crux-tint)' : 'var(--surface)',
-        border: `1px solid ${isLead ? 'var(--crux)' : 'var(--border)'}`,
-        borderRadius: 'var(--radius)',
-        padding: 'var(--space-4)',
-        marginBottom: 'var(--space-3)',
-        boxShadow: isLead ? 'var(--shadow-hover)' : 'var(--shadow-card)',
-        opacity: ruledOut ? 0.5 : 1,
-        transition: 'opacity var(--speed)',
-      }}
-    >
-      {/* Header row: label key + name + prior chip + standing badge */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-2)' }}>
-        <span
-          className="mono plan-key"
-          style={{
-            fontSize: 'var(--text-sm)', fontWeight: 700, letterSpacing: '.05em',
-            color: isLead ? 'var(--crux)' : 'var(--text-muted)',
-            background: isLead ? 'var(--crux-bg)' : 'var(--surface-2)',
-            border: `1px solid ${isLead ? 'var(--crux)' : 'var(--border)'}`,
-            borderRadius: 'var(--radius-sm)', padding: '2px 8px', flex: 'none',
-          }}
-        >
-          {label}
-        </span>
-        <span style={{ flex: 1, fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--text)', textDecoration: ruledOut ? 'line-through' : 'none' }}>
-          {name}
-        </span>
-        {/* ruled-in badge */}
-        {ruledIn && (
-          <span className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--green)', background: 'var(--green-bg)', border: '1px solid var(--green)', borderRadius: 'var(--radius-pill)', padding: '2px 8px', flex: 'none' }}>
-            ✓ Ruled in
-          </span>
-        )}
-        {/* Prior chip */}
-        <span
-          className="mono"
-          style={{
-            fontSize: 'var(--text-xs)', fontWeight: 700,
-            color: isLead ? 'var(--crux)' : 'var(--text-sub)',
-            background: isLead ? 'var(--crux-bg)' : 'var(--surface-2)',
-            border: `1px solid ${isLead ? 'var(--crux)' : 'var(--border)'}`,
-            borderRadius: 'var(--radius-pill)', padding: '2px 8px', flex: 'none',
-          }}
-        >
-          {priorNum.toFixed(2)}
-        </span>
-      </div>
-
-      {/* Mechanism */}
-      <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', lineHeight: 1.5, margin: '0 0 var(--space-3)' }}>
-        {mechanism}
-      </p>
-
-      {/* Sources section */}
-      <div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-2)' }}>
-          <span className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)' }}>
-            SOURCES {sources.length > 0 && `· ${sources.length}`}
-          </span>
-          <button
-            className="btn btn-sm"
-            onClick={() => setShowForm(true)}
-            style={{ padding: '3px 9px', fontSize: 'var(--text-2xs)' }}
-          >
-            <i className="ti ti-plus" aria-hidden="true"></i> Add source
-          </button>
-        </div>
-        {sources.length > 0 ? (
-          <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
-            {sources.map((s) => (
-              <SourceChip key={s.id || s.title} kind={s.kind} title={s.title} url={s.url} />
-            ))}
-          </div>
-        ) : (
-          <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-sub)' }}>No sources yet.</span>
-        )}
-      </div>
-
-      {showForm && (
-        <SourceForm
-          planId={planId}
-          onClose={() => setShowForm(false)}
-          onAdded={handleAdded}
-        />
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// SourceChip — colour-coded chip per source kind; link when URL present
-// ---------------------------------------------------------------------------
-
-function SourceChip({ kind, title, url }) {
+function SourceChip({ kind, title, url, claim }) {
   const iconMap = { book: 'ti-book', article: 'ti-article', youtube: 'ti-brand-youtube' };
   const icon = iconMap[kind] || 'ti-file';
+  const tooltipText = claim ? `${title}\n${claim}` : title;
   const inner = (
     <>
       <i className={`ti ${icon}`} aria-hidden="true"></i>
@@ -451,21 +291,21 @@ function SourceChip({ kind, title, url }) {
         target="_blank"
         rel="noopener noreferrer"
         className={`src ${kind}`}
-        title={title}
+        title={tooltipText}
       >
         {inner}
       </a>
     );
   }
   return (
-    <span className={`src ${kind}`} title={title}>
+    <span className={`src ${kind}`} title={tooltipText}>
       {inner}
     </span>
   );
 }
 
 // ---------------------------------------------------------------------------
-// SourceForm — inline modal for adding a source to a plan
+// SourceForm — modal for manually adding a source (AC8 fallback)
 // ---------------------------------------------------------------------------
 
 function SourceForm({ planId, onClose, onAdded }) {
@@ -518,36 +358,18 @@ function SourceForm({ planId, onClose, onAdded }) {
     }
   }
 
-  const fieldStyle = {
-    width: '100%', padding: 'var(--space-2) var(--space-3)',
-    fontSize: 'var(--text-sm)', color: 'var(--text)', background: 'var(--surface-2)',
-    border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
-    boxSizing: 'border-box',
-  };
+  const fieldStyle = { width: '100%', padding: 'var(--space-2) var(--space-3)', fontSize: 'var(--text-sm)', color: 'var(--text)', background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', boxSizing: 'border-box' };
   const labelStyle = { display: 'block', fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 'var(--space-1)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '.05em' };
   const errStyle = { color: 'var(--red)', fontSize: 'var(--text-2xs)', marginTop: 2 };
 
   return (
-    <div
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-label="Add source"
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--space-5)', zIndex: 50 }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{ width: 480, maxWidth: '100%', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-xl)', boxShadow: 'var(--shadow-card)', padding: 'var(--space-6)' }}
-      >
+    <div onClick={onClose} role="dialog" aria-modal="true" aria-label="Add source" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--space-5)', zIndex: 50 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: 480, maxWidth: '100%', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-xl)', boxShadow: 'var(--shadow-card)', padding: 'var(--space-6)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-4)' }}>
           <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 800, color: 'var(--text)' }}>Add source</h2>
-          <button className="btn btn-sm" onClick={onClose} aria-label="Close" style={{ padding: '6px 8px' }}>
-            <i className="ti ti-x" aria-hidden="true"></i>
-          </button>
+          <button className="btn btn-sm" onClick={onClose} aria-label="Close" style={{ padding: '6px 8px' }}><i className="ti ti-x" aria-hidden="true"></i></button>
         </div>
-
         <form onSubmit={handleSubmit} noValidate>
-          {/* Kind */}
           <div style={{ marginBottom: 'var(--space-3)' }}>
             <label style={labelStyle}>Kind</label>
             <select value={kind} onChange={(e) => setKind(e.target.value)} style={fieldStyle} disabled={submitting}>
@@ -556,44 +378,31 @@ function SourceForm({ planId, onClose, onAdded }) {
               <option value="youtube">YouTube</option>
             </select>
           </div>
-
-          {/* Title */}
           <div style={{ marginBottom: 'var(--space-3)' }}>
             <label style={labelStyle}>Title <span style={{ color: 'var(--red)' }}>*</span></label>
             <input type="text" value={title} onChange={(e) => { setTitle(e.target.value); setErrors((p) => ({ ...p, title: '' })); }} style={{ ...fieldStyle, borderColor: errors.title ? 'var(--red)' : 'var(--border)' }} disabled={submitting} />
             {errors.title && <p role="alert" style={errStyle}>{errors.title}</p>}
           </div>
-
-          {/* URL */}
           <div style={{ marginBottom: 'var(--space-3)' }}>
             <label style={labelStyle}>URL <span style={{ color: 'var(--text-sub)' }}>(optional)</span></label>
             <input type="url" value={url} onChange={(e) => { setUrl(e.target.value); setErrors((p) => ({ ...p, url: '' })); }} placeholder="https://…" style={{ ...fieldStyle, borderColor: errors.url ? 'var(--red)' : 'var(--border)' }} disabled={submitting} />
             {errors.url && <p role="alert" style={errStyle}>{errors.url}</p>}
           </div>
-
-          {/* Claim */}
           <div style={{ marginBottom: 'var(--space-3)' }}>
             <label style={labelStyle}>Claim <span style={{ color: 'var(--red)' }}>*</span></label>
             <textarea rows={2} value={claim} onChange={(e) => { setClaim(e.target.value); setErrors((p) => ({ ...p, claim: '' })); }} placeholder="The assertion this source supports…" style={{ ...fieldStyle, resize: 'vertical', borderColor: errors.claim ? 'var(--red)' : 'var(--border)' }} disabled={submitting} />
             {errors.claim && <p role="alert" style={errStyle}>{errors.claim}</p>}
           </div>
-
-          {/* Citation */}
           <div style={{ marginBottom: 'var(--space-4)' }}>
             <label style={labelStyle}>Citation <span style={{ color: 'var(--red)' }}>*</span></label>
             <input type="text" value={citation} onChange={(e) => { setCitation(e.target.value); setErrors((p) => ({ ...p, citation: '' })); }} placeholder="Smith 2024 / APA string…" style={{ ...fieldStyle, fontFamily: 'var(--font-mono)', borderColor: errors.citation ? 'var(--red)' : 'var(--border)' }} disabled={submitting} />
             {errors.citation && <p role="alert" style={errStyle}>{errors.citation}</p>}
           </div>
-
           {errors.submit && <p role="alert" style={{ ...errStyle, marginBottom: 'var(--space-3)' }}>{errors.submit}</p>}
-
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)' }}>
             <button type="button" className="btn" onClick={onClose} disabled={submitting}>Cancel</button>
             <button type="submit" className="btn btn-crux" disabled={submitting} aria-busy={submitting}>
-              {submitting
-                ? <><i className="ti ti-loader-2 crux-spin" aria-hidden="true"></i> Saving…</>
-                : <><i className="ti ti-plus" aria-hidden="true"></i> Add source</>
-              }
+              {submitting ? <><i className="ti ti-loader-2 crux-spin" aria-hidden="true"></i> Saving…</> : <><i className="ti ti-plus" aria-hidden="true"></i> Add source</>}
             </button>
           </div>
         </form>
@@ -602,8 +411,159 @@ function SourceForm({ planId, onClose, onAdded }) {
   );
 }
 
-// Module-level helper so the endpoint URL doesn't appear inside CaseDetailScreen,
-// which would break the section-order structural test (AC9 of issue #7).
+// ---------------------------------------------------------------------------
+// PlanCard — Stage 2 gather states: idle | running | done | empty | error (AC5-AC8)
+// ---------------------------------------------------------------------------
+
+function PlanCard({ planId, label, name, mechanism, prior, sources: initialSources, isLead, standing, gatherStatus: initialGatherStatus, gatherError: initialGatherError, onGatherDone }) {
+  const priorNum = parseFloat(prior) || 0;
+  const [sources, setSources] = React.useState(initialSources || []);
+  const [gatherStatus, setGatherStatus] = React.useState(initialGatherStatus || 'idle');
+  const [gatherError, setGatherError] = React.useState(initialGatherError || '');
+  const [showForm, setShowForm] = React.useState(false);
+  const ruledOut = standing === 'ruled-out';
+  const ruledIn  = standing === 'ruled-in';
+
+  React.useEffect(() => {
+    setSources(initialSources || []);
+    setGatherStatus(initialGatherStatus || 'idle');
+    setGatherError(initialGatherError || '');
+  }, [initialSources, initialGatherStatus, initialGatherError]);
+
+  function handleAdded(newSource) {
+    setSources((prev) => [...prev, newSource]);
+  }
+
+  async function triggerGather() {
+    setGatherStatus('running');
+    setGatherError('');
+    try {
+      const resp = await fetch(`/api/plans/${planId}/gather`, { method: 'POST' });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        setGatherStatus('error');
+        setGatherError(data.detail || `Gather failed (${resp.status})`);
+        return;
+      }
+      setGatherStatus(data.gather_status);
+      setGatherError(data.error || '');
+      if (data.sources && data.sources.length > 0) {
+        setSources(data.sources);
+      }
+      if (onGatherDone) onGatherDone();
+    } catch (err) {
+      setGatherStatus('error');
+      setGatherError(err.message || 'Research loop failed. Please retry.');
+    }
+  }
+
+  return (
+    <div
+      className={isLead ? 'lead' : undefined}
+      style={{
+        background: isLead ? 'var(--crux-tint)' : 'var(--surface)',
+        border: `1px solid ${isLead ? 'var(--crux)' : 'var(--border)'}`,
+        borderRadius: 'var(--radius)',
+        padding: 'var(--space-4)',
+        marginBottom: 'var(--space-3)',
+        boxShadow: isLead ? 'var(--shadow-hover)' : 'var(--shadow-card)',
+        opacity: ruledOut ? 0.5 : 1,
+        transition: 'opacity var(--speed)',
+      }}
+    >
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-2)' }}>
+        <span className="mono plan-key" style={{ fontSize: 'var(--text-sm)', fontWeight: 700, letterSpacing: '.05em', color: isLead ? 'var(--crux)' : 'var(--text-muted)', background: isLead ? 'var(--crux-bg)' : 'var(--surface-2)', border: `1px solid ${isLead ? 'var(--crux)' : 'var(--border)'}`, borderRadius: 'var(--radius-sm)', padding: '2px 8px', flex: 'none' }}>
+          {label}
+        </span>
+        <span style={{ flex: 1, fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--text)', textDecoration: ruledOut ? 'line-through' : 'none' }}>
+          {name}
+        </span>
+        {ruledIn && (
+          <span className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--green)', background: 'var(--green-bg)', border: '1px solid var(--green)', borderRadius: 'var(--radius-pill)', padding: '2px 8px', flex: 'none' }}>
+            ✓ Ruled in
+          </span>
+        )}
+        <span className="mono" style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: isLead ? 'var(--crux)' : 'var(--text-sub)', background: isLead ? 'var(--crux-bg)' : 'var(--surface-2)', border: `1px solid ${isLead ? 'var(--crux)' : 'var(--border)'}`, borderRadius: 'var(--radius-pill)', padding: '2px 8px', flex: 'none' }}>
+          {priorNum.toFixed(2)}
+        </span>
+      </div>
+
+      {/* Mechanism */}
+      <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', lineHeight: 1.5, margin: '0 0 var(--space-3)' }}>
+        {mechanism}
+      </p>
+
+      {/* Sources section — exposes all states for AC5-AC8 */}
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-2)' }}>
+          <span className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)' }}>
+            SOURCES {sources.length > 0 && `· ${sources.length}`}
+          </span>
+          {/* AC8: manual Add source button always visible */}
+          <button
+            className="btn btn-sm"
+            onClick={() => setShowForm(true)}
+            style={{ padding: '3px 9px', fontSize: 'var(--text-2xs)' }}
+          >
+            <i className="ti ti-plus" aria-hidden="true"></i> Add source
+          </button>
+        </div>
+
+        {/* AC5: Progress state — spinner while research loop runs */}
+        {gatherStatus === 'running' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: 'var(--space-3) 0', color: 'var(--text-muted)' }}>
+            <i className="ti ti-loader-2 crux-spin" aria-hidden="true" style={{ fontSize: 16, color: 'var(--crux)' }}></i>
+            <span style={{ fontSize: 'var(--text-sm)' }}>Gathering sources…</span>
+          </div>
+        )}
+
+        {/* AC7: Failure state with explanatory message and retry */}
+        {gatherStatus === 'error' && (
+          <div style={{ background: 'var(--red-bg)', border: '1px solid var(--red)', borderRadius: 'var(--radius-sm)', padding: 'var(--space-3)', marginBottom: 'var(--space-2)' }}>
+            <p role="alert" style={{ fontSize: 'var(--text-sm)', color: 'var(--red)', margin: '0 0 var(--space-2)' }}>
+              <i className="ti ti-alert-circle" aria-hidden="true"></i>{' '}
+              {gatherError || 'Research loop failed. Check your connection.'}
+            </p>
+            <button className="btn btn-sm" onClick={triggerGather} style={{ fontSize: 'var(--text-2xs)' }}>
+              <i className="ti ti-refresh" aria-hidden="true"></i> Retry
+            </button>
+          </div>
+        )}
+
+        {/* Sources list (done state) — SourceChips with name, URL, and snippet (AC4) */}
+        {gatherStatus !== 'running' && sources.length > 0 && (
+          <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+            {sources.map((s) => (
+              <SourceChip key={s.id || s.title} kind={s.kind} title={s.title} url={s.url} claim={s.claim} />
+            ))}
+          </div>
+        )}
+
+        {/* AC6: Empty state if loop returned no sources */}
+        {gatherStatus === 'empty' && sources.length === 0 && (
+          <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-sub)' }}>
+            No sources found. Add one manually below.
+          </span>
+        )}
+
+        {/* Idle / idle-with-no-sources fallback */}
+        {(gatherStatus === 'idle' || gatherStatus === 'done') && sources.length === 0 && gatherStatus !== 'empty' && (
+          <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-sub)' }}>No sources yet.</span>
+        )}
+      </div>
+
+      {showForm && (
+        <SourceForm planId={planId} onClose={() => setShowForm(false)} onAdded={handleAdded} />
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Helper: post bake-off and probe
+// ---------------------------------------------------------------------------
+
 async function _postBakeOff(caseId) {
   const resp = await fetch(`/api/cases/${caseId}/bake-off`, { method: 'POST' });
   if (!resp.ok) {
@@ -623,15 +583,15 @@ async function _postProbe(caseId) {
 }
 
 // ---------------------------------------------------------------------------
-// ProbeCard — renders the probe design (type, targetMetric, cost, time, note)
+// ProbeCard
 // ---------------------------------------------------------------------------
 
 function ProbeCard({ probe, loading, error }) {
   const TYPE_LABELS = {
-    'measurement':           'Measurement',
-    'lab-test':              'Lab test',
-    'behaviour-experiment':  'Behaviour experiment',
-    'prototype':             'Prototype',
+    'measurement': 'Measurement',
+    'lab-test': 'Lab test',
+    'behaviour-experiment': 'Behaviour experiment',
+    'prototype': 'Prototype',
   };
 
   if (loading) {
@@ -654,9 +614,7 @@ function ProbeCard({ probe, loading, error }) {
   if (!probe) {
     return (
       <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 'var(--space-5)', marginBottom: 'var(--space-6)', textAlign: 'center', color: 'var(--text-muted)' }}>
-        <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 'var(--space-2)' }}>
-          STAGE 4 — PROBE
-        </div>
+        <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 'var(--space-2)' }}>STAGE 4 — PROBE</div>
         <p style={{ fontSize: 'var(--text-base)' }}>No probe designed yet.</p>
       </div>
     );
@@ -667,19 +625,14 @@ function ProbeCard({ probe, loading, error }) {
 
   return (
     <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 'var(--space-5)', marginBottom: 'var(--space-6)' }}>
-      {/* Type badge */}
       <div style={{ marginBottom: 'var(--space-4)' }}>
         <span className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, letterSpacing: '.05em', color: 'var(--crux)', background: 'var(--crux-bg)', border: '1px solid var(--crux)', borderRadius: 'var(--radius-pill)', padding: '3px 10px' }}>
           {typeLabel}
         </span>
       </div>
-
-      {/* Target metric — large monospace */}
       <div className="mono" style={{ fontSize: 'var(--text-xl)', fontWeight: 700, color: 'var(--text)', fontFamily: 'var(--font-mono)', marginBottom: 'var(--space-4)', lineHeight: 1.3 }}>
         {probe.target_metric}
       </div>
-
-      {/* Cost + time foot line */}
       <div style={{ display: 'flex', gap: 'var(--space-5)', marginBottom: 'var(--space-3)' }}>
         <div>
           <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 2 }}>COST</div>
@@ -690,13 +643,7 @@ function ProbeCard({ probe, loading, error }) {
           <div className="mono" style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--text)' }}>{probe.time}</div>
         </div>
       </div>
-
-      {/* Note */}
-      <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', lineHeight: 1.55, margin: '0 0 var(--space-4)' }}>
-        {probe.note}
-      </p>
-
-      {/* Send to commander — only for prototype type; disabled (M3 stub) */}
+      <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', lineHeight: 1.55, margin: '0 0 var(--space-4)' }}>{probe.note}</p>
       {isPrototype && (
         <button className="btn" disabled aria-disabled="true" title="Commander handoff coming in M3">
           <i className="ti ti-send" aria-hidden="true"></i> Send to commander
@@ -707,15 +654,14 @@ function ProbeCard({ probe, loading, error }) {
 }
 
 // ---------------------------------------------------------------------------
-// WeighPanel — Stage 3 re-rank UI: textarea + "Re-rank for me" button
+// WeighPanel
 // ---------------------------------------------------------------------------
 
 function WeighPanel({ caseId, initialContext, onRerankDone }) {
   const [context, setContext] = React.useState(initialContext || '');
-  const [state, setState] = React.useState('idle'); // 'idle'|'loading'|'error'
+  const [state, setState] = React.useState('idle');
   const [error, setError] = React.useState('');
 
-  // Sync initial context if case data loads after mount
   React.useEffect(() => { setContext(initialContext || ''); }, [initialContext]);
 
   async function handleRerank() {
@@ -744,39 +690,20 @@ function WeighPanel({ caseId, initialContext, onRerankDone }) {
 
   return (
     <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 'var(--space-5)', marginBottom: 'var(--space-6)' }}>
-      <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 'var(--space-3)' }}>
-        YOUR CONTEXT
-      </div>
+      <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 'var(--space-3)' }}>YOUR CONTEXT</div>
       <textarea
         value={context}
         onChange={(e) => { setContext(e.target.value); setError(''); }}
-        placeholder="Paste your numbers, constraints, or situation — e.g. Annual income £45k, risk tolerance low, need access within 2 years…"
+        placeholder="Paste your numbers, constraints, or situation…"
         rows={4}
         disabled={isLoading}
         aria-label="Your Context"
-        style={{
-          width: '100%', resize: 'vertical', padding: 'var(--space-3)',
-          fontSize: 'var(--text-base)', color: 'var(--text)', background: 'var(--surface-2)',
-          border: '1px solid var(--border)', borderRadius: 'var(--radius)', lineHeight: 1.55,
-          boxSizing: 'border-box', opacity: isLoading ? 0.6 : 1,
-        }}
+        style={{ width: '100%', resize: 'vertical', padding: 'var(--space-3)', fontSize: 'var(--text-base)', color: 'var(--text)', background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', lineHeight: 1.55, boxSizing: 'border-box', opacity: isLoading ? 0.6 : 1 }}
       />
-      {error && (
-        <p role="alert" style={{ color: 'var(--red)', fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}>
-          {error}
-        </p>
-      )}
+      {error && <p role="alert" style={{ color: 'var(--red)', fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}>{error}</p>}
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'var(--space-3)' }}>
-        <button
-          className="btn btn-crux"
-          onClick={handleRerank}
-          disabled={!context.trim() || isLoading}
-          aria-busy={isLoading}
-        >
-          {isLoading
-            ? <><i className="ti ti-loader-2 crux-spin" aria-hidden="true"></i> Re-ranking…</>
-            : <><i className="ti ti-arrows-sort" aria-hidden="true"></i> Re-rank for me</>
-          }
+        <button className="btn btn-crux" onClick={handleRerank} disabled={!context.trim() || isLoading} aria-busy={isLoading}>
+          {isLoading ? <><i className="ti ti-loader-2 crux-spin" aria-hidden="true"></i> Re-ranking…</> : <><i className="ti ti-arrows-sort" aria-hidden="true"></i> Re-rank for me</>}
         </button>
       </div>
     </div>
@@ -784,7 +711,7 @@ function WeighPanel({ caseId, initialContext, onRerankDone }) {
 }
 
 // ---------------------------------------------------------------------------
-// StageBar — horizontal 5-step pipeline header
+// StageBar
 // ---------------------------------------------------------------------------
 
 const STAGE_BAR_NAMES = ['Sharpen', 'Bake-off', 'Gather', 'Weigh', 'Probe'];
@@ -802,27 +729,11 @@ function StageBar({ stage = 0 }) {
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
               <div
                 aria-current={now ? 'step' : undefined}
-                style={{
-                  width: 22, height: 22, borderRadius: '50%',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  background: done ? 'var(--st-3)' : now ? 'var(--crux)' : 'var(--surface-2)',
-                  border: `1px solid ${color}`,
-                  color: done || now ? '#fff' : 'var(--text-sub)',
-                  fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
-                }}
+                style={{ width: 22, height: 22, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: done ? 'var(--st-3)' : now ? 'var(--crux)' : 'var(--surface-2)', border: `1px solid ${color}`, color: done || now ? '#fff' : 'var(--text-sub)', fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700 }}
               >
-                {done
-                  ? <i className="ti ti-check" aria-hidden="true" style={{ fontSize: 10 }}></i>
-                  : i + 1
-                }
+                {done ? <i className="ti ti-check" aria-hidden="true" style={{ fontSize: 10 }}></i> : i + 1}
               </div>
-              <span
-                className="mono"
-                style={{
-                  fontSize: 'var(--text-2xs)', fontWeight: 700, whiteSpace: 'nowrap',
-                  color: now ? 'var(--crux)' : done ? 'var(--text)' : 'var(--text-sub)',
-                }}
-              >
+              <span className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, whiteSpace: 'nowrap', color: now ? 'var(--crux)' : done ? 'var(--text)' : 'var(--text-sub)' }}>
                 {name}
               </span>
             </div>
@@ -837,30 +748,15 @@ function StageBar({ stage = 0 }) {
 }
 
 // ---------------------------------------------------------------------------
-// LockedPlan — shown in place of the action plan when no verdict is logged
+// LockedPlan
 // ---------------------------------------------------------------------------
 
 function LockedPlan({ onLogVerdict }) {
   return (
-    <div
-      style={{
-        background: 'repeating-linear-gradient(135deg, var(--surface) 0px, var(--surface) 10px, var(--surface-2) 10px, var(--surface-2) 20px)',
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--radius)',
-        padding: 'var(--space-6)',
-        marginBottom: 'var(--space-6)',
-        textAlign: 'center',
-        color: 'var(--text-muted)',
-        opacity: 0.85,
-      }}
-    >
+    <div style={{ background: 'repeating-linear-gradient(135deg, var(--surface) 0px, var(--surface) 10px, var(--surface-2) 10px, var(--surface-2) 20px)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 'var(--space-6)', marginBottom: 'var(--space-6)', textAlign: 'center', color: 'var(--text-muted)', opacity: 0.85 }}>
       <i className="ti ti-lock" aria-hidden="true" style={{ fontSize: 28, color: 'var(--text-sub)', marginBottom: 'var(--space-3)', display: 'block' }}></i>
-      <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 'var(--space-2)' }}>
-        LOCKED
-      </div>
-      <p style={{ fontSize: 'var(--text-base)', marginBottom: 'var(--space-4)' }}>
-        Log verdict to unlock the action plan.
-      </p>
+      <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 'var(--space-2)' }}>LOCKED</div>
+      <p style={{ fontSize: 'var(--text-base)', marginBottom: 'var(--space-4)' }}>Log verdict to unlock the action plan.</p>
       <button className="btn btn-crux" onClick={onLogVerdict}>
         <i className="ti ti-gavel" aria-hidden="true"></i> Log verdict
       </button>
@@ -869,7 +765,7 @@ function LockedPlan({ onLogVerdict }) {
 }
 
 // ---------------------------------------------------------------------------
-// LogVerdictModal — form to record outcome + notes
+// LogVerdictModal
 // ---------------------------------------------------------------------------
 
 const _VERDICT_OUTCOMES = [
@@ -893,10 +789,7 @@ function LogVerdictModal({ caseId, onClose, onVerdictLogged }) {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!notes.trim()) {
-      setNotesError('Notes are required (min 1 character).');
-      return;
-    }
+    if (!notes.trim()) { setNotesError('Notes are required (min 1 character).'); return; }
     setSubmitting(true);
     setNotesError('');
     setSubmitError('');
@@ -920,59 +813,25 @@ function LogVerdictModal({ caseId, onClose, onVerdictLogged }) {
     }
   }
 
-  const fieldStyle = {
-    width: '100%', padding: 'var(--space-2) var(--space-3)',
-    fontSize: 'var(--text-sm)', color: 'var(--text)', background: 'var(--surface-2)',
-    border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
-    boxSizing: 'border-box',
-  };
-  const labelStyle = {
-    display: 'block', fontSize: 'var(--text-2xs)', fontWeight: 700,
-    color: 'var(--text-muted)', marginBottom: 'var(--space-1)',
-    fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '.05em',
-  };
+  const fieldStyle = { width: '100%', padding: 'var(--space-2) var(--space-3)', fontSize: 'var(--text-sm)', color: 'var(--text)', background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', boxSizing: 'border-box' };
+  const labelStyle = { display: 'block', fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 'var(--space-1)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '.05em' };
 
   return (
-    <div
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-label="Log verdict"
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--space-5)', zIndex: 50 }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{ width: 480, maxWidth: '100%', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-xl)', boxShadow: 'var(--shadow-card)', padding: 'var(--space-6)' }}
-      >
+    <div onClick={onClose} role="dialog" aria-modal="true" aria-label="Log verdict" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--space-5)', zIndex: 50 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: 480, maxWidth: '100%', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-xl)', boxShadow: 'var(--shadow-card)', padding: 'var(--space-6)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-4)' }}>
           <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 800, color: 'var(--text)' }}>Log verdict</h2>
-          <button className="btn btn-sm" onClick={onClose} aria-label="Close" style={{ padding: '6px 8px' }}>
-            <i className="ti ti-x" aria-hidden="true"></i>
-          </button>
+          <button className="btn btn-sm" onClick={onClose} aria-label="Close" style={{ padding: '6px 8px' }}><i className="ti ti-x" aria-hidden="true"></i></button>
         </div>
-
         <form onSubmit={handleSubmit} noValidate>
-          {/* Outcome selector */}
           <div style={{ marginBottom: 'var(--space-4)' }}>
             <label style={labelStyle}>Outcome <span style={{ color: 'var(--red)' }}>*</span></label>
             <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
               {_VERDICT_OUTCOMES.map(({ value, label, color, bg, border }) => {
                 const selected = outcome === value;
                 return (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setOutcome(value)}
-                    style={{
-                      flex: 1, padding: 'var(--space-2) var(--space-3)',
-                      border: `1.5px solid ${selected ? border : 'var(--border)'}`,
-                      borderRadius: 'var(--radius-sm)',
-                      background: selected ? bg : 'var(--surface-2)',
-                      color: selected ? color : 'var(--text-muted)',
-                      fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)',
-                      fontWeight: 700, cursor: 'pointer',
-                      transition: 'all var(--speed)',
-                    }}
+                  <button key={value} type="button" onClick={() => setOutcome(value)}
+                    style={{ flex: 1, padding: 'var(--space-2) var(--space-3)', border: `1.5px solid ${selected ? border : 'var(--border)'}`, borderRadius: 'var(--radius-sm)', background: selected ? bg : 'var(--surface-2)', color: selected ? color : 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', fontWeight: 700, cursor: 'pointer', transition: 'all var(--speed)' }}
                     aria-pressed={selected}
                   >
                     {label}
@@ -981,38 +840,16 @@ function LogVerdictModal({ caseId, onClose, onVerdictLogged }) {
               })}
             </div>
           </div>
-
-          {/* Notes */}
           <div style={{ marginBottom: 'var(--space-4)' }}>
             <label style={labelStyle}>Notes <span style={{ color: 'var(--red)' }}>*</span></label>
-            <textarea
-              rows={4}
-              value={notes}
-              onChange={(e) => { setNotes(e.target.value); setNotesError(''); }}
-              placeholder="What did you observe? What evidence supports this outcome?"
-              disabled={submitting}
-              style={{
-                ...fieldStyle, resize: 'vertical',
-                lineHeight: 1.55,
-                borderColor: notesError ? 'var(--red)' : 'var(--border)',
-              }}
-            />
-            {notesError && (
-              <p role="alert" style={{ color: 'var(--red)', fontSize: 'var(--text-2xs)', marginTop: 2 }}>{notesError}</p>
-            )}
+            <textarea rows={4} value={notes} onChange={(e) => { setNotes(e.target.value); setNotesError(''); }} placeholder="What did you observe? What evidence supports this outcome?" disabled={submitting} style={{ ...fieldStyle, resize: 'vertical', lineHeight: 1.55, borderColor: notesError ? 'var(--red)' : 'var(--border)' }} />
+            {notesError && <p role="alert" style={{ color: 'var(--red)', fontSize: 'var(--text-2xs)', marginTop: 2 }}>{notesError}</p>}
           </div>
-
-          {submitError && (
-            <p role="alert" style={{ color: 'var(--red)', fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}>{submitError}</p>
-          )}
-
+          {submitError && <p role="alert" style={{ color: 'var(--red)', fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}>{submitError}</p>}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)' }}>
             <button type="button" className="btn" onClick={onClose} disabled={submitting}>Cancel</button>
             <button type="submit" className="btn btn-crux" disabled={submitting} aria-busy={submitting}>
-              {submitting
-                ? <><i className="ti ti-loader-2 crux-spin" aria-hidden="true"></i> Saving…</>
-                : <><i className="ti ti-gavel" aria-hidden="true"></i> Submit verdict</>
-              }
+              {submitting ? <><i className="ti ti-loader-2 crux-spin" aria-hidden="true"></i> Saving…</> : <><i className="ti ti-gavel" aria-hidden="true"></i> Submit verdict</>}
             </button>
           </div>
         </form>
@@ -1022,7 +859,7 @@ function LogVerdictModal({ caseId, onClose, onVerdictLogged }) {
 }
 
 // ---------------------------------------------------------------------------
-// CaseDetailScreen — case detail page scaffold with StageBar
+// CaseDetailScreen — auto-triggers research loop at Stage 2 (AC1)
 // ---------------------------------------------------------------------------
 
 function SectionLabel({ children }) {
@@ -1036,9 +873,7 @@ function SectionLabel({ children }) {
 function EmptySection({ label, message }) {
   return (
     <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 'var(--space-5)', textAlign: 'center', color: 'var(--text-muted)', marginBottom: 'var(--space-6)' }}>
-      <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 'var(--space-2)' }}>
-        {label}
-      </div>
+      <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 'var(--space-2)' }}>{label}</div>
       <p style={{ fontSize: 'var(--text-base)' }}>{message}</p>
     </div>
   );
@@ -1047,11 +882,13 @@ function EmptySection({ label, message }) {
 function CaseDetailScreen({ caseId, onBack, theme, onToggleTheme }) {
   const [caseData, setCaseData] = React.useState(null);
   const [notFound, setNotFound] = React.useState(false);
-  const [bakeOffState, setBakeOffState] = React.useState('idle'); // 'idle'|'loading'|'error'
+  const [bakeOffState, setBakeOffState] = React.useState('idle');
   const [bakeOffError, setBakeOffError] = React.useState('');
-  const [probeState, setProbeState] = React.useState('idle'); // 'idle'|'loading'|'error'
+  const [probeState, setProbeState] = React.useState('idle');
   const [probeError, setProbeError] = React.useState('');
   const [showLogVerdictModal, setShowLogVerdictModal] = React.useState(false);
+  // Track which plan IDs have already had gather triggered to avoid double-firing
+  const gatherTriggered = React.useRef(new Set());
 
   function loadCase() {
     fetch(`/api/cases/${caseId}`)
@@ -1065,7 +902,29 @@ function CaseDetailScreen({ caseId, onBack, theme, onToggleTheme }) {
 
   React.useEffect(() => { loadCase(); }, [caseId]);
 
-  // Auto-trigger probe design when stage >= 4 and no probe exists
+  // AC1: Auto-trigger research loop for each Plan when Case enters Stage 2 (Gather)
+  React.useEffect(() => {
+    if (!caseData) return;
+    const stage = typeof caseData.stage === 'number' ? caseData.stage : 0;
+    if (stage !== 2) return;
+
+    const plans = caseData.plans || [];
+    plans.forEach((plan) => {
+      // Only trigger for plans that haven't started yet and haven't been triggered this session
+      if (
+        plan.gather_status === 'idle' &&
+        !gatherTriggered.current.has(plan.id)
+      ) {
+        gatherTriggered.current.add(plan.id);
+        // Fire and forget — PlanCard manages its own status
+        fetch(`/api/plans/${plan.id}/gather`, { method: 'POST' })
+          .then(() => loadCase())
+          .catch(() => {});
+      }
+    });
+  }, [caseData?.stage, caseData?.id]);
+
+  // Auto-trigger probe at stage >= 4
   React.useEffect(() => {
     if (!caseData) return;
     const stage = typeof caseData.stage === 'number' ? caseData.stage : 0;
@@ -1073,14 +932,8 @@ function CaseDetailScreen({ caseId, onBack, theme, onToggleTheme }) {
       setProbeState('loading');
       setProbeError('');
       _postProbe(caseId)
-        .then(() => {
-          loadCase();
-          setProbeState('idle');
-        })
-        .catch((err) => {
-          setProbeError(err.message || 'Probe design failed. Please try again.');
-          setProbeState('error');
-        });
+        .then(() => { loadCase(); setProbeState('idle'); })
+        .catch((err) => { setProbeError(err.message || 'Probe design failed.'); setProbeState('error'); });
     }
   }, [caseData]);
 
@@ -1089,7 +942,6 @@ function CaseDetailScreen({ caseId, onBack, theme, onToggleTheme }) {
     setBakeOffError('');
     try {
       await _postBakeOff(caseId);
-      // Reload full case data (stage will have advanced)
       loadCase();
       setBakeOffState('idle');
     } catch (err) {
@@ -1111,9 +963,7 @@ function CaseDetailScreen({ caseId, onBack, theme, onToggleTheme }) {
 
   if (!caseData) {
     return (
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
-        Loading…
-      </div>
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>Loading…</div>
     );
   }
 
@@ -1146,7 +996,7 @@ function CaseDetailScreen({ caseId, onBack, theme, onToggleTheme }) {
           <Pill state={caseData.verdict} />
         </div>
 
-        {/* StageBar in bordered card */}
+        {/* StageBar */}
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 'var(--space-5)', marginBottom: 'var(--space-6)' }}>
           <StageBar stage={stage} />
         </div>
@@ -1160,9 +1010,7 @@ function CaseDetailScreen({ caseId, onBack, theme, onToggleTheme }) {
         {/* NOT INVESTIGATING chips */}
         <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', marginBottom: 'var(--space-6)', minHeight: 'var(--space-4)' }}>
           {notInvestigating.length > 0 && (
-            <span className="mono" style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-sub)', fontWeight: 700, alignSelf: 'center' }}>
-              NOT INVESTIGATING:
-            </span>
+            <span className="mono" style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-sub)', fontWeight: 700, alignSelf: 'center' }}>NOT INVESTIGATING:</span>
           )}
           {notInvestigating.map((item) => (
             <NotInvestigatingChip key={item} label={item} />
@@ -1174,11 +1022,9 @@ function CaseDetailScreen({ caseId, onBack, theme, onToggleTheme }) {
         {(() => {
           const plans = caseData.plans || [];
           if (plans.length > 0) {
-            // Plans are sorted by current_rank from the API; rank-1 plan is the lead
             const sortedPlans = [...plans].sort((a, b) => (a.current_rank || 99) - (b.current_rank || 99));
             return (
               <div style={{ marginBottom: 'var(--space-6)' }}>
-                {/* BakeOffStrip racing bars ordered by current_rank */}
                 <div style={{ marginBottom: 'var(--space-4)' }}>
                   <BakeOffStrip plans={sortedPlans.map((p) => ({
                     key: p.label,
@@ -1189,7 +1035,6 @@ function CaseDetailScreen({ caseId, onBack, theme, onToggleTheme }) {
                     state: p.state,
                   }))} />
                 </div>
-                {/* PlanCard for each plan; lead is determined by current_rank === 1 */}
                 {sortedPlans.map((p) => (
                   <PlanCard
                     key={p.label}
@@ -1201,6 +1046,9 @@ function CaseDetailScreen({ caseId, onBack, theme, onToggleTheme }) {
                     sources={p.sources || []}
                     isLead={p.current_rank === 1}
                     standing={p.standing}
+                    gatherStatus={p.gather_status}
+                    gatherError={p.gather_error}
+                    onGatherDone={loadCase}
                   />
                 ))}
               </div>
@@ -1216,99 +1064,63 @@ function CaseDetailScreen({ caseId, onBack, theme, onToggleTheme }) {
           }
           return (
             <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 'var(--space-5)', marginBottom: 'var(--space-6)', textAlign: 'center' }}>
-              <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 'var(--space-2)' }}>
-                STAGE 1 — BAKE-OFF
-              </div>
-              <p style={{ fontSize: 'var(--text-base)', color: 'var(--text-muted)', marginBottom: 'var(--space-4)' }}>
-                Generate three competing root-cause plans to race against each other.
-              </p>
+              <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 'var(--space-2)' }}>STAGE 1 — BAKE-OFF</div>
+              <p style={{ fontSize: 'var(--text-base)', color: 'var(--text-muted)', marginBottom: 'var(--space-4)' }}>Generate three competing root-cause plans to race against each other.</p>
               {bakeOffState === 'error' && (
-                <p role="alert" style={{ color: 'var(--red)', fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}>
-                  {bakeOffError}
-                </p>
+                <p role="alert" style={{ color: 'var(--red)', fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}>{bakeOffError}</p>
               )}
-              <button
-                className="btn btn-crux"
-                onClick={handleGeneratePlans}
-                disabled={bakeOffState === 'loading'}
-                aria-busy={bakeOffState === 'loading'}
-              >
+              <button className="btn btn-crux" onClick={handleGeneratePlans} disabled={bakeOffState === 'loading'} aria-busy={bakeOffState === 'loading'}>
                 <i className="ti ti-sparkles" aria-hidden="true"></i> Generate plans
               </button>
             </div>
           );
         })()}
 
-        {/* WEIGH · RE-RANK AGAINST YOUR DATA — only visible at stage >= 3 */}
+        {/* WEIGH — only at stage >= 3 (AC10: no regression) */}
         {stage >= 3 && (
           <>
             <SectionLabel>WEIGH · RE-RANK AGAINST YOUR DATA</SectionLabel>
-            <WeighPanel
-              caseId={caseId}
-              initialContext={caseData.weigh_context || ''}
-              onRerankDone={loadCase}
-            />
+            <WeighPanel caseId={caseId} initialContext={caseData.weigh_context || ''} onRerankDone={loadCase} />
           </>
         )}
 
-        {/* THE PROBE · CHEAPEST DECISIVE TEST — auto-triggers at stage >= 4 */}
+        {/* PROBE — auto-triggers at stage >= 4 (AC10: no regression) */}
         <SectionLabel>THE PROBE · CHEAPEST DECISIVE TEST</SectionLabel>
         {stage >= 4 ? (
-          <ProbeCard
-            probe={caseData.probe || null}
-            loading={probeState === 'loading'}
-            error={probeError}
-          />
+          <ProbeCard probe={caseData.probe || null} loading={probeState === 'loading'} error={probeError} />
         ) : (
           <EmptySection label="STAGE 4 — PROBE" message="Complete the Weigh stage first." />
         )}
 
-        {/* ACTION PLAN — locked until verdict is logged */}
+        {/* ACTION PLAN */}
         <SectionLabel>ACTION PLAN</SectionLabel>
         {caseData.verdict_log ? (
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 'var(--space-5)', marginBottom: 'var(--space-6)' }}>
-            {/* Verdict summary */}
             <div style={{ marginBottom: 'var(--space-4)' }}>
-              <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 'var(--space-2)' }}>
-                VERDICT
-              </div>
-              <span
-                className="mono"
-                style={{
-                  fontSize: 'var(--text-sm)', fontWeight: 700, letterSpacing: '.05em',
-                  color: caseData.verdict === 'confirmed' ? 'var(--green)'
-                       : caseData.verdict === 'killed'    ? 'var(--red)'
-                       : 'var(--amber)',
-                  background: caseData.verdict === 'confirmed' ? 'var(--green-bg)'
-                             : caseData.verdict === 'killed'    ? 'var(--red-bg)'
-                             : 'var(--amber-bg)',
-                  border: `1px solid ${caseData.verdict === 'confirmed' ? 'var(--green)' : caseData.verdict === 'killed' ? 'var(--red)' : 'var(--amber)'}`,
-                  borderRadius: 'var(--radius-pill)', padding: '3px 10px',
-                }}
-              >
+              <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 'var(--space-2)' }}>VERDICT</div>
+              <span className="mono" style={{
+                fontSize: 'var(--text-sm)', fontWeight: 700, letterSpacing: '.05em',
+                color: caseData.verdict === 'confirmed' ? 'var(--green)' : caseData.verdict === 'killed' ? 'var(--red)' : 'var(--amber)',
+                background: caseData.verdict === 'confirmed' ? 'var(--green-bg)' : caseData.verdict === 'killed' ? 'var(--red-bg)' : 'var(--amber-bg)',
+                border: `1px solid ${caseData.verdict === 'confirmed' ? 'var(--green)' : caseData.verdict === 'killed' ? 'var(--red)' : 'var(--amber)'}`,
+                borderRadius: 'var(--radius-pill)', padding: '3px 10px',
+              }}>
                 {caseData.verdict_log.outcome.charAt(0).toUpperCase() + caseData.verdict_log.outcome.slice(1)}
               </span>
               <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', lineHeight: 1.55, marginTop: 'var(--space-3)', marginBottom: 0 }}>
                 {caseData.verdict_log.notes}
               </p>
             </div>
-            {/* Top-ranked plan as the action plan */}
             {(() => {
               const plans = caseData.plans || [];
               const lead = plans.find((p) => p.current_rank === 1);
               if (!lead) return null;
               return (
                 <div>
-                  <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 'var(--space-2)' }}>
-                    LEADING PLAN
-                  </div>
+                  <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 'var(--space-2)' }}>LEADING PLAN</div>
                   <div style={{ background: 'var(--crux-tint)', border: '1px solid var(--crux)', borderRadius: 'var(--radius)', padding: 'var(--space-4)' }}>
-                    <div style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--text)', marginBottom: 'var(--space-2)' }}>
-                      {lead.name}
-                    </div>
-                    <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', lineHeight: 1.5, margin: 0 }}>
-                      {lead.mechanism}
-                    </p>
+                    <div style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--text)', marginBottom: 'var(--space-2)' }}>{lead.name}</div>
+                    <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', lineHeight: 1.5, margin: 0 }}>{lead.mechanism}</p>
                   </div>
                 </div>
               );
@@ -1325,7 +1137,6 @@ function CaseDetailScreen({ caseId, onBack, theme, onToggleTheme }) {
             onVerdictLogged={() => { loadCase(); setShowLogVerdictModal(false); }}
           />
         )}
-
       </div>
     </div>
   );
@@ -1335,16 +1146,9 @@ function NotInvestigatingChip({ label }) {
   const [dismissed, setDismissed] = React.useState(false);
   if (dismissed) return null;
   return (
-    <span
-      className="src"
-      style={{ display: 'inline-flex', alignItems: 'center', gap: 4, textDecoration: 'line-through' }}
-    >
+    <span className="src" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, textDecoration: 'line-through' }}>
       {label}
-      <button
-        onClick={() => setDismissed(true)}
-        aria-label={`Dismiss: ${label}`}
-        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', color: 'var(--text-sub)', lineHeight: 1 }}
-      >
+      <button onClick={() => setDismissed(true)} aria-label={`Dismiss: ${label}`} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', color: 'var(--text-sub)', lineHeight: 1 }}>
         <i className="ti ti-x" style={{ fontSize: 10 }} aria-hidden="true"></i>
       </button>
     </span>
@@ -1364,9 +1168,7 @@ function CasesScreen({ theme, onToggleTheme, onCaseCreated }) {
 
   if (cases === null) {
     return (
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
-        Loading…
-      </div>
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>Loading…</div>
     );
   }
 
@@ -1375,7 +1177,6 @@ function CasesScreen({ theme, onToggleTheme, onCaseCreated }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-      {/* Top bar */}
       <header style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 'var(--space-4)', padding: 'var(--space-5) var(--space-6)', borderBottom: '1px solid var(--border)' }}>
         <div>
           <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 800, letterSpacing: '-.01em', color: 'var(--text)' }}>Cases</h1>
@@ -1391,24 +1192,17 @@ function CasesScreen({ theme, onToggleTheme, onCaseCreated }) {
         </div>
       </header>
 
-      {/* Case list */}
       <div style={{ flex: 1, overflowY: 'auto', padding: 'var(--space-6)' }}>
         {cases.length === 0 ? (
           <div style={{ textAlign: 'center', padding: 'var(--space-7) 0', color: 'var(--text-muted)' }}>
-            <div style={{ fontSize: 'var(--text-xl)', fontWeight: 600, color: 'var(--text)', marginBottom: 'var(--space-2)' }}>
-              No cases yet
-            </div>
-            <p style={{ fontSize: 'var(--text-base)', lineHeight: 1.55 }}>
-              Got a problem worth solving? Start a case.
-            </p>
+            <div style={{ fontSize: 'var(--text-xl)', fontWeight: 600, color: 'var(--text)', marginBottom: 'var(--space-2)' }}>No cases yet</div>
+            <p style={{ fontSize: 'var(--text-base)', lineHeight: 1.55 }}>Got a problem worth solving? Start a case.</p>
           </div>
         ) : (
           <>
             {open.length > 0 && (
               <>
-                <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 'var(--space-3)' }}>
-                  OPEN · {open.length}
-                </div>
+                <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 'var(--space-3)' }}>OPEN · {open.length}</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', marginBottom: 'var(--space-6)' }}>
                   {open.map((c) => (
                     <CaseCard key={c.id} {...c} onClick={() => onCaseCreated && onCaseCreated(c.id)} />
@@ -1416,12 +1210,9 @@ function CasesScreen({ theme, onToggleTheme, onCaseCreated }) {
                 </div>
               </>
             )}
-
             {closed.length > 0 && (
               <>
-                <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 'var(--space-3)' }}>
-                  CLOSED · {closed.length}
-                </div>
+                <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 'var(--space-3)' }}>CLOSED · {closed.length}</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
                   {closed.map((c) => (
                     <CaseCard key={c.id} {...c} onClick={() => onCaseCreated && onCaseCreated(c.id)} />
@@ -1436,12 +1227,13 @@ function CasesScreen({ theme, onToggleTheme, onCaseCreated }) {
       {showModal && (
         <NewCaseModal
           onClose={() => setShowModal(false)}
-          onCaseCreated={(id) => {
-            setShowModal(false);
-            if (onCaseCreated) onCaseCreated(id);
-          }}
+          onCaseCreated={(id) => { setShowModal(false); if (onCaseCreated) onCaseCreated(id); }}
         />
       )}
     </div>
   );
 }
+
+// Mount — runs after both shell.js and cases.js have been parsed, so all
+// components (App, CasesScreen, CaseDetailScreen, etc.) are in scope.
+ReactDOM.createRoot(document.getElementById('app')).render(<App />);

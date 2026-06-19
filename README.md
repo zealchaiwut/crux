@@ -41,20 +41,49 @@ alembic upgrade head
 alembic revision --autogenerate -m "description"
 ```
 
-## API routes
+## Research loop (Stage 2)
+
+The `app/research/` module automates source gathering for a case plan. It uses
+an LLM query planner to generate search queries, fetches results via
+DuckDuckGo and article scraping, retrieves YouTube transcripts, extracts
+claims, and synthesises citations.
+
+Key components:
+
+| Module | Purpose |
+|---|---|
+| `research/planner.py` | `LLMQueryPlanner` — generates search queries from a plan |
+| `research/fetchers.py` | `WebSearchFetcher`, `ArticleReaderFetcher`, `YouTubeTranscriptFetcher` |
+| `research/extractor.py` | `ClaimExtractor` — extracts claims from fetched content |
+| `research/synthesiser.py` | `CitationSynthesiser` — produces cited summaries |
+| `research/loop.py` | `runResearchLoop` — orchestrates the full pipeline |
+
+Trigger via API:
 
 ```
-GET  /api/cases                       — list all cases (with plans, stage, verdict state)
-GET  /api/cases/{id}                  — case detail including plans
-POST /api/cases/sharpen               — call Claude to sharpen a raw problem statement
-POST /api/cases                       — create a case at Stage 0 (sharpened)
-POST /api/cases/{id}/bake-off         — generate Plan A/B/C via Claude and advance to Stage 1
-POST /api/cases/{id}/rerank           — re-rank plans with user context, advance to Stage 3
-POST /api/cases/{id}/probe            — design a probe via Claude, advance to Stage 4
-POST /api/cases/{id}/verdict          — record verdict outcome, advance to Stage 5
+POST /api/plans/{plan_id}/gather      # gather sources for one plan
+POST /api/cases/{case_id}/gather      # gather sources for all plans in a case
+GET  /api/plans/{plan_id}/gather-status
+```
 
-GET  /api/sources?plan_id=<id>        — list sources for a plan
-POST /api/sources                     — add a source to a plan
+## API endpoints
+
+```
+GET  /api/cases                        # list all cases
+GET  /api/cases/{case_id}              # get a single case with plans, probes, sources
+POST /api/cases                        # create a case
+POST /api/cases/sharpen                # LLM-sharpen a raw problem statement
+POST /api/cases/{case_id}/bake-off     # generate competing plans (A/B/C)
+POST /api/cases/{case_id}/rerank       # rerank plans after evidence gathering
+POST /api/cases/{case_id}/probe        # design a next probe
+POST /api/cases/{case_id}/verdict      # log a verdict for the active probe
+
+GET  /api/sources?plan_id={id}         # list sources for a plan
+POST /api/sources                      # manually add a source
+
+POST /api/plans/{plan_id}/gather       # run research loop for a plan
+POST /api/cases/{case_id}/gather       # run research loop for all plans
+GET  /api/plans/{plan_id}/gather-status
 ```
 
 ## Running tests
