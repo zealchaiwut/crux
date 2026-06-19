@@ -6,6 +6,7 @@ from html.parser import HTMLParser
 from typing import Protocol
 
 import httpx
+from youtube_transcript_api import YouTubeTranscriptApi
 
 from .types import (
     EMPTY_CONTENT_THRESHOLD,
@@ -227,3 +228,97 @@ def _parse_ddg_lite_results(html: str) -> list[SearchResult]:
     parser = _DDGParser()
     parser.feed(html)
     return results
+
+
+# ---------------------------------------------------------------------------
+# YouTubeTranscriptFetcher
+# ---------------------------------------------------------------------------
+
+_YT_VIDEO_ID_RE = re.compile(r"[A-Za-z0-9_-]{11}")
+_YT_WATCH_RE = re.compile(r"[?&]v=([A-Za-z0-9_-]{11})")
+_YT_SHORT_RE = re.compile(r"youtu\.be/([A-Za-z0-9_-]{11})")
+
+
+class YouTubeTranscriptFetcher(ResearchFetcherBase):
+    """Fetcher that retrieves a YouTube video transcript via the captions API.
+
+    Accepts full YouTube watch URLs, youtu.be short URLs, or bare 11-char video
+    IDs. Returns an ArticleDocument on success, or None when the transcript is
+    unavailable (captions disabled, age-gated, private/deleted) or the budget is
+    exhausted. Never raises an unhandled exception.
+    """
+
+    def __init__(
+        self,
+        budget: int,
+        timeout: float = 10.0,
+        http_client: httpx.Client | None = None,
+    ) -> None:
+        super().__init__(budget, timeout)
+        self._http = http_client
+
+    @staticmethod
+    def _extract_video_id(url_or_id: str) -> str | None:
+        s = url_or_id.strip()
+        if re.fullmatch(r"[A-Za-z0-9_-]{11}", s):
+            return s
+        m = _YT_WATCH_RE.search(s)
+        if m:
+            return m.group(1)
+        m = _YT_SHORT_RE.search(s)
+        if m:
+            return m.group(1)
+        return None
+
+    def _fetch_title(self, video_id: str) -> str:
+        """Return video title via YouTube oEmbed; falls back to video_id on error."""
+        try:
+            client = self._http or httpx.Client()
+            resp = client.get(
+                "https://www.youtube.com/oembed",
+                params={
+                    "url": f"https://www.youtube.com/watch?v={video_id}",
+                    "format": "json",
+                },
+                timeout=self.timeout,
+                follow_redirects=True,
+            )
+            if resp.status_code == 200:
+                title = resp.json().get("title", "")
+                if title:
+                    return title
+        except Exception:
+            pass
+        return video_id
+
+    def fetch(self, url_or_id: str) -> ArticleDocument | None:
+        video_id = self._extract_video_id(url_or_id)
+        if not video_id:
+            logger.info("YouTubeTranscriptFetcher: cannot parse video ID from %r", url_or_id)
+            return None
+
+        try:
+            self._consume_budget()
+        except BudgetExhaustedError:
+            logger.warning("YouTubeTranscriptFetcher: budget exhausted, skipping %s", video_id)
+            return None
+
+        try:
+            transcript = YouTubeTranscriptApi().fetch(video_id)
+            entries = list(transcript)
+        except Exception as exc:
+            logger.info(
+                "YouTubeTranscriptFetcher: transcript unavailable for %s: %s", video_id, exc
+            )
+            return None
+
+        text = _normalize_text(" ".join(e.text for e in entries))
+        if not text:
+            return None
+
+        title = self._fetch_title(video_id)
+        return ArticleDocument(
+            url=f"https://www.youtube.com/watch?v={video_id}",
+            title=title,
+            text=text,
+        )
