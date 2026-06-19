@@ -365,7 +365,6 @@ def test_related_text_never_returns_5xx_on_empty_input(api_client):
 def test_existing_verdict_gate_endpoint_unchanged(api_client, db_session):
     """AC9: POST /api/cases/{id}/verdict still works correctly."""
     from app import models
-    import datetime
 
     c = models.Case(
         id=str(uuid.uuid4()),
