@@ -10,7 +10,7 @@ Database: Neon Postgres. Migrations managed by Alembic (revision `a1b2c3d4e5f6`)
 | `plan_label_enum` | `A`, `B`, `C` |
 | `source_kind_enum` | `book`, `article`, `youtube` |
 | `probe_type_enum` | `measurement`, `lab-test`, `behaviour-experiment`, `prototype` |
-| `probe_status_enum` | `designed`, `running`, `confirmed`, `killed` |
+| `probe_status_enum` | `designed`, `running`, `confirmed`, `killed`, `inconclusive` |
 | `verdict_outcome_enum` | `confirmed`, `killed`, `inconclusive` |
 
 ## Tables
@@ -25,6 +25,7 @@ Database: Neon Postgres. Migrations managed by Alembic (revision `a1b2c3d4e5f6`)
 | `not_investigating` | text | |
 | `stage` | stage_enum | NOT NULL |
 | `created_at` | timestamptz | NOT NULL, default `now()` |
+| `weigh_context` | text | |
 
 ### `plan`
 
@@ -33,9 +34,11 @@ Database: Neon Postgres. Migrations managed by Alembic (revision `a1b2c3d4e5f6`)
 | `id` | UUID | PK |
 | `case_id` | UUID | FK → case.id ON DELETE CASCADE, NOT NULL |
 | `label` | plan_label_enum | NOT NULL |
+| `name` | text | |
 | `mechanism` | text | |
 | `prior` | text | |
 | `current_rank` | integer | |
+| `standing` | text | |
 
 ### `source`
 
@@ -57,6 +60,9 @@ Database: Neon Postgres. Migrations managed by Alembic (revision `a1b2c3d4e5f6`)
 | `case_id` | UUID | FK → case.id ON DELETE CASCADE, NOT NULL |
 | `type` | probe_type_enum | NOT NULL |
 | `target_metric` | text | |
+| `cost` | text | |
+| `time` | text | |
+| `note` | text | |
 | `status` | probe_status_enum | NOT NULL, default `designed` |
 | `due_date` | date | |
 | `commander_spec` | text | |
