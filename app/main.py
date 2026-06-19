@@ -70,16 +70,18 @@ async def login(request: Request, password: str = Form(...)):
     ip = request.client.host if request.client else "unknown"
 
     if is_rate_limited(ip):
+        msg = '<p style="color:red">Too many attempts. Try again later.</p>'
         return HTMLResponse(
-            _LOGIN_PAGE.format(error='<p style="color:red">Too many attempts. Try again later.</p>'),
+            _LOGIN_PAGE.format(error=msg),
             status_code=429,
         )
 
     record_attempt(ip)
 
     if not check_password(password, AUTH_SECRET):
+        msg = '<p style="color:red">Invalid password.</p>'
         return HTMLResponse(
-            _LOGIN_PAGE.format(error='<p style="color:red">Invalid password.</p>'),
+            _LOGIN_PAGE.format(error=msg),
             status_code=401,
         )
 

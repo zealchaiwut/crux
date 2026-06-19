@@ -1,14 +1,21 @@
 """Tests for issue #28: Related-case matching service over Verdicts.
 
 AC coverage:
-  AC1  – Endpoint accepts Case ID and returns ranked list of related Cases with Verdicts.
-  AC2  – Similarity computed over sharpened statement and plan mechanism fields.
-  AC3  – Each match includes case_id, sharpened snippet, verdict_outcome, deciding_metric, similarity_score.
+  AC1  – Endpoint accepts Case ID and returns ranked list of related
+         Cases with Verdicts.
+  AC2  – Similarity computed over sharpened statement and plan
+         mechanism fields.
+  AC3  – Each match includes case_id, sharpened snippet,
+         verdict_outcome, deciding_metric, similarity_score.
   AC4  – Results ranked by descending similarity_score.
-  AC5  – Case with no sharpened statement returns empty list (no crash).
-  AC6  – Empty corpus (no Cases with Verdicts) returns empty list with 200 response.
-  AC7  – Query latency < 3s for corpus of up to 1,000 Case+Verdict rows.
-  AC8  – Integration tests: ranking order, outcome field mapping, empty-corpus edge case.
+  AC5  – Case with no sharpened statement returns empty list (no
+         crash).
+  AC6  – Empty corpus (no Cases with Verdicts) returns empty list
+         with 200 response.
+  AC7  – Query latency < 3s for corpus of up to 1,000 Case+Verdict
+         rows.
+  AC8  – Integration tests: ranking order, outcome field mapping,
+         empty-corpus edge case.
   AC9  – Similarity threshold tunable via config without code change.
 """
 import json
@@ -128,8 +135,10 @@ def _seed_case_with_verdict(
     return c, probe, verdict
 
 
-def _seed_case_no_verdict(session, sharpened: str, mechanisms: list[str]) -> "models.Case":
-    """Seed a Case with plans but no probe or verdict (query target case)."""
+def _seed_case_no_verdict(
+    session, sharpened: str, mechanisms: list[str]
+):
+    """Seed a Case with plans but no probe or verdict (query target)."""
     from app import models
 
     c = models.Case(
@@ -172,7 +181,8 @@ def test_empty_corpus_returns_empty_list(api_client, db_session):
     r = api_client.get(f"/api/cases/{query_case.id}/related")
     assert r.status_code == 200, r.text
     data = r.json()
-    assert data["matches"] == [], f"Expected empty list, got {data['matches']}"
+    assert data["matches"] == [], \
+        f"Expected empty list, got {data['matches']}"
 
 
 def test_empty_corpus_response_shape(api_client, db_session):
@@ -193,10 +203,13 @@ def test_empty_corpus_response_shape(api_client, db_session):
 # ---------------------------------------------------------------------------
 
 def test_endpoint_returns_related_cases(api_client, db_session):
-    """AC1: Endpoint returns related Cases that have at least one logged Verdict."""
+    """AC1: Endpoint returns related Cases with at least one Verdict."""
     _seed_case_with_verdict(
         db_session,
-        sharpened="Energy levels have declined due to iron deficiency and low ferritin.",
+        sharpened=(
+            "Energy levels have declined due to iron deficiency "
+            "and low ferritin."
+        ),
         mechanisms=["Low ferritin impairs oxygen transport to muscles."],
         outcome="confirmed",
         target_metric="serum ferritin",
@@ -204,12 +217,15 @@ def test_endpoint_returns_related_cases(api_client, db_session):
     query_case = _seed_case_no_verdict(
         db_session,
         sharpened="Fatigue and low energy possibly from iron deficiency.",
-        mechanisms=["Iron deficiency reduces hemoglobin and oxygen delivery."],
+        mechanisms=[
+            "Iron deficiency reduces hemoglobin and oxygen delivery."
+        ],
     )
     r = api_client.get(f"/api/cases/{query_case.id}/related")
     assert r.status_code == 200, r.text
     data = r.json()
-    assert len(data["matches"]) >= 1, "Should return at least one related case"
+    assert len(data["matches"]) >= 1, \
+        "Should return at least one related case"
 
 
 def test_endpoint_excludes_cases_without_verdicts(api_client, db_session):
@@ -244,11 +260,13 @@ def test_endpoint_excludes_cases_without_verdicts(api_client, db_session):
 # ---------------------------------------------------------------------------
 
 def test_match_contains_required_fields(api_client, db_session):
-    """AC3: Each match must include case_id, sharpened_snippet, verdict_outcome,
-    deciding_metric, and similarity_score."""
+    """AC3: Each match must include case_id, sharpened_snippet,
+    verdict_outcome, deciding_metric, and similarity_score."""
     _seed_case_with_verdict(
         db_session,
-        sharpened="Energy declined from iron deficiency and low ferritin levels.",
+        sharpened=(
+            "Energy declined from iron deficiency and low ferritin levels."
+        ),
         mechanisms=["Low ferritin impairs oxygen transport to muscles."],
         outcome="confirmed",
         target_metric="serum ferritin",
@@ -264,10 +282,12 @@ def test_match_contains_required_fields(api_client, db_session):
     assert len(data["matches"]) >= 1, "Expected at least one match"
     match = data["matches"][0]
     assert "case_id" in match, "match must have case_id"
-    assert "sharpened_snippet" in match, "match must have sharpened_snippet"
+    assert "sharpened_snippet" in match, \
+        "match must have sharpened_snippet"
     assert "verdict_outcome" in match, "match must have verdict_outcome"
     assert "deciding_metric" in match, "match must have deciding_metric"
-    assert "similarity_score" in match, "match must have similarity_score"
+    assert "similarity_score" in match, \
+        "match must have similarity_score"
 
 
 def test_match_verdict_outcome_is_valid(api_client, db_session):
@@ -292,11 +312,15 @@ def test_match_verdict_outcome_is_valid(api_client, db_session):
             f"verdict_outcome must be valid enum value, got {outcome!r}"
 
 
-def test_match_deciding_metric_maps_to_probe_target_metric(api_client, db_session):
+def test_match_deciding_metric_maps_to_probe_target_metric(
+    api_client, db_session
+):
     """AC3: deciding_metric must equal the probe's target_metric."""
     _seed_case_with_verdict(
         db_session,
-        sharpened="Energy declined from iron deficiency and low ferritin.",
+        sharpened=(
+            "Energy declined from iron deficiency and low ferritin."
+        ),
         mechanisms=["Low ferritin impairs oxygen transport to muscles."],
         outcome="confirmed",
         target_metric="serum ferritin ng/mL",
@@ -313,8 +337,11 @@ def test_match_deciding_metric_maps_to_probe_target_metric(api_client, db_sessio
 
 
 def test_match_sharpened_snippet_is_substring(api_client, db_session):
-    """AC3: sharpened_snippet must be a non-empty substring of the matched Case's sharpened field."""
-    original_sharpened = "Energy declined from iron deficiency and low ferritin levels."
+    """AC3: sharpened_snippet must be a non-empty substring of the
+    matched Case's sharpened field."""
+    original_sharpened = (
+        "Energy declined from iron deficiency and low ferritin levels."
+    )
     _seed_case_with_verdict(
         db_session,
         sharpened=original_sharpened,
@@ -331,8 +358,9 @@ def test_match_sharpened_snippet_is_substring(api_client, db_session):
     assert len(data["matches"]) >= 1
     snippet = data["matches"][0]["sharpened_snippet"]
     assert snippet, "sharpened_snippet must be non-empty"
-    assert snippet in original_sharpened or original_sharpened.startswith(snippet[:20]), \
-        "sharpened_snippet must derive from the matched case's sharpened field"
+    starts_with = original_sharpened.startswith(snippet[:20])
+    assert snippet in original_sharpened or starts_with, \
+        "sharpened_snippet must derive from matched case's sharpened"
 
 
 def test_match_similarity_score_is_numeric(api_client, db_session):
@@ -352,8 +380,10 @@ def test_match_similarity_score_is_numeric(api_client, db_session):
     data = r.json()
     if data["matches"]:
         score = data["matches"][0]["similarity_score"]
-        assert isinstance(score, (int, float)), "similarity_score must be numeric"
-        assert 0.0 <= score <= 1.0, f"similarity_score must be in [0,1], got {score}"
+        assert isinstance(score, (int, float)), \
+            "similarity_score must be numeric"
+        assert 0.0 <= score <= 1.0, \
+            f"similarity_score must be in [0,1], got {score}"
 
 
 # ---------------------------------------------------------------------------
@@ -365,15 +395,25 @@ def test_results_ranked_by_descending_similarity(api_client, db_session):
     # Case clearly similar to query (high similarity)
     _seed_case_with_verdict(
         db_session,
-        sharpened="Low energy fatigue iron deficiency hemoglobin oxygen transport.",
-        mechanisms=["Iron deficiency reduces hemoglobin oxygen transport fatigue."],
+        sharpened=(
+            "Low energy fatigue iron deficiency hemoglobin oxygen "
+            "transport."
+        ),
+        mechanisms=[
+            "Iron deficiency reduces hemoglobin oxygen transport fatigue."
+        ],
         outcome="confirmed",
     )
     # Case less similar (different domain)
     _seed_case_with_verdict(
         db_session,
-        sharpened="Quarterly revenue declined due to reduced customer acquisition costs.",
-        mechanisms=["Marketing spend cut reduces new customer pipeline inflow."],
+        sharpened=(
+            "Quarterly revenue declined due to reduced customer "
+            "acquisition costs."
+        ),
+        mechanisms=[
+            "Marketing spend cut reduces new customer pipeline inflow."
+        ],
         outcome="killed",
     )
     query_case = _seed_case_no_verdict(
@@ -386,21 +426,33 @@ def test_results_ranked_by_descending_similarity(api_client, db_session):
     data = r.json()
     scores = [m["similarity_score"] for m in data["matches"]]
     assert scores == sorted(scores, reverse=True), \
-        f"Matches must be sorted descending by similarity_score, got {scores}"
+        f"Matches must be sorted descending by similarity_score: {scores}"
 
 
-def test_topically_similar_case_ranked_above_unrelated(api_client, db_session):
-    """AC4/AC8: Topically similar case appears above unrelated case in ranking."""
+def test_topically_similar_case_ranked_above_unrelated(
+    api_client, db_session
+):
+    """AC4/AC8: Topically similar case appears above unrelated case."""
     similar_case, _, _ = _seed_case_with_verdict(
         db_session,
-        sharpened="Low energy fatigue iron deficiency hemoglobin oxygen.",
-        mechanisms=["Iron deficiency reduces hemoglobin and oxygen transport to muscles."],
+        sharpened=(
+            "Low energy fatigue iron deficiency hemoglobin oxygen."
+        ),
+        mechanisms=[
+            "Iron deficiency reduces hemoglobin and oxygen transport "
+            "to muscles."
+        ],
         outcome="confirmed",
     )
     _seed_case_with_verdict(
         db_session,
-        sharpened="Revenue declined due to reduced customer acquisition costs budget.",
-        mechanisms=["Marketing spend cut reduces new pipeline inflow acquisition."],
+        sharpened=(
+            "Revenue declined due to reduced customer acquisition "
+            "costs budget."
+        ),
+        mechanisms=[
+            "Marketing spend cut reduces new pipeline inflow acquisition."
+        ],
         outcome="killed",
     )
     query_case = _seed_case_no_verdict(
@@ -422,16 +474,20 @@ def test_topically_similar_case_ranked_above_unrelated(api_client, db_session):
 # ---------------------------------------------------------------------------
 
 def test_similarity_uses_sharpened_not_raw_problem(api_client, db_session):
-    """AC2: Matching is based on sharpened statement and plan mechanism, not raw_problem."""
+    """AC2: Matching is based on sharpened and plan mechanism, not
+    raw_problem."""
     # Seed a case where raw_problem matches query but sharpened does not
     from app import models
     import datetime
 
-    # Seed case: raw_problem very similar to query, sharpened very different
+    # Seed case: raw_problem very similar to query, sharpened different
     c = models.Case(
         id=str(uuid.uuid4()),
         raw_problem="Low energy fatigue iron deficiency hemoglobin oxygen.",
-        sharpened="Revenue declined due to marketing budget cuts and reduced pipeline.",
+        sharpened=(
+            "Revenue declined due to marketing budget cuts and "
+            "reduced pipeline."
+        ),
         not_investigating=json.dumps([]),
         stage="verdict",
     )
@@ -470,7 +526,7 @@ def test_similarity_uses_sharpened_not_raw_problem(api_client, db_session):
     db_session.add(verdict)
     db_session.commit()
 
-    # Query case: sharpened is about iron/fatigue (should NOT match above case)
+    # Query case: sharpened is about iron/fatigue (should NOT match)
     query_case = _seed_case_no_verdict(
         db_session,
         sharpened="Low energy fatigue iron deficiency hemoglobin oxygen.",
@@ -479,11 +535,11 @@ def test_similarity_uses_sharpened_not_raw_problem(api_client, db_session):
     r = api_client.get(f"/api/cases/{query_case.id}/related")
     assert r.status_code == 200
     data = r.json()
-    # The seeded case should NOT be in top results (its sharpened is about marketing, not iron)
+    # Seeded case should NOT be top result (its sharpened is marketing)
     if data["matches"]:
         top_id = data["matches"][0]["case_id"]
         assert top_id != c.id, \
-            "Case matching only on raw_problem (not sharpened) must not be top match"
+            "Case matching only on raw_problem must not be top match"
 
 
 # ---------------------------------------------------------------------------
@@ -491,7 +547,7 @@ def test_similarity_uses_sharpened_not_raw_problem(api_client, db_session):
 # ---------------------------------------------------------------------------
 
 def test_no_sharpened_statement_returns_empty_list(api_client, db_session):
-    """AC5: Case with null/empty sharpened statement returns empty list, not an error."""
+    """AC5: Case with null sharpened returns empty list, not an error."""
     from app import models
 
     c = models.Case(
@@ -505,13 +561,17 @@ def test_no_sharpened_statement_returns_empty_list(api_client, db_session):
     db_session.commit()
 
     r = api_client.get(f"/api/cases/{c.id}/related")
-    assert r.status_code == 200, f"Expected 200, got {r.status_code}: {r.text}"
+    assert r.status_code == 200, \
+        f"Expected 200, got {r.status_code}: {r.text}"
     data = r.json()
-    assert data["matches"] == [], f"Expected empty list for no-sharpened case, got {data['matches']}"
+    assert data["matches"] == [], \
+        f"Expected empty list for no-sharpened case: {data['matches']}"
 
 
-def test_empty_sharpened_statement_returns_empty_list(api_client, db_session):
-    """AC5: Case with empty string sharpened statement returns empty list."""
+def test_empty_sharpened_statement_returns_empty_list(
+    api_client, db_session
+):
+    """AC5: Case with empty sharpened returns empty list."""
     from app import models
 
     c = models.Case(
@@ -525,14 +585,18 @@ def test_empty_sharpened_statement_returns_empty_list(api_client, db_session):
     db_session.commit()
 
     r = api_client.get(f"/api/cases/{c.id}/related")
-    assert r.status_code == 200, f"Expected 200, got {r.status_code}: {r.text}"
+    assert r.status_code == 200, \
+        f"Expected 200, got {r.status_code}: {r.text}"
     data = r.json()
-    assert data["matches"] == [], f"Expected empty list for empty-sharpened case, got {data['matches']}"
+    assert data["matches"] == [], \
+        f"Expected empty list for empty-sharpened: {data['matches']}"
 
 
 def test_unknown_case_id_returns_404(api_client):
     """AC1: Unknown Case ID returns 404."""
-    r = api_client.get("/api/cases/00000000-0000-0000-0000-000000000000/related")
+    r = api_client.get(
+        "/api/cases/00000000-0000-0000-0000-000000000000/related"
+    )
     assert r.status_code == 404, r.text
 
 
@@ -544,8 +608,12 @@ def test_outcome_confirmed_mapped_correctly(api_client, db_session):
     """AC8: confirmed outcome is preserved in match payload."""
     _seed_case_with_verdict(
         db_session,
-        sharpened="Energy fatigue iron deficiency hemoglobin oxygen transport.",
-        mechanisms=["Iron deficiency reduces hemoglobin transport oxygen fatigue."],
+        sharpened=(
+            "Energy fatigue iron deficiency hemoglobin oxygen transport."
+        ),
+        mechanisms=[
+            "Iron deficiency reduces hemoglobin transport oxygen fatigue."
+        ],
         outcome="confirmed",
     )
     query_case = _seed_case_no_verdict(
@@ -555,7 +623,9 @@ def test_outcome_confirmed_mapped_correctly(api_client, db_session):
     )
     r = api_client.get(f"/api/cases/{query_case.id}/related")
     data = r.json()
-    confirmed = [m for m in data["matches"] if m["verdict_outcome"] == "confirmed"]
+    confirmed = [
+        m for m in data["matches"] if m["verdict_outcome"] == "confirmed"
+    ]
     assert confirmed, "At least one confirmed match must appear"
 
 
@@ -563,8 +633,12 @@ def test_outcome_killed_mapped_correctly(api_client, db_session):
     """AC8: killed outcome is preserved in match payload."""
     _seed_case_with_verdict(
         db_session,
-        sharpened="Energy fatigue iron deficiency hemoglobin oxygen transport.",
-        mechanisms=["Iron deficiency reduces hemoglobin oxygen fatigue transport."],
+        sharpened=(
+            "Energy fatigue iron deficiency hemoglobin oxygen transport."
+        ),
+        mechanisms=[
+            "Iron deficiency reduces hemoglobin oxygen fatigue transport."
+        ],
         outcome="killed",
     )
     query_case = _seed_case_no_verdict(
@@ -574,7 +648,9 @@ def test_outcome_killed_mapped_correctly(api_client, db_session):
     )
     r = api_client.get(f"/api/cases/{query_case.id}/related")
     data = r.json()
-    killed = [m for m in data["matches"] if m["verdict_outcome"] == "killed"]
+    killed = [
+        m for m in data["matches"] if m["verdict_outcome"] == "killed"
+    ]
     assert killed, "At least one killed match must appear"
 
 
@@ -582,8 +658,12 @@ def test_outcome_inconclusive_mapped_correctly(api_client, db_session):
     """AC8: inconclusive outcome is preserved in match payload."""
     _seed_case_with_verdict(
         db_session,
-        sharpened="Energy fatigue iron deficiency hemoglobin oxygen transport.",
-        mechanisms=["Iron deficiency reduces hemoglobin oxygen fatigue transport."],
+        sharpened=(
+            "Energy fatigue iron deficiency hemoglobin oxygen transport."
+        ),
+        mechanisms=[
+            "Iron deficiency reduces hemoglobin oxygen fatigue transport."
+        ],
         outcome="inconclusive",
     )
     query_case = _seed_case_no_verdict(
@@ -593,7 +673,10 @@ def test_outcome_inconclusive_mapped_correctly(api_client, db_session):
     )
     r = api_client.get(f"/api/cases/{query_case.id}/related")
     data = r.json()
-    inconclusive = [m for m in data["matches"] if m["verdict_outcome"] == "inconclusive"]
+    inconclusive = [
+        m for m in data["matches"]
+        if m["verdict_outcome"] == "inconclusive"
+    ]
     assert inconclusive, "At least one inconclusive match must appear"
 
 
@@ -601,8 +684,10 @@ def test_outcome_inconclusive_mapped_correctly(api_client, db_session):
 # AC9: Similarity threshold tunable via config
 # ---------------------------------------------------------------------------
 
-def test_high_threshold_filters_out_low_similarity_matches(api_client, db_session, monkeypatch):
-    """AC9: Setting a very high threshold (0.99) returns fewer matches than default."""
+def test_high_threshold_filters_out_low_similarity_matches(
+    api_client, db_session, monkeypatch
+):
+    """AC9: Setting a very high threshold (0.99) returns fewer matches."""
     import app.services.related_cases as svc
     _seed_case_with_verdict(
         db_session,
@@ -619,16 +704,20 @@ def test_high_threshold_filters_out_low_similarity_matches(api_client, db_sessio
     r_default = api_client.get(f"/api/cases/{query_case.id}/related")
     default_count = len(r_default.json()["matches"])
 
-    # With very high threshold, should return fewer (possibly zero) matches
+    # With very high threshold, should return fewer (possibly zero)
     monkeypatch.setattr(svc, "SIMILARITY_THRESHOLD", 0.99)
     r_high = api_client.get(f"/api/cases/{query_case.id}/related")
     high_count = len(r_high.json()["matches"])
 
-    assert high_count <= default_count, \
-        f"High threshold should return <= matches vs default, got {high_count} vs {default_count}"
+    assert high_count <= default_count, (
+        f"High threshold should return <= matches vs default, "
+        f"got {high_count} vs {default_count}"
+    )
 
 
-def test_zero_threshold_returns_all_cases_with_verdicts(api_client, db_session, monkeypatch):
+def test_zero_threshold_returns_all_cases_with_verdicts(
+    api_client, db_session, monkeypatch
+):
     """AC9: Setting threshold to 0.0 returns all Cases with Verdicts."""
     import app.services.related_cases as svc
     monkeypatch.setattr(svc, "SIMILARITY_THRESHOLD", 0.0)
@@ -636,8 +725,13 @@ def test_zero_threshold_returns_all_cases_with_verdicts(api_client, db_session, 
     for i in range(3):
         _seed_case_with_verdict(
             db_session,
-            sharpened=f"Unrelated domain case number {i} with unique distinct words.",
-            mechanisms=[f"Completely different mechanism number {i} unique words."],
+            sharpened=(
+                f"Unrelated domain case number {i} with unique "
+                "distinct words."
+            ),
+            mechanisms=[
+                f"Completely different mechanism number {i} unique words."
+            ],
             outcome="confirmed",
         )
     query_case = _seed_case_no_verdict(
@@ -648,9 +742,11 @@ def test_zero_threshold_returns_all_cases_with_verdicts(api_client, db_session, 
     r = api_client.get(f"/api/cases/{query_case.id}/related")
     assert r.status_code == 200
     data = r.json()
-    # With threshold=0.0, all 3 seeded cases (which have verdicts) should be returned
-    assert len(data["matches"]) == 3, \
-        f"With threshold=0.0, all 3 verdict cases should be returned, got {len(data['matches'])}"
+    # With threshold=0.0, all 3 seeded cases should be returned
+    assert len(data["matches"]) == 3, (
+        "With threshold=0.0, all 3 verdict cases should be returned, "
+        f"got {len(data['matches'])}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -658,14 +754,17 @@ def test_zero_threshold_returns_all_cases_with_verdicts(api_client, db_session, 
 # ---------------------------------------------------------------------------
 
 def test_query_latency_under_3_seconds_for_1000_rows(db_session):
-    """AC7: Related-case query must complete within 3 seconds for 1,000 seeded rows."""
+    """AC7: Related-case query must complete within 3s for 1,000 rows."""
     import datetime
     from app import models
     from app.services.related_cases import find_related_cases
 
     # Seed 1,000 cases with verdicts
-    words = ["energy", "fatigue", "iron", "hemoglobin", "oxygen", "sleep", "cortisol",
-             "stress", "metabolism", "thyroid", "vitamin", "deficiency", "inflammation"]
+    words = [
+        "energy", "fatigue", "iron", "hemoglobin", "oxygen", "sleep",
+        "cortisol", "stress", "metabolism", "thyroid", "vitamin",
+        "deficiency", "inflammation",
+    ]
     import random
     random.seed(42)
 
