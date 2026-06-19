@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session, joinedload
 from app import models
 from app.bake_off import BakeOffError, generate_plans
 from app.db import get_db
+from app.probe import ProbeError, design_probe
 from app.sharpen import SharpenError, sharpen_problem
 from app.weigh import WeighError, rerank_plans
 
@@ -155,6 +156,18 @@ def get_case(case_id: str, db: Session = Depends(get_db)):
             ],
         })
 
+    probe_out = None
+    if probe:
+        probe_out = {
+            "id": probe.id,
+            "type": probe.type,
+            "target_metric": probe.target_metric or "",
+            "cost": probe.cost or "",
+            "time": probe.time or "",
+            "note": probe.note or "",
+            "status": probe.status,
+        }
+
     return {
         "id": case.id,
         "raw_problem": case.raw_problem,
@@ -166,6 +179,7 @@ def get_case(case_id: str, db: Session = Depends(get_db)):
         "created_at": str(case.created_at) if case.created_at else None,
         "weigh_context": case.weigh_context or "",
         "plans": plans_out,
+        "probe": probe_out,
     }
 
 
@@ -369,3 +383,85 @@ async def rerank_case(case_id: str, body: RerankRequest, db: Session = Depends(g
         for p in updated_plans
     ]
     return {"plans": plans_out, "weigh_context": case.weigh_context}
+
+
+# ---------------------------------------------------------------------------
+# POST /api/cases/{id}/probe
+# ---------------------------------------------------------------------------
+
+@router.post("/cases/{case_id}/probe")
+async def design_probe_for_case(case_id: str, db: Session = Depends(get_db)):
+    case = (
+        db.query(models.Case)
+        .options(
+            joinedload(models.Case.plans),
+            joinedload(models.Case.probes),
+        )
+        .filter(models.Case.id == case_id)
+        .first()
+    )
+    if case is None:
+        raise HTTPException(status_code=404, detail="Case not found")
+
+    plans = sorted(case.plans, key=lambda p: p.current_rank or 99)
+    if not plans:
+        raise HTTPException(status_code=422, detail="Case has no plans to design a probe for")
+
+    # Idempotency: if probe already exists, return it
+    if case.probes:
+        probe = case.probes[0]
+        return {
+            "id": probe.id,
+            "type": probe.type,
+            "target_metric": probe.target_metric or "",
+            "cost": probe.cost or "",
+            "time": probe.time or "",
+            "note": probe.note or "",
+            "status": probe.status,
+        }
+
+    # Call Claude to design the probe
+    plans_input = [
+        {
+            "label": p.label,
+            "name": p.name or f"Plan {p.label}",
+            "mechanism": p.mechanism or "",
+            "current_rank": p.current_rank,
+        }
+        for p in plans
+    ]
+    try:
+        result = await design_probe(
+            sharpened=case.sharpened or case.raw_problem,
+            plans=plans_input,
+        )
+    except ProbeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    # Persist probe
+    probe = models.Probe(
+        id=str(_uuid_mod.uuid4()),
+        case_id=case.id,
+        type=result["type"],
+        target_metric=result["target_metric"],
+        cost=result["cost"],
+        time=result["time"],
+        note=result["note"],
+        status="designed",
+    )
+    db.add(probe)
+
+    # Advance stage to "probe"
+    case.stage = "probe"
+    db.commit()
+    db.refresh(probe)
+
+    return {
+        "id": probe.id,
+        "type": probe.type,
+        "target_metric": probe.target_metric or "",
+        "cost": probe.cost or "",
+        "time": probe.time or "",
+        "note": probe.note or "",
+        "status": probe.status,
+    }
