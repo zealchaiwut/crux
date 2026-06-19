@@ -109,6 +109,11 @@ def cases():
     return FileResponse(_INDEX_HTML)
 
 
+@app.get("/cases/{case_id}")
+def case_detail(case_id: str):
+    return FileResponse(_INDEX_HTML)
+
+
 @app.get("/probes")
 def probes():
     return FileResponse(_INDEX_HTML)

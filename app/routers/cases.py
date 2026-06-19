@@ -1,12 +1,21 @@
 """Cases API router.
 
-GET /api/cases  — returns all cases with plans, stage number, and verdict state.
+GET  /api/cases         — all cases with plans, stage number, verdict state.
+GET  /api/cases/{id}    — single case detail.
+POST /api/cases/sharpen — call Claude to produce sharpened statement + not_investigating.
+POST /api/cases         — create a Case record at stage 0 (sharpened).
 """
-from fastapi import APIRouter, Depends
+import json
+import uuid as _uuid_mod
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session, joinedload
 
 from app import models
 from app.db import get_db
+from app.sharpen import SharpenError, sharpen_problem
 
 router = APIRouter(prefix="/api")
 
@@ -30,6 +39,10 @@ def _plan_state(plan: models.Plan, probe: models.Probe | None,
         return "leading"
     return None
 
+
+# ---------------------------------------------------------------------------
+# GET /api/cases
+# ---------------------------------------------------------------------------
 
 @router.get("/cases")
 def list_cases(db: Session = Depends(get_db)):
@@ -83,3 +96,100 @@ def list_cases(db: Session = Depends(get_db)):
         })
 
     return {"cases": result}
+
+
+# ---------------------------------------------------------------------------
+# GET /api/cases/{id}
+# ---------------------------------------------------------------------------
+
+@router.get("/cases/{case_id}")
+def get_case(case_id: str, db: Session = Depends(get_db)):
+    case = (
+        db.query(models.Case)
+        .options(
+            joinedload(models.Case.plans),
+            joinedload(models.Case.probes).joinedload(models.Probe.verdicts),
+        )
+        .filter(models.Case.id == case_id)
+        .first()
+    )
+    if case is None:
+        raise HTTPException(status_code=404, detail="Case not found")
+
+    probe = case.probes[0] if case.probes else None
+    verdict_obj = (probe.verdicts[0] if probe and probe.verdicts else None)
+
+    not_investigating = []
+    if case.not_investigating:
+        try:
+            not_investigating = json.loads(case.not_investigating)
+        except (ValueError, TypeError):
+            not_investigating = []
+
+    return {
+        "id": case.id,
+        "raw_problem": case.raw_problem,
+        "sharpened": case.sharpened or "",
+        "not_investigating": not_investigating,
+        "stage": _STAGE_ORDER.get(case.stage, 0),
+        "verdict": (verdict_obj.outcome if verdict_obj else
+                    ("progress" if probe and probe.status == "running" else "awaiting")),
+        "created_at": str(case.created_at) if case.created_at else None,
+    }
+
+
+# ---------------------------------------------------------------------------
+# POST /api/cases/sharpen
+# ---------------------------------------------------------------------------
+
+class SharpenRequest(BaseModel):
+    raw_problem: str
+
+    @field_validator("raw_problem")
+    @classmethod
+    def not_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("raw_problem must not be empty")
+        return v
+
+
+@router.post("/cases/sharpen")
+async def sharpen_case(body: SharpenRequest):
+    try:
+        result = await sharpen_problem(body.raw_problem)
+    except SharpenError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    return result
+
+
+# ---------------------------------------------------------------------------
+# POST /api/cases
+# ---------------------------------------------------------------------------
+
+class CreateCaseRequest(BaseModel):
+    raw_problem: str
+    sharpened: str
+    not_investigating: list[str]
+
+    @field_validator("sharpened")
+    @classmethod
+    def sharpened_not_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("sharpened must not be empty")
+        return v
+
+
+@router.post("/cases", status_code=201)
+def create_case(body: CreateCaseRequest, db: Session = Depends(get_db)):
+    case = models.Case(
+        id=str(_uuid_mod.uuid4()),
+        raw_problem=body.raw_problem,
+        sharpened=body.sharpened,
+        not_investigating=json.dumps(body.not_investigating),
+        stage="sharpened",
+        created_at=datetime.now(tz=timezone.utc),
+    )
+    db.add(case)
+    db.commit()
+    db.refresh(case)
+    return {"id": case.id}
