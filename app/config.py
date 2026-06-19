@@ -19,3 +19,7 @@ if len(_raw_secret) < 16:
     sys.exit(1)
 
 AUTH_SECRET: str = _raw_secret
+
+# §11: research engine selection — "custom" (default) or "fallback".
+# Switch without any code change: set RESEARCH_ENGINE=fallback in the environment.
+RESEARCH_ENGINE: str = os.environ.get("RESEARCH_ENGINE", "custom")
