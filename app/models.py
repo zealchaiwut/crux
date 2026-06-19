@@ -22,7 +22,7 @@ _STAGE = ("sharpened", "bake_off", "gather", "weigh", "probe", "verdict")
 _PLAN_LABEL = ("A", "B", "C")
 _SOURCE_KIND = ("book", "article", "youtube")
 _PROBE_TYPE = ("measurement", "lab-test", "behaviour-experiment", "prototype")
-_PROBE_STATUS = ("designed", "running", "confirmed", "killed")
+_PROBE_STATUS = ("designed", "running", "confirmed", "killed", "inconclusive")
 _VERDICT_OUTCOME = ("confirmed", "killed", "inconclusive")
 
 

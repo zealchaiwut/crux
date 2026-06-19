@@ -837,6 +837,191 @@ function StageBar({ stage = 0 }) {
 }
 
 // ---------------------------------------------------------------------------
+// LockedPlan — shown in place of the action plan when no verdict is logged
+// ---------------------------------------------------------------------------
+
+function LockedPlan({ onLogVerdict }) {
+  return (
+    <div
+      style={{
+        background: 'repeating-linear-gradient(135deg, var(--surface) 0px, var(--surface) 10px, var(--surface-2) 10px, var(--surface-2) 20px)',
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius)',
+        padding: 'var(--space-6)',
+        marginBottom: 'var(--space-6)',
+        textAlign: 'center',
+        color: 'var(--text-muted)',
+        opacity: 0.85,
+      }}
+    >
+      <i className="ti ti-lock" aria-hidden="true" style={{ fontSize: 28, color: 'var(--text-sub)', marginBottom: 'var(--space-3)', display: 'block' }}></i>
+      <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 'var(--space-2)' }}>
+        LOCKED
+      </div>
+      <p style={{ fontSize: 'var(--text-base)', marginBottom: 'var(--space-4)' }}>
+        Log verdict to unlock the action plan.
+      </p>
+      <button className="btn btn-crux" onClick={onLogVerdict}>
+        <i className="ti ti-gavel" aria-hidden="true"></i> Log verdict
+      </button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// LogVerdictModal — form to record outcome + notes
+// ---------------------------------------------------------------------------
+
+const _VERDICT_OUTCOMES = [
+  { value: 'confirmed',    label: 'Confirmed',    color: 'var(--green)',  bg: 'var(--green-bg)',  border: 'var(--green)' },
+  { value: 'killed',       label: 'Killed',       color: 'var(--red)',    bg: 'var(--red-bg)',    border: 'var(--red)' },
+  { value: 'inconclusive', label: 'Inconclusive', color: 'var(--amber)',  bg: 'var(--amber-bg)',  border: 'var(--amber)' },
+];
+
+function LogVerdictModal({ caseId, onClose, onVerdictLogged }) {
+  const [outcome, setOutcome] = React.useState('confirmed');
+  const [notes, setNotes] = React.useState('');
+  const [notesError, setNotesError] = React.useState('');
+  const [submitError, setSubmitError] = React.useState('');
+  const [submitting, setSubmitting] = React.useState(false);
+
+  React.useEffect(() => {
+    function onKey(e) { if (e.key === 'Escape') onClose(); }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!notes.trim()) {
+      setNotesError('Notes are required (min 1 character).');
+      return;
+    }
+    setSubmitting(true);
+    setNotesError('');
+    setSubmitError('');
+    try {
+      const resp = await fetch(`/api/cases/${caseId}/verdict`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ outcome, notes: notes.trim() }),
+      });
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        throw new Error(data.detail || `Error ${resp.status}`);
+      }
+      const data = await resp.json();
+      if (onVerdictLogged) onVerdictLogged(data);
+      onClose();
+    } catch (err) {
+      setSubmitError(err.message || 'Could not save verdict. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const fieldStyle = {
+    width: '100%', padding: 'var(--space-2) var(--space-3)',
+    fontSize: 'var(--text-sm)', color: 'var(--text)', background: 'var(--surface-2)',
+    border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
+    boxSizing: 'border-box',
+  };
+  const labelStyle = {
+    display: 'block', fontSize: 'var(--text-2xs)', fontWeight: 700,
+    color: 'var(--text-muted)', marginBottom: 'var(--space-1)',
+    fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '.05em',
+  };
+
+  return (
+    <div
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Log verdict"
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--space-5)', zIndex: 50 }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{ width: 480, maxWidth: '100%', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-xl)', boxShadow: 'var(--shadow-card)', padding: 'var(--space-6)' }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-4)' }}>
+          <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 800, color: 'var(--text)' }}>Log verdict</h2>
+          <button className="btn btn-sm" onClick={onClose} aria-label="Close" style={{ padding: '6px 8px' }}>
+            <i className="ti ti-x" aria-hidden="true"></i>
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} noValidate>
+          {/* Outcome selector */}
+          <div style={{ marginBottom: 'var(--space-4)' }}>
+            <label style={labelStyle}>Outcome <span style={{ color: 'var(--red)' }}>*</span></label>
+            <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+              {_VERDICT_OUTCOMES.map(({ value, label, color, bg, border }) => {
+                const selected = outcome === value;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setOutcome(value)}
+                    style={{
+                      flex: 1, padding: 'var(--space-2) var(--space-3)',
+                      border: `1.5px solid ${selected ? border : 'var(--border)'}`,
+                      borderRadius: 'var(--radius-sm)',
+                      background: selected ? bg : 'var(--surface-2)',
+                      color: selected ? color : 'var(--text-muted)',
+                      fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)',
+                      fontWeight: 700, cursor: 'pointer',
+                      transition: 'all var(--speed)',
+                    }}
+                    aria-pressed={selected}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Notes */}
+          <div style={{ marginBottom: 'var(--space-4)' }}>
+            <label style={labelStyle}>Notes <span style={{ color: 'var(--red)' }}>*</span></label>
+            <textarea
+              rows={4}
+              value={notes}
+              onChange={(e) => { setNotes(e.target.value); setNotesError(''); }}
+              placeholder="What did you observe? What evidence supports this outcome?"
+              disabled={submitting}
+              style={{
+                ...fieldStyle, resize: 'vertical',
+                lineHeight: 1.55,
+                borderColor: notesError ? 'var(--red)' : 'var(--border)',
+              }}
+            />
+            {notesError && (
+              <p role="alert" style={{ color: 'var(--red)', fontSize: 'var(--text-2xs)', marginTop: 2 }}>{notesError}</p>
+            )}
+          </div>
+
+          {submitError && (
+            <p role="alert" style={{ color: 'var(--red)', fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}>{submitError}</p>
+          )}
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)' }}>
+            <button type="button" className="btn" onClick={onClose} disabled={submitting}>Cancel</button>
+            <button type="submit" className="btn btn-crux" disabled={submitting} aria-busy={submitting}>
+              {submitting
+                ? <><i className="ti ti-loader-2 crux-spin" aria-hidden="true"></i> Saving…</>
+                : <><i className="ti ti-gavel" aria-hidden="true"></i> Submit verdict</>
+              }
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // CaseDetailScreen — case detail page scaffold with StageBar
 // ---------------------------------------------------------------------------
 
@@ -866,6 +1051,7 @@ function CaseDetailScreen({ caseId, onBack, theme, onToggleTheme }) {
   const [bakeOffError, setBakeOffError] = React.useState('');
   const [probeState, setProbeState] = React.useState('idle'); // 'idle'|'loading'|'error'
   const [probeError, setProbeError] = React.useState('');
+  const [showLogVerdictModal, setShowLogVerdictModal] = React.useState(false);
 
   function loadCase() {
     fetch(`/api/cases/${caseId}`)
@@ -1077,14 +1263,68 @@ function CaseDetailScreen({ caseId, onBack, theme, onToggleTheme }) {
           <EmptySection label="STAGE 4 — PROBE" message="Complete the Weigh stage first." />
         )}
 
-        {/* ACTION PLAN (locked) */}
+        {/* ACTION PLAN — locked until verdict is logged */}
         <SectionLabel>ACTION PLAN</SectionLabel>
-        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 'var(--space-5)', marginBottom: 'var(--space-6)', textAlign: 'center', color: 'var(--text-muted)' }}>
-          <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 'var(--space-2)' }}>
-            LOCKED
+        {caseData.verdict_log ? (
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 'var(--space-5)', marginBottom: 'var(--space-6)' }}>
+            {/* Verdict summary */}
+            <div style={{ marginBottom: 'var(--space-4)' }}>
+              <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 'var(--space-2)' }}>
+                VERDICT
+              </div>
+              <span
+                className="mono"
+                style={{
+                  fontSize: 'var(--text-sm)', fontWeight: 700, letterSpacing: '.05em',
+                  color: caseData.verdict === 'confirmed' ? 'var(--green)'
+                       : caseData.verdict === 'killed'    ? 'var(--red)'
+                       : 'var(--amber)',
+                  background: caseData.verdict === 'confirmed' ? 'var(--green-bg)'
+                             : caseData.verdict === 'killed'    ? 'var(--red-bg)'
+                             : 'var(--amber-bg)',
+                  border: `1px solid ${caseData.verdict === 'confirmed' ? 'var(--green)' : caseData.verdict === 'killed' ? 'var(--red)' : 'var(--amber)'}`,
+                  borderRadius: 'var(--radius-pill)', padding: '3px 10px',
+                }}
+              >
+                {caseData.verdict_log.outcome.charAt(0).toUpperCase() + caseData.verdict_log.outcome.slice(1)}
+              </span>
+              <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', lineHeight: 1.55, marginTop: 'var(--space-3)', marginBottom: 0 }}>
+                {caseData.verdict_log.notes}
+              </p>
+            </div>
+            {/* Top-ranked plan as the action plan */}
+            {(() => {
+              const plans = caseData.plans || [];
+              const lead = plans.find((p) => p.current_rank === 1);
+              if (!lead) return null;
+              return (
+                <div>
+                  <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 'var(--space-2)' }}>
+                    LEADING PLAN
+                  </div>
+                  <div style={{ background: 'var(--crux-tint)', border: '1px solid var(--crux)', borderRadius: 'var(--radius)', padding: 'var(--space-4)' }}>
+                    <div style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--text)', marginBottom: 'var(--space-2)' }}>
+                      {lead.name}
+                    </div>
+                    <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', lineHeight: 1.5, margin: 0 }}>
+                      {lead.mechanism}
+                    </p>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
-          <p style={{ fontSize: 'var(--text-base)' }}>Locked until you log a verdict.</p>
-        </div>
+        ) : (
+          <LockedPlan onLogVerdict={() => setShowLogVerdictModal(true)} />
+        )}
+
+        {showLogVerdictModal && (
+          <LogVerdictModal
+            caseId={caseId}
+            onClose={() => setShowLogVerdictModal(false)}
+            onVerdictLogged={() => { loadCase(); setShowLogVerdictModal(false); }}
+          />
+        )}
 
       </div>
     </div>
