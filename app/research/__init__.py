@@ -1,7 +1,9 @@
 from .config import ResearchConfig
+from .extractor import ClaimExtractor
 from .fetchers import ArticleReaderFetcher, DuckDuckGoSearchProvider, StubFetcher, WebSearchFetcher, YouTubeTranscriptFetcher
 from .loop import runResearchLoop
 from .planner import LLMQueryPlanner
+from .synthesiser import CitationSynthesiser, SYNTHESISER_PROMPT
 from .types import (
     ArticleDocument,
     BudgetExhaustedError,
@@ -17,6 +19,9 @@ from .types import (
     ResearchFetcher,
     SearchQuery,
     SearchResult,
+    Source,
+    SourceDocument,
+    SourceKind,
     Synthesiser,
 )
 
@@ -26,6 +31,9 @@ __all__ = [
     "FetchResult",
     "SearchResult",
     "ArticleDocument",
+    "Source",
+    "SourceDocument",
+    "SourceKind",
     "FetchTimeoutError",
     "FetchBlockedError",
     "FetchEmptyContentError",
@@ -44,4 +52,7 @@ __all__ = [
     "DuckDuckGoSearchProvider",
     "YouTubeTranscriptFetcher",
     "runResearchLoop",
+    "ClaimExtractor",
+    "CitationSynthesiser",
+    "SYNTHESISER_PROMPT",
 ]

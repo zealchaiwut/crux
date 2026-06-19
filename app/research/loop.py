@@ -13,7 +13,6 @@ from .types import (
     FetchTimeoutError,
     Plan,
     QueryPlanner,
-    SearchQuery,
     Synthesiser,
 )
 
