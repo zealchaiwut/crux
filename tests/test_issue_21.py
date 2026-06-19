@@ -13,7 +13,6 @@ AC10 — No regression: Stage 3 (rerank) endpoint still functional after gather 
 """
 from __future__ import annotations
 
-import os
 import pytest
 from unittest.mock import MagicMock, patch
 
@@ -127,7 +126,7 @@ def _make_stub_sources():
 
 def test_gather_plan_persists_sources_to_db(authed_client_with_db, db_session):
     """AC3: POST /api/plans/{id}/gather saves sources and returns them."""
-    from app.services.research_orchestrator import make_engine, gather_status_store
+    from app.services.research_orchestrator import gather_status_store
     gather_status_store.reset()
 
     case_id, plan_ids = _seed_case_at_gather(db_session)
@@ -486,7 +485,7 @@ def test_orchestrator_pipeline_order():
 def test_custom_engine_uses_planner_then_fetcher_then_extractor_then_synthesiser():
     """AC2: _CustomEngine calls planner.plan → fetcher.fetch → extractor.extract → synthesiser.synthesise."""
     from app.services.research_orchestrator import _CustomEngine
-    from app.research.types import Plan as ResearchPlan, SearchQuery, FetchResult, Source, SourceDocument
+    from app.research.types import Plan as ResearchPlan, SearchQuery, FetchResult
 
     call_order = []
 
