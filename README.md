@@ -1,18 +1,53 @@
 # crux
 
-FastAPI backend service.
+A personal research-and-diagnosis tool. It sharpens a messy problem into a falsifiable statement, generates competing root-cause hypotheses (A/B/C), researches each with cited sources, re-ranks them against your own data, designs the single cheapest experiment that settles it — then refuses to show an action plan until you log a test result.
+
+Companion to [commander](https://github.com/zealchaiwut/commander) (which builds the probe prototypes) and perf-coach (where winning prototypes graduate).
+
+## Docs
+
+- [Quick Start](docs/quickstart.md) — run it locally in 10 minutes
+- [Architecture](docs/architecture.md) — how the system is built
+- [Milestones](docs/milestones.md) — sprint history
+- [PRODUCT.md](PRODUCT.md) — what crux is and why
+- [DESIGN.md](DESIGN.md) — design system and component specs
+- [SCHEMA.md](SCHEMA.md) — full database schema reference
+
+## Status
+
+Four sprints complete. All five pipeline stages are live:
+
+| Stage | Status |
+|---|---|
+| 0 — Sharpen | ✓ |
+| 1 — Bake-off (Plans A/B/C) | ✓ |
+| 2 — Gather (custom research loop) | ✓ |
+| 3 — Weigh (re-rank against your data) | ✓ |
+| 4 — Probe design + Commander spec | ✓ |
+| 5 — Verdict gate + action plan | ✓ |
+| Prior learnings (related-case recall) | ✓ |
 
 ## Local development
 
 ```bash
+# 1. Clone and create venv
+git clone git@github.com:zealchaiwut/crux.git && cd crux
+python3 -m venv .venv && source .venv/bin/activate
+
+# 2. Install
 pip install -r requirements.txt
 
-# Start with auto-reload
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+# 3. Configure — copy .env.example, fill in DATABASE_URL, AUTH_SECRET, ANTHROPIC_API_KEY
+cp .env.example .env
 
-# Or via Make
+# 4. Migrate
+alembic upgrade head
+
+# 5. Run
 make dev
 ```
+
+See [docs/quickstart.md](docs/quickstart.md) for the full setup guide including troubleshooting.
 
 ## Health check
 
@@ -22,60 +57,32 @@ GET /healthz  →  {"status": "ok", "env": "development"}
 
 ## Authentication
 
-All routes except `/login` require a valid session cookie. Set the password via environment variable:
+All routes except `/login` require a valid session cookie. The login password is the value of `AUTH_SECRET`.
 
 ```bash
-export AUTH_PASSWORD=your-password
-export AUTH_SECRET=your-secret-key   # used to sign session cookies
+# Generate a strong secret
+python3 -c "import secrets; print(secrets.token_hex(32))"
 ```
-
-See `.env.example` for all required variables.
-
-## Database (Neon Postgres + Alembic)
 
 ```bash
-# Apply migrations
-alembic upgrade head
-
-# Create a new migration
-alembic revision --autogenerate -m "description"
+# Required env vars
+AUTH_SECRET=<min 16 chars — server exits at startup if missing>
+DATABASE_URL=<Neon Postgres connection string>
+ANTHROPIC_API_KEY=<Claude API key>
 ```
 
-## Research loop (Stage 2)
-
-The `app/research/` module automates source gathering for a case plan. It uses
-an LLM query planner to generate search queries, fetches results via
-DuckDuckGo and article scraping, retrieves YouTube transcripts, extracts
-claims, and synthesises citations.
-
-Key components:
-
-| Module | Purpose |
-|---|---|
-| `research/planner.py` | `LLMQueryPlanner` — generates search queries from a plan |
-| `research/fetchers.py` | `WebSearchFetcher`, `ArticleReaderFetcher`, `YouTubeTranscriptFetcher` |
-| `research/extractor.py` | `ClaimExtractor` — extracts claims from fetched content |
-| `research/synthesiser.py` | `CitationSynthesiser` — produces cited summaries |
-| `research/loop.py` | `runResearchLoop` — orchestrates the full pipeline |
-
-Trigger via API:
-
-```
-POST /api/plans/{plan_id}/gather      # gather sources for one plan
-POST /api/cases/{case_id}/gather      # gather sources for all plans in a case
-GET  /api/plans/{plan_id}/gather-status
-```
+See `.env.example` for all variables.
 
 ## API endpoints
 
 ```
 GET  /api/cases                        # list all cases
-GET  /api/cases/{case_id}              # get a single case with plans, probes, sources
+GET  /api/cases/{case_id}              # full case with plans, sources, probe, verdict
 POST /api/cases                        # create a case
-POST /api/cases/sharpen                # LLM-sharpen a raw problem statement
-POST /api/cases/{case_id}/bake-off     # generate competing plans (A/B/C)
-POST /api/cases/{case_id}/rerank       # rerank plans after evidence gathering
-POST /api/cases/{case_id}/probe        # design a next probe
+POST /api/cases/sharpen                # sharpen a raw problem statement
+POST /api/cases/{case_id}/bake-off     # generate competing plans A/B/C
+POST /api/cases/{case_id}/rerank       # re-rank plans against user context
+POST /api/cases/{case_id}/probe        # design the cheapest decisive test
 POST /api/cases/{case_id}/verdict      # log a verdict for the active probe
 
 GET  /api/sources?plan_id={id}         # list sources for a plan
@@ -85,9 +92,9 @@ POST /api/plans/{plan_id}/gather       # run research loop for a plan
 POST /api/cases/{case_id}/gather       # run research loop for all plans
 GET  /api/plans/{plan_id}/gather-status
 
-GET  /api/cases/{case_id}/related          # list prior cases with verdicts ranked by semantic similarity
-POST /api/cases/related-text               # find related cases by raw text (used pre-Case creation)
-POST /api/cases/{case_id}/probe/commander-spec  # generate (or return cached) commander spec; add ?force=true to regenerate
+GET  /api/cases/{case_id}/related          # list prior cases ranked by similarity
+POST /api/cases/related-text               # find related cases by raw text (pre-case-creation)
+POST /api/cases/{case_id}/probe/commander-spec  # generate/cache commander spec; ?force=true regenerates
 ```
 
 ## Running tests
@@ -95,3 +102,5 @@ POST /api/cases/{case_id}/probe/commander-spec  # generate (or return cached) co
 ```bash
 make test
 ```
+
+Tests use SQLite in-memory — no Postgres connection required.

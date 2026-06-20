@@ -102,16 +102,24 @@ Probe(id, case_id, type, target_metric, status, due_date, commander_spec)
 Verdict(id, probe_id, outcome[confirmed/killed/inconclusive], notes, decided_at)
 ```
 
-## 10. Milestones (roadmap → set these in commander at step 6)
+## 10. Milestones (roadmap)
 
 **Sequencing principle:** ship the usable Case spine *before* the risky research engine. The spine works with manually-pasted sources; the custom loop replaces that paste later.
 
-- **M0 — Foundation.** Repo, Render deploy, Neon schema, single-user auth, app shell + `tokens.css` + theme toggle. Commit PRODUCT.md + DESIGN.md + tokens.css.
-- **M1 — Case spine (structure-first).** New Case → sharpen → Plan A/B/C → *manual source paste* → weigh-against-my-data → probe design + type → Verdict gate + log. A fully usable tool with no auto-research yet.
-- **M2 — Custom research loop.** Query planning, web/article/YouTube fetch, extraction, cited synthesis; auto-fills Stage 2, replacing manual paste. The heaviest chunk, deliberately after the spine.
-- **M3 — Commander bridge.** Generate the probe-prototype ticket spec (one metric + AC) as copyable markdown.
-- **M4 — Verdict memory.** Case history surfaces prior learnings on related new Cases.
-- **Future (out of v1):** auto-create GitHub/commander tickets; graduation flow into perf-coach.
+### Completed
+
+- **M0 — Foundation.** ✓ Repo, Render deploy, Neon schema, single-user auth, app shell + `tokens.css` + theme toggle.
+- **M1 — Case spine (structure-first).** ✓ New Case → sharpen → Plan A/B/C → manual source paste → weigh-against-my-data → probe design + type → Verdict gate + log.
+- **M2 — Custom research loop.** ✓ Query planning, web/article/YouTube fetch, extraction, cited synthesis; auto-fills Stage 2.
+- **M3 — Commander bridge.** ✓ Generate the probe-prototype ticket spec (one metric + AC) as copyable markdown.
+- **M4 — Verdict memory.** ✓ TF cosine similarity surfaces prior confirmed/killed learnings when opening a related new Case.
+
+### Upcoming
+
+- **M5 — Probe lifecycle.** Status transitions (`designed → running → verdict`), due date visibility with overdue flagging, and an inconclusive re-probe flow — design a second probe on the same case without resetting the bake-off and gather stages. Closes the biggest daily-use gap after the first verdicts start coming in.
+- **M6 — Verdicts screen & knowledge base.** Build out the Verdicts nav screen: all confirmed causes and killed hypotheses across every case, filterable by outcome, searchable by keyword. Turns the case history into a queryable personal knowledge base you check before starting a new case.
+- **M7 — Case search & filtering.** Keyword search across sharpened statements and plan mechanisms, filter by stage and verdict outcome, and basic case editing (update the sharpened statement or not-investigating list without losing downstream stages). Needed once the library grows past ~20 cases.
+- **M8 — Embedding-based related cases.** Swap `_compute_similarity` in `services/related_cases.py` for a Claude embedding call. TF cosine misses semantically similar cases phrased differently — fine for a small library, noticeably weak past ~50 cases.
 
 ## 11. Risks / open questions
 
