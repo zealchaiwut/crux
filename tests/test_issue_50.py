@@ -234,8 +234,13 @@ def test_design_new_probe_error_state_in_js():
     """AC6: ProbeCard must show an error message when re-probe fails."""
     combined = _read_combined_js()
     # Must handle error prop or state for re-probe
-    assert "reProbeError" in combined or "re-probe" in combined.lower() or "reprobe" in combined.lower() or "reProbe" in combined, \
-        "ProbeCard must handle re-probe error state"
+    has_error_state = (
+        "reProbeError" in combined
+        or "re-probe" in combined.lower()
+        or "reprobe" in combined.lower()
+        or "reProbe" in combined
+    )
+    assert has_error_state, "ProbeCard must handle re-probe error state"
 
 
 # ---------------------------------------------------------------------------

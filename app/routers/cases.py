@@ -3,17 +3,6 @@ import json
 import uuid as _uuid_mod
 from datetime import datetime, timezone
 
-
-def _latest_probe(probes):
-    """Return the most recently created probe from a list, or None."""
-    if not probes:
-        return None
-    with_ts = [p for p in probes if p.created_at is not None]
-    without_ts = [p for p in probes if p.created_at is None]
-    if with_ts:
-        return max(with_ts, key=lambda p: p.created_at)
-    return without_ts[0] if without_ts else None
-
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session, joinedload
@@ -25,6 +14,18 @@ from app.db import get_db
 from app.probe import ProbeError, design_probe
 from app.sharpen import SharpenError, sharpen_problem
 from app.weigh import WeighError, rerank_plans
+
+
+def _latest_probe(probes):
+    """Return the most recently created probe from a list, or None."""
+    if not probes:
+        return None
+    with_ts = [p for p in probes if p.created_at is not None]
+    without_ts = [p for p in probes if p.created_at is None]
+    if with_ts:
+        return max(with_ts, key=lambda p: p.created_at)
+    return without_ts[0] if without_ts else None
+
 
 router = APIRouter(prefix="/api")
 

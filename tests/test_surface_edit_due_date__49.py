@@ -95,8 +95,9 @@ def test_surface_edit_due_date__endpoint_accepts_null_to_clear():
 
 
 def test_surface_edit_due_date__edit_affordance_keyboard_accessible():
-    """AC: The edit affordance is keyboard-accessible (focusable, activatable with Enter/Space, dismissable with Escape).
+    """AC: The edit affordance is keyboard-accessible.
 
+    Focusable, activatable with Enter/Space, dismissable with Escape.
     This is a browser interaction test and cannot be tested via HTTP API.
     It is verified in the browser UAT steps.
     """
@@ -129,7 +130,7 @@ def test_surface_edit_due_date__no_chip_when_unset():
 
 
 def test_surface_edit_due_date__red_styling_overdue_no_verdict():
-    """AC: When `due_date` is in the past **and** the Probe has no verdict, the date chip is rendered using the `--red` design token.
+    """AC: When `due_date` is past and Probe has no verdict, chip uses `--red` token.
 
     This is a visual rendering test with state-dependent logic verified in browser UAT steps.
     Frontend logic: if (dueDate < today && !hasVerdict) { color = var(--red) }
@@ -147,8 +148,10 @@ def test_surface_edit_due_date__default_styling_overdue_with_verdict():
 
 
 def test_surface_edit_due_date__edit_modal_opens_on_click():
-    """AC: Clicking/activating the date chip (or a small adjacent edit icon) reveals a native `<input type="date\">` inline on the ProbeCard — no modal opens.
+    """AC: Clicking the date chip reveals a native date input inline — no modal.
 
+    Clicking/activating the date chip (or a small adjacent edit icon) reveals
+    a native `<input type="date">` inline on the ProbeCard — no modal opens.
     This is a browser interaction test verified in browser UAT steps.
     """
     pytest.skip("manual — verified via browser step: date input appears inline, no modal")
