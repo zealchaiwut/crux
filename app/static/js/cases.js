@@ -1,5 +1,5 @@
 /* crux · Cases list + detail screen components
-   Includes Stage 2 (Gather) research loop automation with per-plan states:
+   Includes Stage-2 research-loop automation with per-plan states:
    idle → running (spinner) → done (SourceChips) | empty | error (retry).
 */
 
@@ -541,7 +541,7 @@ function PlanCard({ planId, label, name, mechanism, prior, sources: initialSourc
     setGatherStatus('running');
     setGatherError('');
     try {
-      const resp = await fetch(`/api/plans/${planId}/gather`, { method: 'POST' });
+      const resp = await fetch(`/api/gather/${planId}`, { method: 'POST' });
       const data = await resp.json().catch(() => ({}));
       if (!resp.ok) {
         setGatherStatus('error');
@@ -817,7 +817,7 @@ function CommanderSpecModal({ caseId, initialSpec, onClose, onSpecUpdated }) {
 // ProbeCard — renders the probe design (type, targetMetric, cost, time, note)
 // ---------------------------------------------------------------------------
 
-function ProbeCard({ probe, loading, error, caseId, hasVerdict, onProbeSpecUpdated, onStatusUpdated }) {
+function ProbeCard({ probe, loading, error, caseId, hasVerdict, onProbeSpecUpdated, onStatusUpdated, verdict, onReProbe, reProbeState, reProbeError }) {
   const [showSpecModal, setShowSpecModal] = React.useState(false);
   const [probeStatus, setProbeStatus] = React.useState(probe ? probe.status : null);
   const [markRunningState, setMarkRunningState] = React.useState('idle'); // 'idle'|'loading'|'error'
@@ -887,6 +887,8 @@ function ProbeCard({ probe, loading, error, caseId, hasVerdict, onProbeSpecUpdat
   const typeLabel = TYPE_LABELS[probe.type] || probe.type;
   const showMarkAsRunning = probeStatus === 'designed' && !hasVerdict;
   const isMarkingRunning = markRunningState === 'loading';
+  const showReProbe = verdict === 'inconclusive';
+  const reProbeLoading = reProbeState === 'loading';
 
   return (
     <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 'var(--space-5)', marginBottom: 'var(--space-6)' }}>
@@ -960,6 +962,28 @@ function ProbeCard({ probe, loading, error, caseId, hasVerdict, onProbeSpecUpdat
             />
           )}
         </>
+      )}
+
+      {/* Design new probe — only shown after an inconclusive verdict */}
+      {showReProbe && (
+        <div style={{ marginTop: 'var(--space-4)', borderTop: '1px solid var(--border)', paddingTop: 'var(--space-4)' }}>
+          {reProbeError && (
+            <p role="alert" style={{ color: 'var(--red)', fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}>
+              {reProbeError}
+            </p>
+          )}
+          <button
+            className="btn btn-crux"
+            onClick={onReProbe}
+            disabled={reProbeLoading}
+            aria-busy={reProbeLoading}
+          >
+            {reProbeLoading
+              ? <><i className="ti ti-loader-2 crux-spin" aria-hidden="true"></i> Designing…</>
+              : <><i className="ti ti-refresh" aria-hidden="true"></i> Design new probe</>
+            }
+          </button>
+        </div>
       )}
     </div>
   );
@@ -1198,6 +1222,8 @@ function CaseDetailScreen({ caseId, onBack, onNavigateToCase, theme, onToggleThe
   const [bakeOffError, setBakeOffError] = React.useState('');
   const [probeState, setProbeState] = React.useState('idle');
   const [probeError, setProbeError] = React.useState('');
+  const [reProbeState, setReProbeState] = React.useState('idle');
+  const [reProbeError, setReProbeError] = React.useState('');
   const [showLogVerdictModal, setShowLogVerdictModal] = React.useState(false);
   const [priorLearnings, setPriorLearnings] = React.useState([]);
   // Track which plan IDs have already had gather triggered to avoid double-firing
@@ -1239,7 +1265,7 @@ function CaseDetailScreen({ caseId, onBack, onNavigateToCase, theme, onToggleThe
       ) {
         gatherTriggered.current.add(plan.id);
         // Fire and forget — PlanCard manages its own status
-        fetch(`/api/plans/${plan.id}/gather`, { method: 'POST' })
+        fetch(`/api/gather/${plan.id}`, { method: 'POST' })
           .then(() => loadCase())
           .catch(() => {});
       }
@@ -1269,6 +1295,19 @@ function CaseDetailScreen({ caseId, onBack, onNavigateToCase, theme, onToggleThe
     } catch (err) {
       setBakeOffError(err.message || 'Plan generation failed. Please try again.');
       setBakeOffState('error');
+    }
+  }
+
+  async function handleReProbe() {
+    setReProbeState('loading');
+    setReProbeError('');
+    try {
+      await _postProbe(caseId);
+      loadCase();
+      setReProbeState('idle');
+    } catch (err) {
+      setReProbeError(err.message || 'Could not design a new probe. Please try again.');
+      setReProbeState('error');
     }
   }
 
@@ -1423,6 +1462,10 @@ function CaseDetailScreen({ caseId, onBack, onNavigateToCase, theme, onToggleThe
             hasVerdict={!!caseData.verdict_log}
             onProbeSpecUpdated={loadCase}
             onStatusUpdated={loadCase}
+            verdict={caseData.verdict}
+            onReProbe={handleReProbe}
+            reProbeState={reProbeState}
+            reProbeError={reProbeError}
           />
         ) : (
           <EmptySection label="STAGE 4 — PROBE" message="Complete the Weigh stage first." />
