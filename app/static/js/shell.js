@@ -183,6 +183,7 @@ function App() {
   const [theme, setTheme] = React.useState('light');
   // route is either 'cases' | 'probes' | 'verdicts' | 'case/<id>'
   const [route, setRoute] = React.useState('cases');
+  const [activeCaseId, setActiveCaseId] = React.useState(null);
 
   React.useEffect(() => {
     if (theme === 'dark') {
@@ -193,6 +194,15 @@ function App() {
   }, [theme]);
 
   const toggleTheme = () => setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
+
+  function openCase(id) {
+    setActiveCaseId(id);
+    setRoute('case');
+  }
+  function goToCases() {
+    setActiveCaseId(null);
+    setRoute('cases');
+  }
 
   const counts = { cases: 0, probes: 0, verdicts: 0 };
 
@@ -219,12 +229,21 @@ function App() {
     main = <PlaceholderScreen title="Probes" />;
   } else if (route === 'verdicts') {
     main = <PlaceholderScreen title="Verdicts" />;
+  } else if (route === 'case' && activeCaseId) {
+    main = (
+      <CaseDetailScreen
+        caseId={activeCaseId}
+        onBack={goToCases}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+      />
+    );
   } else {
     main = (
       <CasesScreen
         theme={theme}
         onToggleTheme={toggleTheme}
-        onCaseCreated={handleCaseOpened}
+        onCaseCreated={openCase}
       />
     );
   }
@@ -239,5 +258,3 @@ function App() {
     </div>
   );
 }
-
-ReactDOM.createRoot(document.getElementById('app')).render(<App />);

@@ -1,7 +1,7 @@
 """Sources API router.
 
 GET  /api/sources?plan_id=<id>   — list all sources for a plan.
-POST /api/sources                — add a source to a plan.
+POST /api/sources                — add a source to a plan (manual paste fallback).
 """
 import re
 import uuid as _uuid_mod

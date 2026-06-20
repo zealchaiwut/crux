@@ -10,6 +10,14 @@ sprint finishes. Dated per-sprint files live under [docs/changelog/](docs/change
 - #28: Build related-case matching service over Verdicts
 - #29: Surface prior learnings on new Cases
 
+## Sprint 3 (2026-06-19)
+
+- #17: Scaffold research-loop module and LLM query planner
+- #18: Implement web-search and article-reader fetchers
+- #19: Implement YouTube transcript fetcher for research loop
+- #20: Implement claim extractor and citation-aware synthesiser
+- #21: Automate Stage 2 source gathering via research loop
+
 ## Sprint 2 (2026-06-19)
 
 - #5: Build Cases List screen with CaseCard rows

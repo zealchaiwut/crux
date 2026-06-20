@@ -1,11 +1,4 @@
-"""Cases API router.
-
-GET  /api/cases                   — all cases with plans, stage number, verdict state.
-GET  /api/cases/{id}              — single case detail including plans.
-POST /api/cases/sharpen           — call Claude to produce sharpened statement + not_investigating.
-POST /api/cases                   — create a Case record at stage 0 (sharpened).
-POST /api/cases/{id}/bake-off     — generate Plan A/B/C via Claude, persist, advance stage.
-"""
+"""Cases API router."""
 import json
 import uuid as _uuid_mod
 from datetime import datetime, timezone
@@ -44,10 +37,6 @@ def _plan_state(plan: models.Plan, probe: models.Probe | None,
         return "leading"
     return None
 
-
-# ---------------------------------------------------------------------------
-# GET /api/cases
-# ---------------------------------------------------------------------------
 
 @router.get("/cases")
 def list_cases(db: Session = Depends(get_db)):
@@ -103,12 +92,10 @@ def list_cases(db: Session = Depends(get_db)):
     return {"cases": result}
 
 
-# ---------------------------------------------------------------------------
-# GET /api/cases/{id}
-# ---------------------------------------------------------------------------
-
 @router.get("/cases/{case_id}")
 def get_case(case_id: str, db: Session = Depends(get_db)):
+    from app.services.research_orchestrator import gather_status_store
+
     case = (
         db.query(models.Case)
         .options(
@@ -134,6 +121,7 @@ def get_case(case_id: str, db: Session = Depends(get_db)):
     plans_out = []
     for plan in sorted(case.plans, key=lambda p: p.current_rank or 99):
         rank = plan.current_rank or 99
+        status_data = gather_status_store.get(plan.id)
         plans_out.append({
             "id": plan.id,
             "label": plan.label,
@@ -144,6 +132,8 @@ def get_case(case_id: str, db: Session = Depends(get_db)):
             "standing": plan.standing,
             "current_rank": plan.current_rank,
             "state": _plan_state(plan, probe, verdict_obj),
+            "gather_status": status_data["status"],
+            "gather_error": status_data["error"],
             "sources": [
                 {
                     "id": s.id,
@@ -194,10 +184,6 @@ def get_case(case_id: str, db: Session = Depends(get_db)):
     }
 
 
-# ---------------------------------------------------------------------------
-# POST /api/cases/sharpen
-# ---------------------------------------------------------------------------
-
 class SharpenRequest(BaseModel):
     raw_problem: str
 
@@ -217,10 +203,6 @@ async def sharpen_case(body: SharpenRequest):
         raise HTTPException(status_code=502, detail=str(exc))
     return result
 
-
-# ---------------------------------------------------------------------------
-# POST /api/cases
-# ---------------------------------------------------------------------------
 
 class CreateCaseRequest(BaseModel):
     raw_problem: str
@@ -251,10 +233,6 @@ def create_case(body: CreateCaseRequest, db: Session = Depends(get_db)):
     return {"id": case.id}
 
 
-# ---------------------------------------------------------------------------
-# POST /api/cases/{id}/bake-off
-# ---------------------------------------------------------------------------
-
 @router.post("/cases/{case_id}/bake-off")
 async def run_bake_off(case_id: str, db: Session = Depends(get_db)):
     case = (
@@ -266,7 +244,6 @@ async def run_bake_off(case_id: str, db: Session = Depends(get_db)):
     if case is None:
         raise HTTPException(status_code=404, detail="Case not found")
 
-    # Idempotency: if plans already exist, return them without calling Claude
     existing = sorted(case.plans, key=lambda p: p.current_rank or 99)
     if existing:
         plans_out = [
@@ -282,13 +259,11 @@ async def run_bake_off(case_id: str, db: Session = Depends(get_db)):
         ]
         return {"plans": plans_out}
 
-    # Generate plans via Claude API
     try:
         plans_data = await generate_plans(case.sharpened or case.raw_problem)
     except BakeOffError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 
-    # Persist plans ordered by prior (rank 1 = highest prior)
     sorted_plans = sorted(plans_data, key=lambda p: float(p["prior"]), reverse=True)
     for rank, plan_dict in enumerate(sorted_plans, start=1):
         plan = models.Plan(
@@ -302,7 +277,6 @@ async def run_bake_off(case_id: str, db: Session = Depends(get_db)):
         )
         db.add(plan)
 
-    # Advance stage from bake_off to gather
     case.stage = "gather"
     db.commit()
 
@@ -321,10 +295,6 @@ async def run_bake_off(case_id: str, db: Session = Depends(get_db)):
     ]
     return {"plans": plans_out}
 
-
-# ---------------------------------------------------------------------------
-# POST /api/cases/{id}/rerank
-# ---------------------------------------------------------------------------
 
 class RerankRequest(BaseModel):
     context: str
@@ -366,7 +336,6 @@ async def rerank_case(case_id: str, body: RerankRequest, db: Session = Depends(g
     except WeighError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 
-    # Persist updated rank and standing on each plan
     rank_map = {item["label"]: item for item in result}
     for plan in plans:
         item = rank_map.get(plan.label)
@@ -374,7 +343,6 @@ async def rerank_case(case_id: str, body: RerankRequest, db: Session = Depends(g
             plan.current_rank = item["rank"]
             plan.standing = item["standing"]
 
-    # Persist user context on case
     case.weigh_context = body.context
     db.commit()
 
@@ -396,10 +364,6 @@ async def rerank_case(case_id: str, body: RerankRequest, db: Session = Depends(g
     return {"plans": plans_out, "weigh_context": case.weigh_context}
 
 
-# ---------------------------------------------------------------------------
-# POST /api/cases/{id}/probe
-# ---------------------------------------------------------------------------
-
 @router.post("/cases/{case_id}/probe")
 async def design_probe_for_case(case_id: str, db: Session = Depends(get_db)):
     case = (
@@ -418,7 +382,6 @@ async def design_probe_for_case(case_id: str, db: Session = Depends(get_db)):
     if not plans:
         raise HTTPException(status_code=422, detail="Case has no plans to design a probe for")
 
-    # Idempotency: if probe already exists, return it
     if case.probes:
         probe = case.probes[0]
         return {
@@ -432,7 +395,6 @@ async def design_probe_for_case(case_id: str, db: Session = Depends(get_db)):
             "commander_spec": probe.commander_spec,
         }
 
-    # Call Claude to design the probe
     plans_input = [
         {
             "label": p.label,
@@ -450,7 +412,6 @@ async def design_probe_for_case(case_id: str, db: Session = Depends(get_db)):
     except ProbeError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 
-    # Persist probe
     probe = models.Probe(
         id=str(_uuid_mod.uuid4()),
         case_id=case.id,
@@ -462,8 +423,6 @@ async def design_probe_for_case(case_id: str, db: Session = Depends(get_db)):
         status="designed",
     )
     db.add(probe)
-
-    # Advance stage to "probe"
     case.stage = "probe"
     db.commit()
     db.refresh(probe)
@@ -479,10 +438,6 @@ async def design_probe_for_case(case_id: str, db: Session = Depends(get_db)):
         "commander_spec": probe.commander_spec,
     }
 
-
-# ---------------------------------------------------------------------------
-# POST /api/cases/{id}/verdict
-# ---------------------------------------------------------------------------
 
 _VERDICT_OUTCOMES = {"confirmed", "killed", "inconclusive"}
 
@@ -529,7 +484,6 @@ def log_verdict(case_id: str, body: LogVerdictRequest, db: Session = Depends(get
         decided_at=datetime.now(tz=timezone.utc),
     )
     db.add(verdict)
-
     probe.status = body.outcome
     case.stage = "verdict"
     db.commit()
