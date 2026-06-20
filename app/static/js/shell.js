@@ -220,6 +220,7 @@ function App() {
       <CaseDetailScreen
         caseId={caseId}
         onBack={() => setRoute('cases')}
+        onNavigateToCase={handleCaseOpened}
         theme={theme}
         onToggleTheme={toggleTheme}
       />

@@ -84,6 +84,10 @@ POST /api/sources                      # manually add a source
 POST /api/plans/{plan_id}/gather       # run research loop for a plan
 POST /api/cases/{case_id}/gather       # run research loop for all plans
 GET  /api/plans/{plan_id}/gather-status
+
+GET  /api/cases/{case_id}/related          # list prior cases with verdicts ranked by semantic similarity
+POST /api/cases/related-text               # find related cases by raw text (used pre-Case creation)
+POST /api/cases/{case_id}/probe/commander-spec  # generate (or return cached) commander spec; add ?force=true to regenerate
 ```
 
 ## Running tests
