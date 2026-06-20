@@ -244,7 +244,6 @@ def test_design_new_probe_error_state_in_js():
 
 def test_reprobe_creates_new_probe(api_client, db_session):
     """AC2: POST /probe after inconclusive verdict creates a new probe row."""
-    from app import models
     c, plans, old_probe, old_verdict = _seed_case_with_inconclusive_verdict(db_session)
 
     with patch("app.routers.cases.design_probe", new_callable=AsyncMock) as mock_probe:
@@ -303,7 +302,6 @@ def test_reprobe_does_not_change_plans(api_client, db_session):
 
 def test_get_case_returns_new_probe_after_reprobe(api_client, db_session):
     """AC3: GET /api/cases/{id} returns the new probe after re-probe."""
-    from app import models
     c, _, old_probe, _ = _seed_case_with_inconclusive_verdict(db_session)
 
     with patch("app.routers.cases.design_probe", new_callable=AsyncMock) as mock_probe:
