@@ -3,6 +3,12 @@
 Per-sprint changelog for crux. Entries are written by the documentor when a
 sprint finishes. Dated per-sprint files live under [docs/changelog/](docs/changelog/).
 
+## Sprint 5 (2026-06-20)
+
+- #48: Add 'Mark as Running' transition for Probes
+- #51: Add GET /api/verdicts list endpoint
+- #52: Build Verdicts list screen with search, filter, and grouping
+
 ## Sprint 4 (2026-06-19)
 
 - #26: Generate Commander Spec for Prototype Probes via Claude API

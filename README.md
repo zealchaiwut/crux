@@ -15,7 +15,7 @@ Companion to [commander](https://github.com/zealchaiwut/commander) (which builds
 
 ## Status
 
-Four sprints complete. All five pipeline stages are live:
+Five sprints complete. All five pipeline stages are live:
 
 | Stage | Status |
 |---|---|
@@ -95,6 +95,10 @@ GET  /api/plans/{plan_id}/gather-status
 GET  /api/cases/{case_id}/related          # list prior cases ranked by similarity
 POST /api/cases/related-text               # find related cases by raw text (pre-case-creation)
 POST /api/cases/{case_id}/probe/commander-spec  # generate/cache commander spec; ?force=true regenerates
+
+PATCH /api/probes/{probe_id}/status        # update probe status; only designed→running is supported
+
+GET  /api/verdicts                         # list all verdicts; ?outcome=confirmed|killed|inconclusive  ?q=keyword
 ```
 
 ## Running tests
