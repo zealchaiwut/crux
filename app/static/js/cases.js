@@ -1,5 +1,5 @@
 /* crux · Cases list + detail screen components
-   Includes Stage 2 (Gather) research loop automation with per-plan states:
+   Includes Stage-2 research-loop automation with per-plan states:
    idle → running (spinner) → done (SourceChips) | empty | error (retry).
 */
 
@@ -541,7 +541,7 @@ function PlanCard({ planId, label, name, mechanism, prior, sources: initialSourc
     setGatherStatus('running');
     setGatherError('');
     try {
-      const resp = await fetch(`/api/plans/${planId}/gather`, { method: 'POST' });
+      const resp = await fetch(`/api/gather/${planId}`, { method: 'POST' });
       const data = await resp.json().catch(() => ({}));
       if (!resp.ok) {
         setGatherStatus('error');
@@ -1265,7 +1265,7 @@ function CaseDetailScreen({ caseId, onBack, onNavigateToCase, theme, onToggleThe
       ) {
         gatherTriggered.current.add(plan.id);
         // Fire and forget — PlanCard manages its own status
-        fetch(`/api/plans/${plan.id}/gather`, { method: 'POST' })
+        fetch(`/api/gather/${plan.id}`, { method: 'POST' })
           .then(() => loadCase())
           .catch(() => {});
       }
