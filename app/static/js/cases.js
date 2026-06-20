@@ -817,8 +817,15 @@ function CommanderSpecModal({ caseId, initialSpec, onClose, onSpecUpdated }) {
 // ProbeCard — renders the probe design (type, targetMetric, cost, time, note)
 // ---------------------------------------------------------------------------
 
-function ProbeCard({ probe, loading, error, caseId, onProbeSpecUpdated }) {
+function ProbeCard({ probe, loading, error, caseId, hasVerdict, onProbeSpecUpdated, onStatusUpdated }) {
   const [showSpecModal, setShowSpecModal] = React.useState(false);
+  const [probeStatus, setProbeStatus] = React.useState(probe ? probe.status : null);
+  const [markRunningState, setMarkRunningState] = React.useState('idle'); // 'idle'|'loading'|'error'
+  const [markRunningError, setMarkRunningError] = React.useState('');
+
+  React.useEffect(() => {
+    if (probe) setProbeStatus(probe.status);
+  }, [probe && probe.status]);
 
   const TYPE_LABELS = {
     'measurement': 'Measurement',
@@ -826,6 +833,29 @@ function ProbeCard({ probe, loading, error, caseId, onProbeSpecUpdated }) {
     'behaviour-experiment': 'Behaviour experiment',
     'prototype': 'Prototype',
   };
+
+  async function handleMarkAsRunning() {
+    if (!probe) return;
+    setMarkRunningState('loading');
+    setMarkRunningError('');
+    try {
+      const resp = await fetch(`/api/probes/${probe.id}/status`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ status: 'running' }),
+      });
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        throw new Error(data.detail || `Error ${resp.status}`);
+      }
+      setProbeStatus('running');
+      setMarkRunningState('idle');
+      if (onStatusUpdated) onStatusUpdated('running');
+    } catch (err) {
+      setMarkRunningError(err.message || 'Could not update probe status.');
+      setMarkRunningState('idle');
+    }
+  }
 
   if (loading) {
     return (
@@ -855,13 +885,20 @@ function ProbeCard({ probe, loading, error, caseId, onProbeSpecUpdated }) {
 
   const isPrototype = probe.type === 'prototype';
   const typeLabel = TYPE_LABELS[probe.type] || probe.type;
+  const showMarkAsRunning = probeStatus === 'designed' && !hasVerdict;
+  const isMarkingRunning = markRunningState === 'loading';
 
   return (
     <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 'var(--space-5)', marginBottom: 'var(--space-6)' }}>
-      <div style={{ marginBottom: 'var(--space-4)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--space-3)', marginBottom: 'var(--space-4)' }}>
         <span className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, letterSpacing: '.05em', color: 'var(--crux)', background: 'var(--crux-bg)', border: '1px solid var(--crux)', borderRadius: 'var(--radius-pill)', padding: '3px 10px' }}>
           {typeLabel}
         </span>
+        {probeStatus && probeStatus !== 'designed' && (
+          <span className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, letterSpacing: '.05em', color: 'var(--green)', background: 'var(--green-bg)', border: '1px solid var(--green)', borderRadius: 'var(--radius-pill)', padding: '3px 10px' }}>
+            {probeStatus.toUpperCase()}
+          </span>
+        )}
       </div>
       <div className="mono" style={{ fontSize: 'var(--text-xl)', fontWeight: 700, color: 'var(--text)', fontFamily: 'var(--font-mono)', marginBottom: 'var(--space-4)', lineHeight: 1.3 }}>
         {probe.target_metric}
@@ -881,6 +918,28 @@ function ProbeCard({ probe, loading, error, caseId, onProbeSpecUpdated }) {
       <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', lineHeight: 1.55, margin: '0 0 var(--space-4)' }}>
         {probe.note}
       </p>
+
+      {/* Mark as running — only when status=designed and no verdict logged */}
+      {showMarkAsRunning && (
+        <div style={{ marginBottom: isPrototype ? 'var(--space-3)' : 0 }}>
+          {markRunningError && (
+            <p role="alert" style={{ color: 'var(--red)', fontSize: 'var(--text-sm)', marginBottom: 'var(--space-2)' }}>
+              {markRunningError}
+            </p>
+          )}
+          <button
+            className="btn btn-crux"
+            onClick={handleMarkAsRunning}
+            disabled={isMarkingRunning}
+            aria-busy={isMarkingRunning}
+          >
+            {isMarkingRunning
+              ? <><i className="ti ti-loader-2 crux-spin" aria-hidden="true"></i> Updating…</>
+              : <><i className="ti ti-player-play" aria-hidden="true"></i> Mark as running</>
+            }
+          </button>
+        </div>
+      )}
 
       {/* Send to commander — only for prototype type */}
       {isPrototype && (
@@ -1361,7 +1420,9 @@ function CaseDetailScreen({ caseId, onBack, onNavigateToCase, theme, onToggleThe
             loading={probeState === 'loading'}
             error={probeError}
             caseId={caseId}
+            hasVerdict={!!caseData.verdict_log}
             onProbeSpecUpdated={loadCase}
+            onStatusUpdated={loadCase}
           />
         ) : (
           <EmptySection label="STAGE 4 — PROBE" message="Complete the Weigh stage first." />
