@@ -158,6 +158,7 @@ def get_case(case_id: str, db: Session = Depends(get_db)):
             "note": probe.note or "",
             "status": probe.status,
             "commander_spec": probe.commander_spec,
+            "due_date": str(probe.due_date) if probe.due_date else None,
         }
 
     verdict_log = None
@@ -393,6 +394,7 @@ async def design_probe_for_case(case_id: str, db: Session = Depends(get_db)):
             "note": probe.note or "",
             "status": probe.status,
             "commander_spec": probe.commander_spec,
+            "due_date": str(probe.due_date) if probe.due_date else None,
         }
 
     plans_input = [
@@ -436,6 +438,7 @@ async def design_probe_for_case(case_id: str, db: Session = Depends(get_db)):
         "note": probe.note or "",
         "status": probe.status,
         "commander_spec": probe.commander_spec,
+        "due_date": str(probe.due_date) if probe.due_date else None,
     }
 
 

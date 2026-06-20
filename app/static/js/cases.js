@@ -814,6 +814,168 @@ function CommanderSpecModal({ caseId, initialSpec, onClose, onSpecUpdated }) {
 }
 
 // ---------------------------------------------------------------------------
+// ProbeDueDateChip — inline due-date display + edit for ProbeCard
+// ---------------------------------------------------------------------------
+
+function ProbeDueDateChip({ probeId, initialDueDate, hasVerdict }) {
+  const [dueDate, setDueDate] = React.useState(initialDueDate || null);
+  const [editing, setEditing] = React.useState(false);
+  const [inputValue, setInputValue] = React.useState(initialDueDate || '');
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState('');
+  const inputRef = React.useRef(null);
+
+  React.useEffect(() => {
+    setDueDate(initialDueDate || null);
+    setInputValue(initialDueDate || '');
+  }, [initialDueDate]);
+
+  React.useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [editing]);
+
+  React.useEffect(() => {
+    if (!editing) return;
+    function onKeyDown(e) {
+      if (e.key === 'Escape') {
+        setEditing(false);
+        setInputValue(dueDate || '');
+        setError('');
+      }
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [editing, dueDate]);
+
+  const today = new Date().toISOString().slice(0, 10);
+  const isOverdue = dueDate && dueDate < today;
+  const chipColor = (isOverdue && !hasVerdict) ? 'var(--red)' : 'var(--text-muted)';
+  const chipBorder = (isOverdue && !hasVerdict) ? '1px solid var(--red)' : '1px solid var(--border)';
+  const chipBg = (isOverdue && !hasVerdict) ? 'var(--red-bg)' : 'var(--surface-2)';
+
+  async function handleSubmit(e) {
+    if (e) e.preventDefault();
+    const previousDueDate = dueDate;
+    const newDate = inputValue.trim() || null;
+
+    setSaving(true);
+    setError('');
+    setDueDate(newDate); // optimistic update
+    setEditing(false);
+
+    try {
+      const resp = await fetch(`/api/probes/${probeId}/due-date`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ due_date: newDate }),
+      });
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        throw new Error(data.detail || `Error ${resp.status}`);
+      }
+      const data = await resp.json();
+      setDueDate(data.due_date || null);
+      setInputValue(data.due_date || '');
+    } catch (err) {
+      setDueDate(previousDueDate);
+      setInputValue(previousDueDate || '');
+      setError(err.message || 'Could not update due date.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function openEdit() {
+    setInputValue(dueDate || '');
+    setEditing(true);
+  }
+
+  if (editing) {
+    return (
+      <form
+        onSubmit={handleSubmit}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-2)' }}
+      >
+        <input
+          ref={inputRef}
+          type="date"
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
+          disabled={saving}
+          aria-label="Due date"
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 'var(--text-xs)',
+            fontWeight: 700,
+            padding: '2px 8px',
+            border: '1px solid var(--crux)',
+            borderRadius: 'var(--radius-sm)',
+            background: 'var(--surface-2)',
+            color: 'var(--text)',
+            cursor: 'pointer',
+          }}
+        />
+        <button
+          type="submit"
+          className="btn btn-sm"
+          disabled={saving}
+          aria-label="Confirm due date"
+          style={{ padding: '2px 7px', fontSize: 'var(--text-2xs)' }}
+        >
+          <i className="ti ti-check" aria-hidden="true"></i>
+        </button>
+        <button
+          type="button"
+          className="btn btn-sm"
+          onClick={() => { setEditing(false); setInputValue(dueDate || ''); setError(''); }}
+          aria-label="Cancel"
+          style={{ padding: '2px 7px', fontSize: 'var(--text-2xs)' }}
+        >
+          <i className="ti ti-x" aria-hidden="true"></i>
+        </button>
+      </form>
+    );
+  }
+
+  return (
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+      {dueDate && (
+        <span
+          className="mono"
+          style={{
+            fontSize: 'var(--text-xs)',
+            fontWeight: 700,
+            color: chipColor,
+            background: chipBg,
+            border: chipBorder,
+            borderRadius: 'var(--radius-sm)',
+            padding: '2px 8px',
+          }}
+        >
+          {dueDate}
+        </span>
+      )}
+      <button
+        className="btn btn-sm"
+        onClick={openEdit}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openEdit(); } }}
+        aria-label={dueDate ? 'Edit due date' : 'Set due date'}
+        style={{ padding: '2px 7px', fontSize: 'var(--text-2xs)' }}
+      >
+        <i className="ti ti-calendar-event" aria-hidden="true"></i>
+      </button>
+      {error && (
+        <span role="alert" style={{ fontSize: 'var(--text-2xs)', color: 'var(--red)' }}>
+          {error}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // ProbeCard — renders the probe design (type, targetMetric, cost, time, note)
 // ---------------------------------------------------------------------------
 
@@ -891,14 +1053,22 @@ function ProbeCard({ probe, loading, error, caseId, hasVerdict, onProbeSpecUpdat
   return (
     <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 'var(--space-5)', marginBottom: 'var(--space-6)' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--space-3)', marginBottom: 'var(--space-4)' }}>
-        <span className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, letterSpacing: '.05em', color: 'var(--crux)', background: 'var(--crux-bg)', border: '1px solid var(--crux)', borderRadius: 'var(--radius-pill)', padding: '3px 10px' }}>
-          {typeLabel}
-        </span>
-        {probeStatus && probeStatus !== 'designed' && (
-          <span className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, letterSpacing: '.05em', color: 'var(--green)', background: 'var(--green-bg)', border: '1px solid var(--green)', borderRadius: 'var(--radius-pill)', padding: '3px 10px' }}>
-            {probeStatus.toUpperCase()}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+          <span className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, letterSpacing: '.05em', color: 'var(--crux)', background: 'var(--crux-bg)', border: '1px solid var(--crux)', borderRadius: 'var(--radius-pill)', padding: '3px 10px' }}>
+            {typeLabel}
           </span>
-        )}
+          {probeStatus && probeStatus !== 'designed' && (
+            <span className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, letterSpacing: '.05em', color: 'var(--green)', background: 'var(--green-bg)', border: '1px solid var(--green)', borderRadius: 'var(--radius-pill)', padding: '3px 10px' }}>
+              {probeStatus.toUpperCase()}
+            </span>
+          )}
+        </div>
+        {/* Due date chip + edit affordance */}
+        <ProbeDueDateChip
+          probeId={probe.id}
+          initialDueDate={probe.due_date || null}
+          hasVerdict={hasVerdict}
+        />
       </div>
       <div className="mono" style={{ fontSize: 'var(--text-xl)', fontWeight: 700, color: 'var(--text)', fontFamily: 'var(--font-mono)', marginBottom: 'var(--space-4)', lineHeight: 1.3 }}>
         {probe.target_metric}
