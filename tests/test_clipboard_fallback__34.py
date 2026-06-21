@@ -131,11 +131,16 @@ def test_ac4_error_rendered_in_jsx():
 # ---------------------------------------------------------------------------
 
 def test_ac5_success_sets_copied_state():
-    """AC5: setCopyState('copied') is still called when clipboard write succeeds."""
+    """AC5: The copied state is set when clipboard write succeeds (literal or STATES.COPIED)."""
     src = _src()
     block = _handleCopy_block(src)
-    assert "setCopyState('copied')" in block or 'setCopyState("copied")' in block, \
-        "setCopyState('copied') must still be called on successful copy"
+    sets_copied = (
+        "setCopyState('copied')" in block
+        or 'setCopyState("copied")' in block
+        or "setCopyState(STATES.COPIED)" in block
+    )
+    assert sets_copied, \
+        "setCopyState must transition to the copied state on successful copy"
 
 
 def test_ac5_no_error_on_success_path():
