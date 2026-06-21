@@ -233,6 +233,57 @@ def get_case(case_id: str, db: Session = Depends(get_db)):
     }
 
 
+class PatchCaseRequest(BaseModel):
+    sharpened: str | None = None
+    not_investigating: list[str] | None = None
+
+    @field_validator("sharpened")
+    @classmethod
+    def sharpened_not_empty(cls, v: str | None) -> str | None:
+        if v is not None and not v.strip():
+            raise ValueError("sharpened must not be empty if provided")
+        return v
+
+    @field_validator("not_investigating")
+    @classmethod
+    def items_not_empty(cls, v: list[str] | None) -> list[str] | None:
+        if v is not None:
+            for item in v:
+                if not item or not item.strip():
+                    raise ValueError("not_investigating items must be non-empty strings")
+        return v
+
+
+@router.patch("/cases/{case_id}")
+def patch_case(case_id: str, body: PatchCaseRequest, db: Session = Depends(get_db)):
+    case = db.query(models.Case).filter(models.Case.id == case_id).first()
+    if case is None:
+        raise HTTPException(status_code=404, detail="Case not found")
+    if case.stage == "verdict":
+        raise HTTPException(
+            status_code=409,
+            detail="Cannot edit a case in verdict stage; it is immutable.",
+        )
+    if body.sharpened is not None:
+        case.sharpened = body.sharpened
+    if body.not_investigating is not None:
+        case.not_investigating = json.dumps(body.not_investigating)
+    db.commit()
+    db.refresh(case)
+    not_investigating_out = []
+    if case.not_investigating:
+        try:
+            not_investigating_out = json.loads(case.not_investigating)
+        except (ValueError, TypeError):
+            not_investigating_out = []
+    return {
+        "id": case.id,
+        "sharpened": case.sharpened or "",
+        "not_investigating": not_investigating_out,
+        "stage": _STAGE_ORDER.get(case.stage, 0),
+    }
+
+
 class SharpenRequest(BaseModel):
     raw_problem: str
 
