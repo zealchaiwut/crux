@@ -544,6 +544,11 @@ async def generate_probe_commander_spec(
         return {"commander_spec": probe.commander_spec}
 
     plans = sorted(case.plans, key=lambda p: p.current_rank or 99)
+    if not plans:
+        raise HTTPException(
+            status_code=422,
+            detail="At least one plan is required for spec generation.",
+        )
     plans_input = [
         {
             "label": p.label,
