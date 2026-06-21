@@ -89,7 +89,7 @@ async def generate_commander_spec(probe_data: dict) -> str:
     }
 
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=10.0, read=30.0)) as client:
             resp = await client.post(_API_URL, json=payload, headers=headers)
         resp.raise_for_status()
     except httpx.HTTPStatusError as exc:
