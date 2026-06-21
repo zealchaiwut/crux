@@ -3,6 +3,12 @@
 Per-sprint changelog for crux. Entries are written by the documentor when a
 sprint finishes. Dated per-sprint files live under [docs/changelog/](docs/changelog/).
 
+## Sprint 6 (2026-06-21)
+
+- #64: Add search and filter params to GET /api/cases
+- #65: Add search input and filter chips to Cases list
+- #66: Allow editing case sharpened statement and not-investigating list
+
 ## Sprint 4 (2026-06-19)
 
 - #26: Generate Commander Spec for Prototype Probes via Claude API
