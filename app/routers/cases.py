@@ -14,6 +14,7 @@ from app.db import get_db
 from app.probe import ProbeError, design_probe
 from app.sharpen import SharpenError, sharpen_problem
 from app.weigh import WeighError, rerank_plans
+from app.services.embeddings import upsert_embedding, EmbeddingError
 
 router = APIRouter(prefix="/api")
 
@@ -230,6 +231,12 @@ def create_case(body: CreateCaseRequest, db: Session = Depends(get_db)):
     db.add(case)
     db.commit()
     db.refresh(case)
+
+    try:
+        upsert_embedding(case.id, case.sharpened or case.raw_problem, db)
+    except EmbeddingError:
+        pass  # embedding failure must not fail case creation
+
     return {"id": case.id}
 
 
