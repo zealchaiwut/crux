@@ -1,6 +1,6 @@
 # Schema
 
-Database: Neon Postgres. Migrations managed by Alembic (revision `e5f6g7h8i9j0`).
+Database: Neon Postgres. Migrations managed by Alembic (revision `f6g7h8i9j0k1`).
 
 ## Enum types
 
@@ -76,3 +76,14 @@ Database: Neon Postgres. Migrations managed by Alembic (revision `e5f6g7h8i9j0`)
 | `outcome` | verdict_outcome_enum | NOT NULL |
 | `notes` | text | |
 | `decided_at` | timestamptz | NOT NULL, default `now()` |
+
+### `case_embedding`
+
+Added in sprint 7 (issue #68). Stores pre-computed Claude embedding vectors for semantic related-case matching.
+
+| Column | Type | Notes |
+|---|---|---|
+| `case_id` | varchar(36) | PK, FK → case.id ON DELETE CASCADE |
+| `embedding` | text | NOT NULL — JSON-serialized float array (256 dimensions) |
+| `model_version` | varchar(128) | NOT NULL — model ID used to produce this embedding |
+| `created_at` | timestamptz | NOT NULL |

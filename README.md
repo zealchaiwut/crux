@@ -15,7 +15,7 @@ Companion to [commander](https://github.com/zealchaiwut/commander) (which builds
 
 ## Status
 
-Four sprints complete. All five pipeline stages are live:
+Seven sprints complete. All five pipeline stages are live:
 
 | Stage | Status |
 |---|---|
@@ -69,6 +69,15 @@ python3 -c "import secrets; print(secrets.token_hex(32))"
 AUTH_SECRET=<min 16 chars — server exits at startup if missing>
 DATABASE_URL=<Neon Postgres connection string>
 ANTHROPIC_API_KEY=<Claude API key>
+
+# Optional
+EMBEDDING_MODEL=claude-haiku-4-5-20251001  # model used for related-case embeddings (issue #68)
+```
+
+After migrating an existing database, backfill embeddings for pre-existing cases:
+
+```bash
+python -m scripts.backfill_embeddings
 ```
 
 See `.env.example` for all variables.

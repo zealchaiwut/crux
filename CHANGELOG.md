@@ -3,6 +3,15 @@
 Per-sprint changelog for crux. Entries are written by the documentor when a
 sprint finishes. Dated per-sprint files live under [docs/changelog/](docs/changelog/).
 
+## Sprint 7 (2026-06-21)
+
+- #68: Replace TF-IDF with Claude embedding-based similarity for related cases
+- #35: Extract UI state constants to eliminate string literals in cases.js
+- #34: Replace deprecated navigator.clipboard fallback with error-reporting copy path
+- #33: Validate plan presence before Commander spec generation (422 if no plans)
+- #32: Clarify httpx timeout semantics in commander spec generation
+- #31: Clarify httpx timeout semantics in commander spec generation
+
 ## Sprint 4 (2026-06-19)
 
 - #26: Generate Commander Spec for Prototype Probes via Claude API
