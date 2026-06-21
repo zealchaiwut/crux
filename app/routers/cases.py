@@ -3,8 +3,9 @@ import json
 import uuid as _uuid_mod
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, field_validator
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
 from app import models
@@ -38,17 +39,65 @@ def _plan_state(plan: models.Plan, probe: models.Probe | None,
     return None
 
 
+_VALID_STAGES = {"sharpened", "bake_off", "gather", "weigh", "probe", "verdict"}
+_VALID_VERDICT_PARAMS = {"confirmed", "killed", "inconclusive", "open"}
+
+
 @router.get("/cases")
-def list_cases(db: Session = Depends(get_db)):
-    cases = (
-        db.query(models.Case)
-        .options(
-            joinedload(models.Case.plans),
-            joinedload(models.Case.probes).joinedload(models.Probe.verdicts),
+def list_cases(
+    db: Session = Depends(get_db),
+    q: str | None = Query(default=None),
+    stage: str | None = Query(default=None),
+    verdict: str | None = Query(default=None),
+):
+    if stage is not None and stage not in _VALID_STAGES:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Invalid stage value {stage!r}. "
+                f"Valid values: {', '.join(sorted(_VALID_STAGES))}"
+            ),
         )
-        .order_by(models.Case.created_at.desc())
-        .all()
+
+    query = db.query(models.Case).options(
+        joinedload(models.Case.plans),
+        joinedload(models.Case.probes).joinedload(models.Probe.verdicts),
     )
+
+    if stage is not None:
+        query = query.filter(models.Case.stage == stage)
+
+    if q is not None:
+        keyword = f"%{q}%"
+        matching_case_ids = (
+            db.query(models.Plan.case_id)
+            .filter(models.Plan.mechanism.ilike(keyword))
+        )
+        query = query.filter(
+            or_(
+                models.Case.sharpened.ilike(keyword),
+                models.Case.id.in_(matching_case_ids),
+            )
+        )
+
+    if verdict is not None:
+        if verdict == "open":
+            # No logged verdict: case has no probe or probe has no verdicts
+            cases_with_verdict = (
+                db.query(models.Verdict.probe_id)
+                .join(models.Probe, models.Probe.id == models.Verdict.probe_id)
+                .with_entities(models.Probe.case_id)
+            )
+            query = query.filter(models.Case.id.notin_(cases_with_verdict))
+        elif verdict in {"confirmed", "killed", "inconclusive"}:
+            cases_with_outcome = (
+                db.query(models.Probe.case_id)
+                .join(models.Verdict, models.Verdict.probe_id == models.Probe.id)
+                .filter(models.Verdict.outcome == verdict)
+            )
+            query = query.filter(models.Case.id.in_(cases_with_outcome))
+
+    cases = query.order_by(models.Case.created_at.desc()).all()
 
     result = []
     for case in cases:
