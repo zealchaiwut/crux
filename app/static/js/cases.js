@@ -1141,6 +1141,8 @@ function CaseDetailScreen({ caseId, onBack, onNavigateToCase, theme, onToggleThe
   const [probeError, setProbeError] = React.useState('');
   const [showLogVerdictModal, setShowLogVerdictModal] = React.useState(false);
   const [priorLearnings, setPriorLearnings] = React.useState([]);
+  const [showEditModal, setShowEditModal] = React.useState(false);
+  const [toast, setToast] = React.useState(null); // { message, type }
   // Track which plan IDs have already had gather triggered to avoid double-firing
   const gatherTriggered = React.useRef(new Set());
 
@@ -1271,7 +1273,19 @@ function CaseDetailScreen({ caseId, onBack, onNavigateToCase, theme, onToggleThe
         />
 
         {/* SHARPENED STATEMENT */}
-        <SectionLabel>SHARPENED STATEMENT</SectionLabel>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-3)' }}>
+          <SectionLabel>SHARPENED STATEMENT</SectionLabel>
+          {stage < 5 && (
+            <button
+              className="btn btn-sm"
+              onClick={() => setShowEditModal(true)}
+              aria-label="Edit case framing"
+              style={{ padding: '4px 10px', fontSize: 'var(--text-xs)', marginBottom: 'var(--space-3)' }}
+            >
+              <i className="ti ti-pencil" aria-hidden="true"></i> Edit
+            </button>
+          )}
+        </div>
         <p style={{ fontSize: 'var(--text-lg)', color: 'var(--text)', lineHeight: 1.55, marginBottom: 'var(--space-3)' }}>
           {caseData.sharpened || <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>No sharpened statement yet.</span>}
         </p>
@@ -1412,8 +1426,33 @@ function CaseDetailScreen({ caseId, onBack, onNavigateToCase, theme, onToggleThe
             onVerdictLogged={() => { loadCase(); setShowLogVerdictModal(false); }}
           />
         )}
+
+        {showEditModal && (
+          <EditCaseModal
+            caseId={caseId}
+            initialSharpened={caseData.sharpened || ''}
+            initialNotInvestigating={notInvestigating}
+            onClose={() => setShowEditModal(false)}
+            onSaved={(updated) => {
+              setCaseData((prev) => ({
+                ...prev,
+                sharpened: updated.sharpened,
+                not_investigating: updated.not_investigating,
+              }));
+              setToast({ message: 'Case framing updated.', type: 'success' });
+            }}
+          />
+        )}
       </div>
     </div>
+
+    {toast && (
+      <Toast
+        message={toast.message}
+        type={toast.type}
+        onDismiss={() => setToast(null)}
+      />
+    )}
   );
 }
 
@@ -1427,6 +1466,166 @@ function NotInvestigatingChip({ label }) {
         <i className="ti ti-x" style={{ fontSize: 10 }} aria-hidden="true"></i>
       </button>
     </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Toast — transient success / error message
+// ---------------------------------------------------------------------------
+
+function Toast({ message, type, onDismiss }) {
+  React.useEffect(() => {
+    const t = setTimeout(onDismiss, 3500);
+    return () => clearTimeout(t);
+  }, [onDismiss]);
+  const bg    = type === 'error' ? 'var(--red-bg)'   : 'var(--green-bg)';
+  const border = type === 'error' ? 'var(--red)'     : 'var(--green)';
+  const color  = type === 'error' ? 'var(--red)'     : 'var(--green)';
+  const icon   = type === 'error' ? 'ti-alert-circle' : 'ti-check';
+  return (
+    <div role="alert" aria-live="polite" style={{
+      position: 'fixed', bottom: 24, right: 24, zIndex: 200,
+      background: bg, border: `1px solid ${border}`, borderRadius: 'var(--radius)',
+      padding: 'var(--space-3) var(--space-4)', display: 'flex', alignItems: 'center',
+      gap: 'var(--space-2)', boxShadow: 'var(--shadow-hover)', maxWidth: 360,
+    }}>
+      <i className={`ti ${icon}`} aria-hidden="true" style={{ color, flexShrink: 0 }}></i>
+      <span style={{ fontSize: 'var(--text-sm)', color, flex: 1 }}>{message}</span>
+      <button onClick={onDismiss} aria-label="Dismiss" style={{ background: 'none', border: 'none', cursor: 'pointer', color, padding: '0 2px', lineHeight: 1, flexShrink: 0 }}>
+        <i className="ti ti-x" style={{ fontSize: 12 }} aria-hidden="true"></i>
+      </button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// EditCaseModal — inline modal for editing sharpened + not_investigating
+// ---------------------------------------------------------------------------
+
+function EditCaseModal({ caseId, initialSharpened, initialNotInvestigating, onClose, onSaved }) {
+  const [sharpened, setSharpened] = React.useState(initialSharpened || '');
+  const [niText, setNiText] = React.useState((initialNotInvestigating || []).join('\n'));
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState('');
+
+  const isDirty = sharpened !== (initialSharpened || '') ||
+    niText !== (initialNotInvestigating || []).join('\n');
+
+  React.useEffect(() => {
+    function onKeyDown(e) {
+      if (e.key === 'Escape') {
+        if (isDirty) {
+          if (!window.confirm('Discard unsaved changes?')) return;
+        }
+        onClose();
+      }
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [onClose, isDirty]);
+
+  function handleCancel() {
+    if (isDirty && !window.confirm('Discard unsaved changes?')) return;
+    onClose();
+  }
+
+  async function handleSave() {
+    if (!sharpened.trim()) { setError('Sharpened statement must not be empty.'); return; }
+    const items = niText.split('\n').map((s) => s.trim()).filter(Boolean);
+    setSaving(true);
+    setError('');
+    try {
+      const resp = await fetch(`/api/cases/${caseId}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ sharpened: sharpened.trim(), not_investigating: items }),
+      });
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        throw new Error(data.detail || `Error ${resp.status}`);
+      }
+      const data = await resp.json();
+      onSaved(data);
+      onClose();
+    } catch (err) {
+      setError(err.message || 'Save failed. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const fieldStyle = {
+    width: '100%', padding: 'var(--space-3)', fontSize: 'var(--text-base)',
+    color: 'var(--text)', background: 'var(--surface-2)', border: '1px solid var(--border)',
+    borderRadius: 'var(--radius)', lineHeight: 1.55, boxSizing: 'border-box',
+  };
+
+  return (
+    <div
+      onClick={handleCancel}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Edit case framing"
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--space-5)', zIndex: 50 }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{ width: 560, maxWidth: '100%', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-xl)', boxShadow: 'var(--shadow-card)', padding: 'var(--space-6)' }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-4)' }}>
+          <h2 style={{ fontSize: 'var(--text-xl)', fontWeight: 800, color: 'var(--text)' }}>Edit case framing</h2>
+          <button className="btn btn-sm" onClick={handleCancel} aria-label="Close" style={{ padding: '6px 8px' }}>
+            <i className="ti ti-x" aria-hidden="true"></i>
+          </button>
+        </div>
+
+        <div style={{ marginBottom: 'var(--space-4)' }}>
+          <label style={{ display: 'block', fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 'var(--space-2)' }}>
+            Sharpened statement <span style={{ color: 'var(--red)' }}>*</span>
+          </label>
+          <textarea
+            value={sharpened}
+            onChange={(e) => { setSharpened(e.target.value); setError(''); }}
+            rows={4}
+            disabled={saving}
+            style={{ ...fieldStyle, resize: 'vertical', opacity: saving ? 0.6 : 1 }}
+          />
+        </div>
+
+        <div style={{ marginBottom: 'var(--space-5)' }}>
+          <label style={{ display: 'block', fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 'var(--space-1)' }}>
+            Not investigating
+          </label>
+          <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-sub)', margin: '0 0 var(--space-2)' }}>
+            One item per line. Empty lines are ignored.
+          </p>
+          <textarea
+            value={niText}
+            onChange={(e) => setNiText(e.target.value)}
+            rows={4}
+            disabled={saving}
+            placeholder="Enter items to exclude, one per line…"
+            style={{ ...fieldStyle, resize: 'vertical', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)', opacity: saving ? 0.6 : 1 }}
+          />
+        </div>
+
+        {error && (
+          <p role="alert" style={{ color: 'var(--red)', fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}>
+            {error}
+          </p>
+        )}
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)' }}>
+          <button className="btn" onClick={handleCancel} disabled={saving}>Cancel</button>
+          <button className="btn btn-crux" onClick={handleSave} disabled={saving} aria-busy={saving}>
+            {saving
+              ? <><i className="ti ti-loader-2 crux-spin" aria-hidden="true"></i> Saving…</>
+              : <><i className="ti ti-check" aria-hidden="true"></i> Save changes</>
+            }
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
