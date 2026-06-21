@@ -7,10 +7,8 @@ AC4: The change passes the existing test suite without modification.
 """
 import ast
 import inspect
-import textwrap
 
 import httpx
-import pytest
 
 
 def _get_source() -> str:
