@@ -36,5 +36,5 @@ def verify_session_cookie(token: str, secret: str) -> bool:
     try:
         data = URLSafeSerializer(secret, salt="session").loads(token)
         return data.get("auth") is True
-    except (BadSignature, Exception):
+    except BadSignature:
         return False
