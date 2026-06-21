@@ -22,10 +22,24 @@ AC coverage:
 import json
 import os
 import uuid
+from unittest.mock import patch
 
 import pytest
 
 os.environ.setdefault("AUTH_SECRET", "test_auth_secret_12345678901")
+
+# Fixed vector used for all test embeddings (issue #68: embedding-based similarity).
+# The same vector is stored in case_embedding rows AND returned by the mock, so
+# cosine similarity between query and all seeded candidates is 1.0, ensuring
+# existing AC10 assertions ("at least one match") remain satisfied.
+_TEST_VECTOR = [0.1] * 256
+
+
+@pytest.fixture(autouse=True)
+def _mock_get_embedding():
+    """Patch get_embedding globally for this module — no API key required in tests."""
+    with patch("app.services.related_cases.get_embedding", return_value=_TEST_VECTOR):
+        yield
 
 STATIC = __import__("pathlib").Path(__file__).parent.parent / "app" / "static"
 JS_DIR = STATIC / "js"
@@ -137,6 +151,18 @@ def _seed_case_with_verdict(
         decided_at=datetime.datetime.now(tz=datetime.timezone.utc),
     )
     session.add(verdict)
+
+    # Seed a pre-computed embedding so embedding-based similarity (issue #68) can
+    # find this case. Uses the same _TEST_VECTOR as the mocked query embedding so
+    # cosine similarity = 1.0, ensuring the case appears in results.
+    emb = models.CaseEmbedding(
+        case_id=c.id,
+        embedding=json.dumps(_TEST_VECTOR),
+        model_version="claude-haiku-4-5-20251001",
+        created_at=datetime.datetime.now(tz=datetime.timezone.utc),
+    )
+    session.add(emb)
+
     session.commit()
     return c, probe, verdict
 
