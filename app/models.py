@@ -43,6 +43,7 @@ class Case(Base):
 
     plans = relationship("Plan", back_populates="case", cascade="all, delete-orphan")
     probes = relationship("Probe", back_populates="case", cascade="all, delete-orphan")
+    embedding = relationship("CaseEmbedding", back_populates="case", uselist=False, cascade="all, delete-orphan")
 
 
 class Plan(Base):
@@ -107,3 +108,15 @@ class Verdict(Base):
     decided_at = Column(TIMESTAMP(timezone=True))
 
     probe = relationship("Probe", back_populates="verdicts")
+
+
+class CaseEmbedding(Base):
+    __tablename__ = "case_embedding"
+
+    id = Column(String(36), primary_key=True, default=_uuid)
+    case_id = Column(String(36), ForeignKey("case.id", ondelete="CASCADE"), nullable=False, unique=True)
+    vector = Column(Text, nullable=False)
+    model_version = Column(Text, nullable=False)
+    updated_at = Column(TIMESTAMP(timezone=True))
+
+    case = relationship("Case", back_populates="embedding")

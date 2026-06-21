@@ -13,6 +13,7 @@ from app.bake_off import BakeOffError, generate_plans
 from app.commander_spec import CommanderSpecError, generate_commander_spec
 from app.db import get_db
 from app.probe import ProbeError, design_probe
+from app.services.embeddings import refresh_case_embedding
 from app.sharpen import SharpenError, sharpen_problem
 from app.weigh import WeighError, rerank_plans
 
@@ -236,6 +237,7 @@ def get_case(case_id: str, db: Session = Depends(get_db)):
 class PatchCaseRequest(BaseModel):
     sharpened: str | None = None
     not_investigating: list[str] | None = None
+    plan_mechanisms: dict[str, str] | None = None
 
     @field_validator("sharpened")
     @classmethod
@@ -256,7 +258,12 @@ class PatchCaseRequest(BaseModel):
 
 @router.patch("/cases/{case_id}")
 def patch_case(case_id: str, body: PatchCaseRequest, db: Session = Depends(get_db)):
-    case = db.query(models.Case).filter(models.Case.id == case_id).first()
+    case = (
+        db.query(models.Case)
+        .options(joinedload(models.Case.plans))
+        .filter(models.Case.id == case_id)
+        .first()
+    )
     if case is None:
         raise HTTPException(status_code=404, detail="Case not found")
     if case.stage == "verdict":
@@ -264,12 +271,23 @@ def patch_case(case_id: str, body: PatchCaseRequest, db: Session = Depends(get_d
             status_code=409,
             detail="Cannot edit a case in verdict stage; it is immutable.",
         )
+    embedding_dirty = False
     if body.sharpened is not None:
         case.sharpened = body.sharpened
+        embedding_dirty = True
     if body.not_investigating is not None:
         case.not_investigating = json.dumps(body.not_investigating)
+    if body.plan_mechanisms is not None:
+        plans_by_label = {p.label: p for p in case.plans}
+        for label, mechanism in body.plan_mechanisms.items():
+            plan = plans_by_label.get(label)
+            if plan is not None:
+                plan.mechanism = mechanism
+        embedding_dirty = True
     db.commit()
     db.refresh(case)
+    if embedding_dirty:
+        refresh_case_embedding(case, db)
     not_investigating_out = []
     if case.not_investigating:
         try:
@@ -379,6 +397,8 @@ async def run_bake_off(case_id: str, db: Session = Depends(get_db)):
 
     case.stage = "gather"
     db.commit()
+    db.refresh(case)
+    refresh_case_embedding(case, db)
 
     plans_out = [
         {
