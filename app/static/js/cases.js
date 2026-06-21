@@ -693,6 +693,7 @@ async function _postProbe(caseId) {
 function CommanderSpecModal({ caseId, initialSpec, onClose, onSpecUpdated }) {
   const [spec, setSpec] = React.useState(initialSpec || null);
   const [copyState, setCopyState] = React.useState('idle'); // 'idle'|'copied'
+  const [copyError, setCopyError] = React.useState('');
   const [regenState, setRegenState] = React.useState('idle'); // 'idle'|'loading'|'error'
   const [regenError, setRegenError] = React.useState('');
 
@@ -723,18 +724,27 @@ function CommanderSpecModal({ caseId, initialSpec, onClose, onSpecUpdated }) {
 
   async function handleCopy() {
     if (!spec) return;
+    setCopyError('');
     try {
       await navigator.clipboard.writeText(spec);
+      setCopyState('copied');
+      setTimeout(() => setCopyState('idle'), 2000);
     } catch (_) {
       const el = document.createElement('textarea');
       el.value = spec;
       document.body.appendChild(el);
       el.select();
-      document.execCommand('copy');
-      document.body.removeChild(el);
+      try {
+        const ok = document.execCommand('copy');
+        document.body.removeChild(el);
+        if (!ok) throw new Error('execCommand returned false');
+        setCopyState('copied');
+        setTimeout(() => setCopyState('idle'), 2000);
+      } catch (err) {
+        document.body.removeChild(el);
+        setCopyError('Copy failed. Please copy the text manually.');
+      }
     }
-    setCopyState('copied');
-    setTimeout(() => setCopyState('idle'), 2000);
   }
 
   const isRegening = regenState === 'loading';
@@ -780,6 +790,11 @@ function CommanderSpecModal({ caseId, initialSpec, onClose, onSpecUpdated }) {
         {regenError && (
           <p role="alert" style={{ fontSize: 'var(--text-sm)', color: 'var(--red)', marginBottom: 'var(--space-3)', flexShrink: 0 }}>
             {regenError}
+          </p>
+        )}
+        {copyError && (
+          <p role="alert" style={{ fontSize: 'var(--text-sm)', color: 'var(--red)', marginBottom: 'var(--space-3)', flexShrink: 0 }}>
+            {copyError}
           </p>
         )}
 
