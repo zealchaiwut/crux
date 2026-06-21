@@ -76,8 +76,9 @@ See `.env.example` for all variables.
 ## API endpoints
 
 ```
-GET  /api/cases                        # list all cases
+GET  /api/cases                        # list all cases; ?q=<keyword> ?stage=<stage> ?verdict=confirmed|killed|inconclusive|open
 GET  /api/cases/{case_id}              # full case with plans, sources, probe, verdict
+PATCH /api/cases/{case_id}            # edit sharpened statement and/or not-investigating list (locked at verdict stage)
 POST /api/cases                        # create a case
 POST /api/cases/sharpen                # sharpen a raw problem statement
 POST /api/cases/{case_id}/bake-off     # generate competing plans A/B/C

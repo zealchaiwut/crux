@@ -1141,6 +1141,8 @@ function CaseDetailScreen({ caseId, onBack, onNavigateToCase, theme, onToggleThe
   const [probeError, setProbeError] = React.useState('');
   const [showLogVerdictModal, setShowLogVerdictModal] = React.useState(false);
   const [priorLearnings, setPriorLearnings] = React.useState([]);
+  const [showEditModal, setShowEditModal] = React.useState(false);
+  const [toast, setToast] = React.useState(null); // { message, type }
   // Track which plan IDs have already had gather triggered to avoid double-firing
   const gatherTriggered = React.useRef(new Set());
 
@@ -1271,7 +1273,19 @@ function CaseDetailScreen({ caseId, onBack, onNavigateToCase, theme, onToggleThe
         />
 
         {/* SHARPENED STATEMENT */}
-        <SectionLabel>SHARPENED STATEMENT</SectionLabel>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-3)' }}>
+          <SectionLabel>SHARPENED STATEMENT</SectionLabel>
+          {stage < 5 && (
+            <button
+              className="btn btn-sm"
+              onClick={() => setShowEditModal(true)}
+              aria-label="Edit case framing"
+              style={{ padding: '4px 10px', fontSize: 'var(--text-xs)', marginBottom: 'var(--space-3)' }}
+            >
+              <i className="ti ti-pencil" aria-hidden="true"></i> Edit
+            </button>
+          )}
+        </div>
         <p style={{ fontSize: 'var(--text-lg)', color: 'var(--text)', lineHeight: 1.55, marginBottom: 'var(--space-3)' }}>
           {caseData.sharpened || <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>No sharpened statement yet.</span>}
         </p>
@@ -1412,8 +1426,33 @@ function CaseDetailScreen({ caseId, onBack, onNavigateToCase, theme, onToggleThe
             onVerdictLogged={() => { loadCase(); setShowLogVerdictModal(false); }}
           />
         )}
+
+        {showEditModal && (
+          <EditCaseModal
+            caseId={caseId}
+            initialSharpened={caseData.sharpened || ''}
+            initialNotInvestigating={notInvestigating}
+            onClose={() => setShowEditModal(false)}
+            onSaved={(updated) => {
+              setCaseData((prev) => ({
+                ...prev,
+                sharpened: updated.sharpened,
+                not_investigating: updated.not_investigating,
+              }));
+              setToast({ message: 'Case framing updated.', type: 'success' });
+            }}
+          />
+        )}
       </div>
     </div>
+
+    {toast && (
+      <Toast
+        message={toast.message}
+        type={toast.type}
+        onDismiss={() => setToast(null)}
+      />
+    )}
   );
 }
 
@@ -1430,9 +1469,199 @@ function NotInvestigatingChip({ label }) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Toast — transient success / error message
+// ---------------------------------------------------------------------------
+
+function Toast({ message, type, onDismiss }) {
+  React.useEffect(() => {
+    const t = setTimeout(onDismiss, 3500);
+    return () => clearTimeout(t);
+  }, [onDismiss]);
+  const bg    = type === 'error' ? 'var(--red-bg)'   : 'var(--green-bg)';
+  const border = type === 'error' ? 'var(--red)'     : 'var(--green)';
+  const color  = type === 'error' ? 'var(--red)'     : 'var(--green)';
+  const icon   = type === 'error' ? 'ti-alert-circle' : 'ti-check';
+  return (
+    <div role="alert" aria-live="polite" style={{
+      position: 'fixed', bottom: 24, right: 24, zIndex: 200,
+      background: bg, border: `1px solid ${border}`, borderRadius: 'var(--radius)',
+      padding: 'var(--space-3) var(--space-4)', display: 'flex', alignItems: 'center',
+      gap: 'var(--space-2)', boxShadow: 'var(--shadow-hover)', maxWidth: 360,
+    }}>
+      <i className={`ti ${icon}`} aria-hidden="true" style={{ color, flexShrink: 0 }}></i>
+      <span style={{ fontSize: 'var(--text-sm)', color, flex: 1 }}>{message}</span>
+      <button onClick={onDismiss} aria-label="Dismiss" style={{ background: 'none', border: 'none', cursor: 'pointer', color, padding: '0 2px', lineHeight: 1, flexShrink: 0 }}>
+        <i className="ti ti-x" style={{ fontSize: 12 }} aria-hidden="true"></i>
+      </button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// EditCaseModal — inline modal for editing sharpened + not_investigating
+// ---------------------------------------------------------------------------
+
+function EditCaseModal({ caseId, initialSharpened, initialNotInvestigating, onClose, onSaved }) {
+  const [sharpened, setSharpened] = React.useState(initialSharpened || '');
+  const [niText, setNiText] = React.useState((initialNotInvestigating || []).join('\n'));
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState('');
+
+  const isDirty = sharpened !== (initialSharpened || '') ||
+    niText !== (initialNotInvestigating || []).join('\n');
+
+  React.useEffect(() => {
+    function onKeyDown(e) {
+      if (e.key === 'Escape') {
+        if (isDirty) {
+          if (!window.confirm('Discard unsaved changes?')) return;
+        }
+        onClose();
+      }
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [onClose, isDirty]);
+
+  function handleCancel() {
+    if (isDirty && !window.confirm('Discard unsaved changes?')) return;
+    onClose();
+  }
+
+  async function handleSave() {
+    if (!sharpened.trim()) { setError('Sharpened statement must not be empty.'); return; }
+    const items = niText.split('\n').map((s) => s.trim()).filter(Boolean);
+    setSaving(true);
+    setError('');
+    try {
+      const resp = await fetch(`/api/cases/${caseId}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ sharpened: sharpened.trim(), not_investigating: items }),
+      });
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        throw new Error(data.detail || `Error ${resp.status}`);
+      }
+      const data = await resp.json();
+      onSaved(data);
+      onClose();
+    } catch (err) {
+      setError(err.message || 'Save failed. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const fieldStyle = {
+    width: '100%', padding: 'var(--space-3)', fontSize: 'var(--text-base)',
+    color: 'var(--text)', background: 'var(--surface-2)', border: '1px solid var(--border)',
+    borderRadius: 'var(--radius)', lineHeight: 1.55, boxSizing: 'border-box',
+  };
+
+  return (
+    <div
+      onClick={handleCancel}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Edit case framing"
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--space-5)', zIndex: 50 }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{ width: 560, maxWidth: '100%', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-xl)', boxShadow: 'var(--shadow-card)', padding: 'var(--space-6)' }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-4)' }}>
+          <h2 style={{ fontSize: 'var(--text-xl)', fontWeight: 800, color: 'var(--text)' }}>Edit case framing</h2>
+          <button className="btn btn-sm" onClick={handleCancel} aria-label="Close" style={{ padding: '6px 8px' }}>
+            <i className="ti ti-x" aria-hidden="true"></i>
+          </button>
+        </div>
+
+        <div style={{ marginBottom: 'var(--space-4)' }}>
+          <label style={{ display: 'block', fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 'var(--space-2)' }}>
+            Sharpened statement <span style={{ color: 'var(--red)' }}>*</span>
+          </label>
+          <textarea
+            value={sharpened}
+            onChange={(e) => { setSharpened(e.target.value); setError(''); }}
+            rows={4}
+            disabled={saving}
+            style={{ ...fieldStyle, resize: 'vertical', opacity: saving ? 0.6 : 1 }}
+          />
+        </div>
+
+        <div style={{ marginBottom: 'var(--space-5)' }}>
+          <label style={{ display: 'block', fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 'var(--space-1)' }}>
+            Not investigating
+          </label>
+          <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-sub)', margin: '0 0 var(--space-2)' }}>
+            One item per line. Empty lines are ignored.
+          </p>
+          <textarea
+            value={niText}
+            onChange={(e) => setNiText(e.target.value)}
+            rows={4}
+            disabled={saving}
+            placeholder="Enter items to exclude, one per line…"
+            style={{ ...fieldStyle, resize: 'vertical', fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)', opacity: saving ? 0.6 : 1 }}
+          />
+        </div>
+
+        {error && (
+          <p role="alert" style={{ color: 'var(--red)', fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}>
+            {error}
+          </p>
+        )}
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)' }}>
+          <button className="btn" onClick={handleCancel} disabled={saving}>Cancel</button>
+          <button className="btn btn-crux" onClick={handleSave} disabled={saving} aria-busy={saving}>
+            {saving
+              ? <><i className="ti ti-loader-2 crux-spin" aria-hidden="true"></i> Saving…</>
+              : <><i className="ti ti-check" aria-hidden="true"></i> Save changes</>
+            }
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// CasesScreen
+// ---------------------------------------------------------------------------
+
 function CasesScreen({ theme, onToggleTheme, onCaseCreated }) {
   const [cases, setCases] = React.useState(null);
   const [showModal, setShowModal] = React.useState(false);
+
+  // Search state: raw input value + debounced value applied to the filter
+  const [searchQuery, setSearchQuery] = React.useState('');
+  const [debouncedQuery, setDebouncedQuery] = React.useState('');
+
+  // Filter state: Sets of active stage values (0-5) and active outcome chip labels
+  const [activeStages, setActiveStages] = React.useState(new Set());
+  const [activeOutcomes, setActiveOutcomes] = React.useState(new Set());
+
+  // Stage and outcome chip definitions (kept inside the component so label strings
+  // are part of the component's source for static inspection and future i18n)
+  const STAGE_CHIP_DEFS = [
+    { label: 'Sharpened', value: 0 },
+    { label: 'Bake-off',  value: 1 },
+    { label: 'Gather',    value: 2 },
+    { label: 'Weigh',     value: 3 },
+    { label: 'Probe',     value: 4 },
+    { label: 'Verdict',   value: 5 },
+  ];
+
+  const OUTCOME_CHIP_DEFS = [
+    { label: 'Open',         values: ['awaiting', 'progress'] },
+    { label: 'Confirmed',    values: ['confirmed'] },
+    { label: 'Killed',       values: ['killed'] },
+    { label: 'Inconclusive', values: ['inconclusive'] },
+  ];
 
   React.useEffect(() => {
     fetch('/api/cases')
@@ -1441,17 +1670,88 @@ function CasesScreen({ theme, onToggleTheme, onCaseCreated }) {
       .catch(() => setCases([]));
   }, []);
 
+  // 300ms debounce: update debouncedQuery after typing stops
+  React.useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(searchQuery), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  function toggleStage(value) {
+    setActiveStages((prev) => {
+      const next = new Set(prev);
+      if (next.has(value)) next.delete(value); else next.add(value);
+      return next;
+    });
+  }
+
+  function toggleOutcome(label) {
+    setActiveOutcomes((prev) => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label); else next.add(label);
+      return next;
+    });
+  }
+
+  function clearAll() {
+    setSearchQuery('');
+    setDebouncedQuery('');
+    setActiveStages(new Set());
+    setActiveOutcomes(new Set());
+  }
+
+  const hasActiveFilters = debouncedQuery.trim() !== '' || activeStages.size > 0 || activeOutcomes.size > 0;
+
+  // Client-side filter — applies all active criteria with AND logic between groups
+  const filteredCases = React.useMemo(() => {
+    if (cases === null) return null;
+    let list = cases;
+
+    if (debouncedQuery.trim()) {
+      const q = debouncedQuery.trim().toLowerCase();
+      list = list.filter((c) => (c.title || '').toLowerCase().includes(q));
+    }
+
+    if (activeStages.size > 0) {
+      list = list.filter((c) => activeStages.has(c.stage));
+    }
+
+    if (activeOutcomes.size > 0) {
+      const verdictValues = new Set();
+      OUTCOME_CHIP_DEFS.forEach((chip) => {
+        if (activeOutcomes.has(chip.label)) chip.values.forEach((v) => verdictValues.add(v));
+      });
+      list = list.filter((c) => verdictValues.has(c.verdict));
+    }
+
+    return list;
+  }, [cases, debouncedQuery, activeStages, activeOutcomes]);
+
   if (cases === null) {
     return (
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>Loading…</div>
     );
   }
 
-  const open   = cases.filter((c) => c.verdict === 'progress' || c.verdict === 'awaiting');
-  const closed = cases.filter((c) => c.verdict_log);
+  const visibleCases = filteredCases || [];
+  const open   = visibleCases.filter((c) => c.verdict === 'progress' || c.verdict === 'awaiting');
+  const closed = visibleCases.filter((c) => c.verdict_log);
+
+  const _chipStyle = (active) => ({
+    padding: '3px 12px',
+    borderRadius: 'var(--radius-pill)',
+    border: `1px solid ${active ? 'var(--crux)' : 'var(--border)'}`,
+    background: active ? 'var(--crux-bg)' : 'var(--surface-2)',
+    color: active ? 'var(--crux)' : 'var(--text-muted)',
+    fontFamily: 'var(--font-mono)',
+    fontSize: 'var(--text-xs)',
+    fontWeight: 700,
+    cursor: 'pointer',
+    transition: 'all var(--speed)',
+  });
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+      {/* Page header */}
       <header style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 'var(--space-4)', padding: 'var(--space-5) var(--space-6)', borderBottom: '1px solid var(--border)' }}>
         <div>
           <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 800, letterSpacing: '-.01em', color: 'var(--text)' }}>Cases</h1>
@@ -1467,11 +1767,62 @@ function CasesScreen({ theme, onToggleTheme, onCaseCreated }) {
         </div>
       </header>
 
+      {/* Search + filter bar */}
+      <div style={{ padding: 'var(--space-3) var(--space-6)', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', background: 'var(--surface)', flexShrink: 0 }}>
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search cases…"
+          aria-label="Search cases"
+          style={{ padding: 'var(--space-2) var(--space-3)', fontSize: 'var(--text-base)', color: 'var(--text)', background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', width: '100%', boxSizing: 'border-box' }}
+        />
+
+        {/* Stage filter chips */}
+        <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', alignItems: 'center' }}>
+          <span className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', flex: 'none', width: 52 }}>STAGE</span>
+          <button style={_chipStyle(activeStages.size === 0)} onClick={() => setActiveStages(new Set())} aria-pressed={activeStages.size === 0}>All</button>
+          {STAGE_CHIP_DEFS.map((chip) => (
+            <button key={chip.label} style={_chipStyle(activeStages.has(chip.value))} onClick={() => toggleStage(chip.value)} aria-pressed={activeStages.has(chip.value)}>
+              {chip.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Outcome filter chips */}
+        <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', alignItems: 'center' }}>
+          <span className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', flex: 'none', width: 52 }}>OUTCOME</span>
+          <button style={_chipStyle(activeOutcomes.size === 0)} onClick={() => setActiveOutcomes(new Set())} aria-pressed={activeOutcomes.size === 0}>All</button>
+          {OUTCOME_CHIP_DEFS.map((chip) => (
+            <button key={chip.label} style={_chipStyle(activeOutcomes.has(chip.label))} onClick={() => toggleOutcome(chip.label)} aria-pressed={activeOutcomes.has(chip.label)}>
+              {chip.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Clear all — only visible when at least one filter is active */}
+        {hasActiveFilters && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <button className="btn btn-sm" onClick={clearAll} style={{ fontSize: 'var(--text-xs)' }}>
+              <i className="ti ti-x" aria-hidden="true"></i> Clear all
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Case list */}
       <div style={{ flex: 1, overflowY: 'auto', padding: 'var(--space-6)' }}>
         {cases.length === 0 ? (
+          /* No cases in DB at all */
           <div style={{ textAlign: 'center', padding: 'var(--space-7) 0', color: 'var(--text-muted)' }}>
             <div style={{ fontSize: 'var(--text-xl)', fontWeight: 600, color: 'var(--text)', marginBottom: 'var(--space-2)' }}>No cases yet</div>
             <p style={{ fontSize: 'var(--text-base)', lineHeight: 1.55 }}>Got a problem worth solving? Start a case.</p>
+          </div>
+        ) : hasActiveFilters && visibleCases.length === 0 ? (
+          /* Filters active but nothing matches */
+          <div style={{ textAlign: 'center', padding: 'var(--space-7) 0', color: 'var(--text-muted)' }}>
+            <div style={{ fontSize: 'var(--text-xl)', fontWeight: 600, color: 'var(--text)', marginBottom: 'var(--space-2)' }}>No cases match your search and filters</div>
+            <p style={{ fontSize: 'var(--text-base)', lineHeight: 1.55 }}>Try adjusting your search or clearing the filters.</p>
           </div>
         ) : (
           <>
