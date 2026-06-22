@@ -483,21 +483,32 @@ def test_orchestrator_pipeline_order():
 
 
 def test_custom_engine_uses_planner_then_fetcher_then_extractor_then_synthesiser():
-    """AC2: _CustomEngine calls planner.plan → fetcher.fetch → extractor.extract → synthesiser.synthesise."""
+    """AC2: _CustomEngine calls planner.plan → search → article_fetch → extractor.extract → synthesiser.synthesise.
+
+    Updated for issue #81: StubFetcher replaced by WebSearchFetcher (discovery) +
+    ArticleReaderFetcher (read). Pipeline order is preserved.
+    """
     from app.services.research_orchestrator import _CustomEngine
-    from app.research.types import Plan as ResearchPlan, SearchQuery, FetchResult
+    from app.research.types import Plan as ResearchPlan, SearchQuery, SearchResult, ArticleDocument
 
     call_order = []
 
     mock_client = MagicMock()
-
     engine = _CustomEngine(anthropic_client=mock_client)
 
     mock_planner = MagicMock()
     mock_planner.plan.side_effect = lambda p: (call_order.append("planner") or [SearchQuery(query="q1")])
 
-    mock_fetcher = MagicMock()
-    mock_fetcher.fetch.side_effect = lambda q: (call_order.append("fetcher") or FetchResult(query=q, content="Some content here for extraction."))
+    mock_search_fetcher = MagicMock()
+    mock_search_fetcher.fetch.side_effect = lambda q: (
+        call_order.append("search_fetcher") or [SearchResult(url="http://example.com/a", title="A")]
+    )
+
+    mock_article_fetcher = MagicMock()
+    mock_article_fetcher.fetch.side_effect = lambda url: (
+        call_order.append("article_fetcher")
+        or ArticleDocument(url=url, title="A", text="Some factual content here for extraction.")
+    )
 
     mock_extractor = MagicMock()
     mock_extractor.extract.side_effect = lambda doc: (call_order.append("extractor") or ["Claim extracted."])
@@ -505,14 +516,22 @@ def test_custom_engine_uses_planner_then_fetcher_then_extractor_then_synthesiser
     mock_synthesiser = MagicMock()
     mock_synthesiser.synthesise.side_effect = lambda plan, cands: (call_order.append("synthesiser") or [])
 
+    mock_config = MagicMock()
+    mock_config.max_fetches = 10
+
     with patch("app.research.LLMQueryPlanner", return_value=mock_planner), \
-         patch("app.research.StubFetcher", return_value=mock_fetcher), \
+         patch("app.research.WebSearchFetcher", return_value=mock_search_fetcher), \
+         patch("app.research.ArticleReaderFetcher", return_value=mock_article_fetcher), \
+         patch("app.research.YouTubeTranscriptFetcher"), \
+         patch("app.research.DuckDuckGoSearchProvider"), \
          patch("app.research.ClaimExtractor", return_value=mock_extractor), \
-         patch("app.research.CitationSynthesiser", return_value=mock_synthesiser):
+         patch("app.research.CitationSynthesiser", return_value=mock_synthesiser), \
+         patch("app.research.ResearchConfig") as MockConfig:
+        MockConfig.from_env.return_value = mock_config
         plan = ResearchPlan(mechanism="exercise causes fatigue", prior="0.5")
         engine.run(plan)
 
-    assert call_order == ["planner", "fetcher", "extractor", "synthesiser"]
+    assert call_order == ["planner", "search_fetcher", "article_fetcher", "extractor", "synthesiser"]
 
 
 # ---------------------------------------------------------------------------
