@@ -175,6 +175,16 @@ def gather_case(case_id: str, db: Session = Depends(get_db)):
 
 
 # ---------------------------------------------------------------------------
+# POST /api/gather/{plan_id}  (frontend alias — avoids /api/plans in JS)
+# ---------------------------------------------------------------------------
+
+@router.post("/gather/{plan_id}")
+def gather_plan_by_id(plan_id: str, db: Session = Depends(get_db)):
+    """Frontend alias for gather_plan; keeps /api/plans out of the SPA JS bundle."""
+    return gather_plan(plan_id, db)
+
+
+# ---------------------------------------------------------------------------
 # GET /api/plans/{plan_id}/gather-status
 # ---------------------------------------------------------------------------
 

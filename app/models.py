@@ -92,6 +92,7 @@ class Probe(Base):
     )
     due_date = Column(Date)
     commander_spec = Column(Text)
+    created_at = Column(TIMESTAMP(timezone=True))
 
     case = relationship("Case", back_populates="probes")
     verdicts = relationship("Verdict", back_populates="probe")

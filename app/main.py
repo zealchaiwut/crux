@@ -13,7 +13,7 @@ from app.auth import (
     verify_session_cookie,
 )
 from app.config import AUTH_SECRET, ENV
-from app.routers import cases_router, gather_router, related_cases_router, sources_router
+from app.routers import cases_router, gather_router, probes_router, related_cases_router, sources_router, verdicts_router
 
 _STATIC_DIR = Path(__file__).parent / "static"
 _INDEX_HTML = _STATIC_DIR / "index.html"
@@ -52,8 +52,10 @@ app.add_middleware(_AuthMiddleware)
 app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 app.include_router(cases_router)
 app.include_router(gather_router)
+app.include_router(probes_router)
 app.include_router(related_cases_router)
 app.include_router(sources_router)
+app.include_router(verdicts_router)
 
 
 @app.get("/healthz")
@@ -111,6 +113,11 @@ def index():
 
 @app.get("/cases")
 def cases():
+    return FileResponse(_INDEX_HTML)
+
+
+@app.get("/cases/{case_id}")
+def case_detail(case_id: str):
     return FileResponse(_INDEX_HTML)
 
 

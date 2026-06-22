@@ -228,7 +228,7 @@ function App() {
   } else if (route === 'probes') {
     main = <PlaceholderScreen title="Probes" />;
   } else if (route === 'verdicts') {
-    main = <PlaceholderScreen title="Verdicts" />;
+    main = <VerdictScreen onViewCase={(id) => handleCaseOpened(id)} />;
   } else if (route === 'case' && activeCaseId) {
     main = (
       <CaseDetailScreen

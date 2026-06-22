@@ -3,8 +3,9 @@ import json
 import uuid as _uuid_mod
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, field_validator
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
 from app import models
@@ -15,6 +16,18 @@ from app.probe import ProbeError, design_probe
 from app.sharpen import SharpenError, sharpen_problem
 from app.weigh import WeighError, rerank_plans
 from app.services.embeddings import upsert_embedding, EmbeddingError
+
+
+def _latest_probe(probes):
+    """Return the most recently created probe from a list, or None."""
+    if not probes:
+        return None
+    with_ts = [p for p in probes if p.created_at is not None]
+    without_ts = [p for p in probes if p.created_at is None]
+    if with_ts:
+        return max(with_ts, key=lambda p: p.created_at)
+    return without_ts[0] if without_ts else None
+
 
 router = APIRouter(prefix="/api")
 
@@ -39,21 +52,69 @@ def _plan_state(plan: models.Plan, probe: models.Probe | None,
     return None
 
 
+_VALID_STAGES = {"sharpened", "bake_off", "gather", "weigh", "probe", "verdict"}
+_VALID_VERDICT_PARAMS = {"confirmed", "killed", "inconclusive", "open"}
+
+
 @router.get("/cases")
-def list_cases(db: Session = Depends(get_db)):
-    cases = (
-        db.query(models.Case)
-        .options(
-            joinedload(models.Case.plans),
-            joinedload(models.Case.probes).joinedload(models.Probe.verdicts),
+def list_cases(
+    db: Session = Depends(get_db),
+    q: str | None = Query(default=None),
+    stage: str | None = Query(default=None),
+    verdict: str | None = Query(default=None),
+):
+    if stage is not None and stage not in _VALID_STAGES:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Invalid stage value {stage!r}. "
+                f"Valid values: {', '.join(sorted(_VALID_STAGES))}"
+            ),
         )
-        .order_by(models.Case.created_at.desc())
-        .all()
+
+    query = db.query(models.Case).options(
+        joinedload(models.Case.plans),
+        joinedload(models.Case.probes).joinedload(models.Probe.verdicts),
     )
+
+    if stage is not None:
+        query = query.filter(models.Case.stage == stage)
+
+    if q is not None:
+        keyword = f"%{q}%"
+        matching_case_ids = (
+            db.query(models.Plan.case_id)
+            .filter(models.Plan.mechanism.ilike(keyword))
+        )
+        query = query.filter(
+            or_(
+                models.Case.sharpened.ilike(keyword),
+                models.Case.id.in_(matching_case_ids),
+            )
+        )
+
+    if verdict is not None:
+        if verdict == "open":
+            # No logged verdict: case has no probe or probe has no verdicts
+            cases_with_verdict = (
+                db.query(models.Verdict.probe_id)
+                .join(models.Probe, models.Probe.id == models.Verdict.probe_id)
+                .with_entities(models.Probe.case_id)
+            )
+            query = query.filter(models.Case.id.notin_(cases_with_verdict))
+        elif verdict in {"confirmed", "killed", "inconclusive"}:
+            cases_with_outcome = (
+                db.query(models.Probe.case_id)
+                .join(models.Verdict, models.Verdict.probe_id == models.Probe.id)
+                .filter(models.Verdict.outcome == verdict)
+            )
+            query = query.filter(models.Case.id.in_(cases_with_outcome))
+
+    cases = query.order_by(models.Case.created_at.desc()).all()
 
     result = []
     for case in cases:
-        probe = case.probes[0] if case.probes else None
+        probe = _latest_probe(case.probes)
         verdict_obj = (probe.verdicts[0] if probe and probe.verdicts else None)
 
         if verdict_obj:
@@ -109,7 +170,7 @@ def get_case(case_id: str, db: Session = Depends(get_db)):
     if case is None:
         raise HTTPException(status_code=404, detail="Case not found")
 
-    probe = case.probes[0] if case.probes else None
+    probe = _latest_probe(case.probes)
     verdict_obj = (probe.verdicts[0] if probe and probe.verdicts else None)
 
     not_investigating = []
@@ -182,6 +243,57 @@ def get_case(case_id: str, db: Session = Depends(get_db)):
         "weigh_context": case.weigh_context or "",
         "plans": plans_out,
         "probe": probe_out,
+    }
+
+
+class PatchCaseRequest(BaseModel):
+    sharpened: str | None = None
+    not_investigating: list[str] | None = None
+
+    @field_validator("sharpened")
+    @classmethod
+    def sharpened_not_empty(cls, v: str | None) -> str | None:
+        if v is not None and not v.strip():
+            raise ValueError("sharpened must not be empty if provided")
+        return v
+
+    @field_validator("not_investigating")
+    @classmethod
+    def items_not_empty(cls, v: list[str] | None) -> list[str] | None:
+        if v is not None:
+            for item in v:
+                if not item or not item.strip():
+                    raise ValueError("not_investigating items must be non-empty strings")
+        return v
+
+
+@router.patch("/cases/{case_id}")
+def patch_case(case_id: str, body: PatchCaseRequest, db: Session = Depends(get_db)):
+    case = db.query(models.Case).filter(models.Case.id == case_id).first()
+    if case is None:
+        raise HTTPException(status_code=404, detail="Case not found")
+    if case.stage == "verdict":
+        raise HTTPException(
+            status_code=409,
+            detail="Cannot edit a case in verdict stage; it is immutable.",
+        )
+    if body.sharpened is not None:
+        case.sharpened = body.sharpened
+    if body.not_investigating is not None:
+        case.not_investigating = json.dumps(body.not_investigating)
+    db.commit()
+    db.refresh(case)
+    not_investigating_out = []
+    if case.not_investigating:
+        try:
+            not_investigating_out = json.loads(case.not_investigating)
+        except (ValueError, TypeError):
+            not_investigating_out = []
+    return {
+        "id": case.id,
+        "sharpened": case.sharpened or "",
+        "not_investigating": not_investigating_out,
+        "stage": _STAGE_ORDER.get(case.stage, 0),
     }
 
 
@@ -389,18 +501,20 @@ async def design_probe_for_case(case_id: str, db: Session = Depends(get_db)):
     if not plans:
         raise HTTPException(status_code=422, detail="Case has no plans to design a probe for")
 
-    if case.probes:
-        probe = case.probes[0]
-        return {
-            "id": probe.id,
-            "type": probe.type,
-            "target_metric": probe.target_metric or "",
-            "cost": probe.cost or "",
-            "time": probe.time or "",
-            "note": probe.note or "",
-            "status": probe.status,
-            "commander_spec": probe.commander_spec,
-        }
+    existing = _latest_probe(case.probes)
+    if existing:
+        existing_verdict = existing.verdicts[0] if existing.verdicts else None
+        if not (existing_verdict and existing_verdict.outcome == "inconclusive"):
+            return {
+                "id": existing.id,
+                "type": existing.type,
+                "target_metric": existing.target_metric or "",
+                "cost": existing.cost or "",
+                "time": existing.time or "",
+                "note": existing.note or "",
+                "status": existing.status,
+                "commander_spec": existing.commander_spec,
+            }
 
     plans_input = [
         {
@@ -419,6 +533,7 @@ async def design_probe_for_case(case_id: str, db: Session = Depends(get_db)):
     except ProbeError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 
+    is_reprobe = existing is not None
     probe = models.Probe(
         id=str(_uuid_mod.uuid4()),
         case_id=case.id,
@@ -428,9 +543,11 @@ async def design_probe_for_case(case_id: str, db: Session = Depends(get_db)):
         time=result["time"],
         note=result["note"],
         status="designed",
+        created_at=datetime.now(tz=timezone.utc),
     )
     db.add(probe)
-    case.stage = "probe"
+    if not is_reprobe:
+        case.stage = "probe"
     db.commit()
     db.refresh(probe)
 
@@ -479,7 +596,7 @@ def log_verdict(case_id: str, body: LogVerdictRequest, db: Session = Depends(get
     if case is None:
         raise HTTPException(status_code=404, detail="Case not found")
 
-    probe = case.probes[0] if case.probes else None
+    probe = _latest_probe(case.probes)
     if probe is None:
         raise HTTPException(status_code=422, detail="Case has no probe; cannot log a verdict")
 
@@ -533,7 +650,7 @@ async def generate_probe_commander_spec(
     if case is None:
         raise HTTPException(status_code=404, detail="Case not found")
 
-    probe = case.probes[0] if case.probes else None
+    probe = _latest_probe(case.probes)
     if probe is None:
         raise HTTPException(status_code=422, detail="Case has no probe; design one first")
 

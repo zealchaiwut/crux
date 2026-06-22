@@ -85,8 +85,9 @@ See `.env.example` for all variables.
 ## API endpoints
 
 ```
-GET  /api/cases                        # list all cases
+GET  /api/cases                        # list all cases; ?q=<keyword> ?stage=<stage> ?verdict=confirmed|killed|inconclusive|open
 GET  /api/cases/{case_id}              # full case with plans, sources, probe, verdict
+PATCH /api/cases/{case_id}            # edit sharpened statement and/or not-investigating list (locked at verdict stage)
 POST /api/cases                        # create a case
 POST /api/cases/sharpen                # sharpen a raw problem statement
 POST /api/cases/{case_id}/bake-off     # generate competing plans A/B/C
@@ -104,6 +105,10 @@ GET  /api/plans/{plan_id}/gather-status
 GET  /api/cases/{case_id}/related          # list prior cases ranked by similarity
 POST /api/cases/related-text               # find related cases by raw text (pre-case-creation)
 POST /api/cases/{case_id}/probe/commander-spec  # generate/cache commander spec; ?force=true regenerates
+
+PATCH /api/probes/{probe_id}/status        # update probe status; only designed→running is supported
+
+GET  /api/verdicts                         # list all verdicts; ?outcome=confirmed|killed|inconclusive  ?q=keyword
 ```
 
 ## Running tests

@@ -12,6 +12,18 @@ sprint finishes. Dated per-sprint files live under [docs/changelog/](docs/change
 - #32: Clarify httpx timeout semantics in commander spec generation
 - #31: Clarify httpx timeout semantics in commander spec generation
 
+## Sprint 6 (2026-06-21)
+
+- #64: Add search and filter params to GET /api/cases
+- #65: Add search input and filter chips to Cases list
+- #66: Allow editing case sharpened statement and not-investigating list
+
+## Sprint 5 (2026-06-20)
+
+- #48: Add 'Mark as Running' transition for Probes
+- #51: Add GET /api/verdicts list endpoint
+- #52: Build Verdicts list screen with search, filter, and grouping
+
 ## Sprint 4 (2026-06-19)
 
 - #26: Generate Commander Spec for Prototype Probes via Claude API
