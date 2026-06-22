@@ -12,7 +12,11 @@ from sqlalchemy.orm import Session, sessionmaker
 _DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
 if _DATABASE_URL:
-    engine = create_engine(_DATABASE_URL)
+    # pool_pre_ping revalidates a pooled connection before use; pool_recycle
+    # drops connections older than 5 min. Both guard against Neon (serverless
+    # Postgres) closing idle connections during slow Claude calls, which
+    # otherwise surfaces as "SSL connection has been closed unexpectedly".
+    engine = create_engine(_DATABASE_URL, pool_pre_ping=True, pool_recycle=300)
 else:
     engine = None
 

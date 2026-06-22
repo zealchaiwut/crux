@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 # Load .env before importing app.config (which reads env at import time).
@@ -49,9 +50,14 @@ _LOGIN_PAGE = """\
 _UNPROTECTED = {"/login"}
 
 
+# Auth disabled for single-user local use. Set CRUX_REQUIRE_AUTH=1 to re-enable
+# the session-cookie gate (login page + AUTH_SECRET password).
+_REQUIRE_AUTH = os.environ.get("CRUX_REQUIRE_AUTH", "") == "1"
+
+
 class _AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-        if request.url.path in _UNPROTECTED:
+        if not _REQUIRE_AUTH or request.url.path in _UNPROTECTED:
             return await call_next(request)
         token = request.cookies.get("session", "")
         if not token or not verify_session_cookie(token, AUTH_SECRET):

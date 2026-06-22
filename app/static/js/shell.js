@@ -48,11 +48,6 @@ function NavItem({ icon, label, count, active, onClick }) {
 }
 
 function Sidebar({ route, setRoute, counts, theme, onToggleTheme, onOpenSettings }) {
-  const projects = [
-    { id: 'commander', name: 'commander', accent: 'var(--blue)' },
-    { id: 'perf-coach', name: 'perf-coach', accent: 'var(--green)' },
-    { id: 'crux', name: 'crux', accent: 'var(--crux)', active: true },
-  ];
   return (
     <aside style={{
       width: 208, flex: 'none',
@@ -72,26 +67,6 @@ function Sidebar({ route, setRoute, counts, theme, onToggleTheme, onOpenSettings
           active={route === 'verdicts'} onClick={() => setRoute('verdicts')} />
       </div>
 
-      <div className="mono" style={{
-        fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)',
-        margin: 'var(--space-5) 6px var(--space-2)'
-      }}>PROJECTS</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {projects.map((p) => (
-          <div key={p.id} style={{
-            display: 'flex', alignItems: 'center', gap: 9, padding: '6px 10px',
-            borderRadius: 'var(--radius-sm)',
-            background: p.active ? 'var(--surface-2)' : 'transparent'
-          }}>
-            <span style={{ width: 7, height: 7, borderRadius: '50%', background: p.accent }}></span>
-            <span style={{
-              fontSize: 'var(--text-base)',
-              color: p.active ? 'var(--text)' : 'var(--text-muted)',
-              fontWeight: p.active ? 600 : 400
-            }}>{p.name}</span>
-          </div>
-        ))}
-      </div>
 
       <div style={{ flex: 1 }}></div>
 
@@ -428,3 +403,7 @@ function App() {
     </div>
   );
 }
+
+// Mount — shell.js loads last (after cases.js + verdicts.js), so App and every
+// screen component it references are in scope here.
+ReactDOM.createRoot(document.getElementById('app')).render(<App />);
