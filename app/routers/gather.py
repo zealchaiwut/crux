@@ -1,11 +1,13 @@
 """Gather API router — Stage 2 research loop automation.
 
 POST /api/plans/{plan_id}/gather          — run research loop for one plan
+POST /api/plans/{plan_id}/gather/suggest  — return ranked candidates without persisting
 POST /api/cases/{case_id}/gather          — trigger research loop for all plans in a case
 GET  /api/plans/{plan_id}/gather-status   — current gather status for a plan
 """
 from __future__ import annotations
 
+import logging
 import uuid as _uuid_mod
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -20,6 +22,11 @@ from app.services.research_orchestrator import (
     make_engine,
     run_research_for_plan,
 )
+
+logger = logging.getLogger(__name__)
+
+_VALID_KINDS = frozenset({"book", "article", "youtube"})
+_MAX_SUGGEST_CANDIDATES = 5
 
 router = APIRouter(prefix="/api")
 
@@ -56,6 +63,95 @@ def _persist_sources(plan_id: str, sources, db: Session) -> list[models.Source]:
         saved.append(row)
     db.commit()
     return saved
+
+
+# ---------------------------------------------------------------------------
+# Suggest helpers
+# ---------------------------------------------------------------------------
+
+def _build_suggest_candidate(source, score: float) -> dict | None:
+    """Validate a Source and build a candidate dict; logs warning and returns None if invalid."""
+    kind = (getattr(source, "kind", "") or "")
+    title = (getattr(source, "title", "") or "").strip()
+    url = (getattr(source, "url", "") or "").strip()
+    claim = (getattr(source, "claim", "") or "").strip()
+    citation = (getattr(source, "citation", "") or "").strip()
+
+    if kind not in _VALID_KINDS:
+        logger.warning(
+            "suggest: dropping candidate — invalid kind=%r (url=%r)", kind, url
+        )
+        return None
+    if not title:
+        logger.warning(
+            "suggest: dropping candidate — empty title (kind=%r, url=%r)", kind, url
+        )
+        return None
+    if not url:
+        logger.warning(
+            "suggest: dropping candidate — empty url (kind=%r)", kind
+        )
+        return None
+    if not claim:
+        logger.warning(
+            "suggest: dropping candidate — empty claim (kind=%r, url=%r)", kind, url
+        )
+        return None
+    if not citation:
+        logger.warning(
+            "suggest: dropping candidate — empty citation (kind=%r, url=%r)", kind, url
+        )
+        return None
+
+    return {
+        "candidate_id": str(_uuid_mod.uuid4()),
+        "kind": kind,
+        "title": title,
+        "url": url,
+        "claim": claim,
+        "citation": citation,
+        "relevance_score": score,
+    }
+
+
+# ---------------------------------------------------------------------------
+# POST /api/plans/{plan_id}/gather/suggest
+# ---------------------------------------------------------------------------
+
+@router.post("/plans/{plan_id}/gather/suggest")
+def suggest_plan_sources(plan_id: str, db: Session = Depends(get_db)):
+    """Run the research loop and return up to 5 ranked candidates without persisting them."""
+    plan = (
+        db.query(models.Plan)
+        .filter(models.Plan.id == plan_id)
+        .first()
+    )
+    if plan is None:
+        raise HTTPException(status_code=404, detail="Plan not found")
+
+    engine = make_engine(RESEARCH_ENGINE)
+    try:
+        result_sources = run_research_for_plan(
+            plan_mechanism=plan.mechanism or "",
+            plan_prior=plan.prior or "",
+            engine=engine,
+        )
+    except OrchestratorError as exc:
+        logger.warning("suggest: research pipeline failed for plan %s: %s", plan_id, exc)
+        return {"candidates": []}
+
+    top_sources = result_sources[:_MAX_SUGGEST_CANDIDATES]
+
+    candidates = []
+    for i, src in enumerate(top_sources):
+        score = round(1.0 - i * 0.1, 1)
+        candidate = _build_suggest_candidate(src, score)
+        if candidate is not None:
+            candidates.append(candidate)
+
+    candidates.sort(key=lambda c: c["relevance_score"], reverse=True)
+
+    return {"candidates": candidates}
 
 
 # ---------------------------------------------------------------------------
