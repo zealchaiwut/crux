@@ -1735,7 +1735,7 @@ function CaseDetailScreen({ caseId, onBack, onNavigateToCase, theme, onToggleThe
           );
         })()}
 
-        {/* WEIGH — gather (2) and weigh (3) only */}
+        {/* WEIGH — at gather (2) and weigh (3) only; absent at probe/verdict */}
         {(stage === 2 || stage === 3) && (
           <>
             <SectionLabel>WEIGH · RE-RANK AGAINST YOUR DATA</SectionLabel>
