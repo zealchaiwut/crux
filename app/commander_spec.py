@@ -89,7 +89,8 @@ async def generate_commander_spec(probe_data: dict) -> str:
     }
 
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        # connect 10s (routing failure fast-fail), read 30s (512-token response), write/pool use 5s (small JSON payload, single connection)
+        async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=10.0, read=30.0, write=5.0, pool=5.0)) as client:
             resp = await client.post(_API_URL, json=payload, headers=headers)
         resp.raise_for_status()
     except httpx.HTTPStatusError as exc:

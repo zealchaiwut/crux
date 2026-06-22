@@ -14,7 +14,7 @@ from sqlalchemy import (
     Text,
 )
 from sqlalchemy.orm import declarative_base, relationship
-from sqlalchemy.types import TIMESTAMP, String
+from sqlalchemy.types import TIMESTAMP, String, JSON
 
 Base = declarative_base()
 
@@ -108,3 +108,14 @@ class Verdict(Base):
     decided_at = Column(TIMESTAMP(timezone=True))
 
     probe = relationship("Probe", back_populates="verdicts")
+
+
+class CaseEmbedding(Base):
+    __tablename__ = "case_embedding"
+
+    case_id = Column(String(36), ForeignKey("case.id", ondelete="CASCADE"), primary_key=True)
+    embedding = Column(Text, nullable=False)  # JSON-serialized float array
+    model_version = Column(String(128), nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False)
+
+    case = relationship("Case")

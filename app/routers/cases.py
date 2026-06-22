@@ -15,6 +15,7 @@ from app.db import get_db
 from app.probe import ProbeError, design_probe
 from app.sharpen import SharpenError, sharpen_problem
 from app.weigh import WeighError, rerank_plans
+from app.services.embeddings import upsert_embedding, EmbeddingError
 
 
 def _latest_probe(probes):
@@ -342,6 +343,12 @@ def create_case(body: CreateCaseRequest, db: Session = Depends(get_db)):
     db.add(case)
     db.commit()
     db.refresh(case)
+
+    try:
+        upsert_embedding(case.id, case.sharpened or case.raw_problem, db)
+    except EmbeddingError:
+        pass  # embedding failure must not fail case creation
+
     return {"id": case.id}
 
 
@@ -661,6 +668,11 @@ async def generate_probe_commander_spec(
         return {"commander_spec": probe.commander_spec}
 
     plans = sorted(case.plans, key=lambda p: p.current_rank or 99)
+    if not plans:
+        raise HTTPException(
+            status_code=422,
+            detail="At least one plan is required for spec generation.",
+        )
     plans_input = [
         {
             "label": p.label,

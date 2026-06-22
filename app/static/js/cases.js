@@ -6,6 +6,8 @@
 const STAGE_NAMES = ['Sharpen', 'Bake-off', 'Gather', 'Weigh', 'Probe'];
 const STAGE_COLORS = ['var(--st-1)', 'var(--st-2)', 'var(--st-3)', 'var(--st-4)', 'var(--st-5)'];
 
+const STATES = { IDLE: 'idle', COPIED: 'copied', LOADING: 'loading', ERROR: 'error' };
+
 function Pill({ state }) {
   const labels = {
     confirmed:    'confirmed',
@@ -692,8 +694,9 @@ async function _postProbe(caseId) {
 
 function CommanderSpecModal({ caseId, initialSpec, onClose, onSpecUpdated }) {
   const [spec, setSpec] = React.useState(initialSpec || null);
-  const [copyState, setCopyState] = React.useState('idle'); // 'idle'|'copied'
-  const [regenState, setRegenState] = React.useState('idle'); // 'idle'|'loading'|'error'
+  const [copyState, setCopyState] = React.useState(STATES.IDLE);
+  const [copyError, setCopyError] = React.useState('');
+  const [regenState, setRegenState] = React.useState(STATES.IDLE);
   const [regenError, setRegenError] = React.useState('');
 
   React.useEffect(() => {
@@ -703,7 +706,7 @@ function CommanderSpecModal({ caseId, initialSpec, onClose, onSpecUpdated }) {
   }, [onClose]);
 
   async function handleRegenerate() {
-    setRegenState('loading');
+    setRegenState(STATES.LOADING);
     setRegenError('');
     try {
       const resp = await fetch(`/api/cases/${caseId}/probe/commander-spec?force=true`, { method: 'POST' });
@@ -713,31 +716,40 @@ function CommanderSpecModal({ caseId, initialSpec, onClose, onSpecUpdated }) {
       }
       const data = await resp.json();
       setSpec(data.commander_spec);
-      setRegenState('idle');
+      setRegenState(STATES.IDLE);
       if (onSpecUpdated) onSpecUpdated(data.commander_spec);
     } catch (err) {
       setRegenError(err.message || 'Regeneration failed. Please try again.');
-      setRegenState('idle');
+      setRegenState(STATES.IDLE);
     }
   }
 
   async function handleCopy() {
     if (!spec) return;
+    setCopyError('');
     try {
       await navigator.clipboard.writeText(spec);
+      setCopyState(STATES.COPIED);
+      setTimeout(() => setCopyState(STATES.IDLE), 2000);
     } catch (_) {
       const el = document.createElement('textarea');
       el.value = spec;
       document.body.appendChild(el);
       el.select();
-      document.execCommand('copy');
-      document.body.removeChild(el);
+      try {
+        const ok = document.execCommand('copy');
+        document.body.removeChild(el);
+        if (!ok) throw new Error('execCommand returned false');
+        setCopyState(STATES.COPIED);
+        setTimeout(() => setCopyState(STATES.IDLE), 2000);
+      } catch (err) {
+        document.body.removeChild(el);
+        setCopyError('Copy failed. Please copy the text manually.');
+      }
     }
-    setCopyState('copied');
-    setTimeout(() => setCopyState('idle'), 2000);
   }
 
-  const isRegening = regenState === 'loading';
+  const isRegening = regenState === STATES.LOADING;
 
   return (
     <div
@@ -782,6 +794,11 @@ function CommanderSpecModal({ caseId, initialSpec, onClose, onSpecUpdated }) {
             {regenError}
           </p>
         )}
+        {copyError && (
+          <p role="alert" style={{ fontSize: 'var(--text-sm)', color: 'var(--red)', marginBottom: 'var(--space-3)', flexShrink: 0 }}>
+            {copyError}
+          </p>
+        )}
 
         {/* Actions */}
         <div style={{ display: 'flex', gap: 'var(--space-3)', flexShrink: 0 }}>
@@ -792,8 +809,8 @@ function CommanderSpecModal({ caseId, initialSpec, onClose, onSpecUpdated }) {
             style={{ flex: 1 }}
             aria-label="Copy spec to clipboard"
           >
-            <i className={`ti ${copyState === 'copied' ? 'ti-check' : 'ti-clipboard'}`} aria-hidden="true"></i>
-            {copyState === 'copied' ? ' Copied!' : ' Copy to clipboard'}
+            <i className={`ti ${copyState === STATES.COPIED ? 'ti-check' : 'ti-clipboard'}`} aria-hidden="true"></i>
+            {copyState === STATES.COPIED ? ' Copied!' : ' Copy to clipboard'}
           </button>
           <button
             className="btn"

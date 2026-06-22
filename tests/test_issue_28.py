@@ -27,6 +27,12 @@ import pytest
 
 os.environ.setdefault("AUTH_SECRET", "test_auth_secret_12345678901")
 
+# Fixed vectors used for embedding-based similarity tests (issue #68).
+# _TEST_VECTOR is used for the query case and "similar" candidates.
+# _DISSIMILAR_VECTOR is the opposite direction; cosine similarity with _TEST_VECTOR ≈ -1.0.
+_TEST_VECTOR = [0.1] * 256
+_DISSIMILAR_VECTOR = [-0.1] * 256
+
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
@@ -84,8 +90,9 @@ def _seed_case_with_verdict(
     mechanisms: list[str],
     outcome: str = "confirmed",
     target_metric: str = "blood pressure",
+    embedding_vector: list | None = None,
 ) -> tuple:
-    """Seed a Case with plans, a probe, and a Verdict."""
+    """Seed a Case with plans, a probe, a Verdict, and a pre-computed embedding."""
     import datetime
     from app import models
 
@@ -131,14 +138,27 @@ def _seed_case_with_verdict(
         decided_at=datetime.datetime.now(tz=datetime.timezone.utc),
     )
     session.add(verdict)
+
+    # Pre-compute embedding so find_related_cases (issue #68) can use this case.
+    vector = embedding_vector if embedding_vector is not None else _TEST_VECTOR
+    emb = models.CaseEmbedding(
+        case_id=c.id,
+        embedding=json.dumps(vector),
+        model_version="claude-haiku-4-5-20251001",
+        created_at=datetime.datetime.now(tz=datetime.timezone.utc),
+    )
+    session.add(emb)
+
     session.commit()
     return c, probe, verdict
 
 
 def _seed_case_no_verdict(
-    session, sharpened: str, mechanisms: list[str]
+    session, sharpened: str, mechanisms: list[str],
+    embedding_vector: list | None = None,
 ):
-    """Seed a Case with plans but no probe or verdict (query target)."""
+    """Seed a Case with plans, an embedding row, but no probe or verdict (query target)."""
+    import datetime
     from app import models
 
     c = models.Case(
@@ -163,6 +183,17 @@ def _seed_case_no_verdict(
             current_rank=i + 1,
         )
         session.add(plan)
+
+    # Pre-compute embedding so find_related_cases (issue #68) can query from this case.
+    vector = embedding_vector if embedding_vector is not None else _TEST_VECTOR
+    emb = models.CaseEmbedding(
+        case_id=c.id,
+        embedding=json.dumps(vector),
+        model_version="claude-haiku-4-5-20251001",
+        created_at=datetime.datetime.now(tz=datetime.timezone.utc),
+    )
+    session.add(emb)
+
     session.commit()
     return c
 
@@ -443,6 +474,8 @@ def test_topically_similar_case_ranked_above_unrelated(
             "to muscles."
         ],
         outcome="confirmed",
+        # Same vector as query → cosine similarity = 1.0
+        embedding_vector=_TEST_VECTOR,
     )
     _seed_case_with_verdict(
         db_session,
@@ -454,6 +487,8 @@ def test_topically_similar_case_ranked_above_unrelated(
             "Marketing spend cut reduces new pipeline inflow acquisition."
         ],
         outcome="killed",
+        # Opposite vector → cosine similarity = -1.0 (below threshold)
+        embedding_vector=_DISSIMILAR_VECTOR,
     )
     query_case = _seed_case_no_verdict(
         db_session,
