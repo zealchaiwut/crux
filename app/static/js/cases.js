@@ -517,6 +517,259 @@ function PriorLearnings({ matches, onNavigate }) {
 }
 
 // ---------------------------------------------------------------------------
+// SuggestPanel — pick-to-attach UI for AI-ranked source candidates (issue #84)
+// States: idle → loading → results | empty | error
+// ---------------------------------------------------------------------------
+
+function SuggestPanel({ planId, onAttached }) {
+  const [state, setState] = React.useState('idle'); // idle | loading | results | empty | error
+  const [candidates, setCandidates] = React.useState([]);
+  const [selected, setSelected] = React.useState(new Set());
+  const [addState, setAddState] = React.useState('idle'); // idle | loading | error
+  const [addError, setAddError] = React.useState('');
+
+  const iconMap = { book: 'ti-book', article: 'ti-article', youtube: 'ti-brand-youtube' };
+
+  async function handleSuggest() {
+    setState('loading');
+    setAddError('');
+    try {
+      const resp = await fetch(`/api/plans/${planId}/gather/suggest`, { method: 'POST' });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        setState('error');
+        return;
+      }
+      const cands = data.candidates || [];
+      setCandidates(cands);
+      setSelected(new Set());
+      setState(cands.length === 0 ? 'empty' : 'results');
+    } catch {
+      setState('error');
+    }
+  }
+
+  function toggleOne(id) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    if (selected.size === candidates.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(candidates.map((c) => c.candidate_id)));
+    }
+  }
+
+  async function handleAddSelected() {
+    const chosen = candidates.filter((c) => selected.has(c.candidate_id));
+    if (chosen.length === 0) return;
+    setAddState('loading');
+    setAddError('');
+    try {
+      const resp = await fetch('/api/sources/batch', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          plan_id: planId,
+          sources: chosen.map((c) => ({
+            kind: c.kind,
+            title: c.title,
+            url: c.url,
+            claim: c.claim,
+            citation: c.citation,
+          })),
+        }),
+      });
+      if (!resp.ok) {
+        const errData = await resp.json().catch(() => ({}));
+        setAddError(errData.detail || `Could not attach sources (${resp.status})`);
+        setAddState('error');
+        return;
+      }
+      setAddState('idle');
+      setCandidates([]);
+      setSelected(new Set());
+      setState('idle');
+      if (onAttached) onAttached();
+    } catch (err) {
+      setAddError(err.message || 'Network error. Please try again.');
+      setAddState('error');
+    }
+  }
+
+  const allSelected = candidates.length > 0 && selected.size === candidates.length;
+  const noneSelected = selected.size === 0;
+  const adding = addState === 'loading';
+
+  if (state === 'idle') {
+    return (
+      <button
+        className="btn btn-sm"
+        onClick={handleSuggest}
+        style={{ padding: '3px 9px', fontSize: 'var(--text-2xs)' }}
+        aria-label="Suggest sources for this plan"
+      >
+        <i className="ti ti-sparkles" aria-hidden="true"></i> Suggest sources
+      </button>
+    );
+  }
+
+  if (state === 'loading') {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', color: 'var(--text-muted)', fontSize: 'var(--text-sm)', padding: 'var(--space-2) 0' }}>
+        <i className="ti ti-loader-2 crux-spin" aria-hidden="true" style={{ color: 'var(--crux)' }}></i>
+        Suggesting sources…
+      </div>
+    );
+  }
+
+  if (state === 'error') {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 'var(--text-sm)', color: 'var(--red)' }}>
+          <i className="ti ti-alert-circle" aria-hidden="true"></i> Suggest failed.
+        </span>
+        <button className="btn btn-sm" onClick={handleSuggest} style={{ fontSize: 'var(--text-2xs)' }}>
+          <i className="ti ti-refresh" aria-hidden="true"></i> Retry
+        </button>
+        <button className="btn btn-sm" onClick={() => setState('idle')} style={{ fontSize: 'var(--text-2xs)' }}>
+          Cancel
+        </button>
+      </div>
+    );
+  }
+
+  if (state === 'empty') {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-sub)' }}>
+          No sources found — add one manually.
+        </span>
+        <button className="btn btn-sm" onClick={() => setState('idle')} style={{ fontSize: 'var(--text-2xs)', padding: '2px 7px' }}>
+          Dismiss
+        </button>
+      </div>
+    );
+  }
+
+  // results state
+  return (
+    <div style={{ marginTop: 'var(--space-3)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
+      {/* Header bar: select-all + count + add button */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', padding: 'var(--space-2) var(--space-3)', background: 'var(--surface-2)', borderBottom: '1px solid var(--border)', flexWrap: 'wrap' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', cursor: 'pointer', fontSize: 'var(--text-sm)', color: 'var(--text-muted)', userSelect: 'none' }}>
+          <input
+            type="checkbox"
+            checked={allSelected}
+            onChange={toggleAll}
+            aria-label="Select all candidates"
+            style={{ accentColor: 'var(--crux)', width: 14, height: 14, cursor: 'pointer' }}
+          />
+          Select all
+        </label>
+        <span className="mono" style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-sub)', flex: 1 }}>
+          {selected.size} of {candidates.length} selected
+        </span>
+        <button
+          className="btn btn-sm btn-crux"
+          onClick={handleAddSelected}
+          disabled={noneSelected || adding}
+          aria-busy={adding}
+          style={{ fontSize: 'var(--text-2xs)', padding: '3px 10px', opacity: noneSelected || adding ? 0.5 : 1 }}
+        >
+          {adding
+            ? <><i className="ti ti-loader-2 crux-spin" aria-hidden="true"></i> Adding…</>
+            : <><i className="ti ti-paperclip" aria-hidden="true"></i> Add selected</>
+          }
+        </button>
+        <button
+          className="btn btn-sm"
+          onClick={() => setState('idle')}
+          disabled={adding}
+          aria-label="Dismiss suggest panel"
+          style={{ fontSize: 'var(--text-2xs)', padding: '3px 7px' }}
+        >
+          <i className="ti ti-x" aria-hidden="true"></i>
+        </button>
+      </div>
+
+      {/* Error from batch add */}
+      {addState === 'error' && (
+        <div role="alert" style={{ background: 'var(--red-bg)', borderBottom: '1px solid var(--border)', padding: 'var(--space-2) var(--space-3)', fontSize: 'var(--text-sm)', color: 'var(--red)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+          <i className="ti ti-alert-circle" aria-hidden="true"></i>
+          {addError || 'Could not attach sources. Your selection is preserved.'}
+        </div>
+      )}
+
+      {/* Candidate list */}
+      <div>
+        {candidates.map((c, i) => {
+          const isChecked = selected.has(c.candidate_id);
+          const icon = iconMap[c.kind] || 'ti-file';
+          return (
+            <label
+              key={c.candidate_id}
+              style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 'var(--space-3)',
+                padding: 'var(--space-3)',
+                cursor: 'pointer',
+                background: isChecked ? 'var(--crux-tint)' : 'var(--surface)',
+                borderTop: i > 0 ? '1px solid var(--border)' : 'none',
+                transition: 'background var(--speed)',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={isChecked}
+                onChange={() => toggleOne(c.candidate_id)}
+                aria-label={`Select candidate: ${c.title}`}
+                style={{ accentColor: 'var(--crux)', width: 14, height: 14, marginTop: 2, flex: 'none', cursor: 'pointer' }}
+              />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-1)', flexWrap: 'wrap' }}>
+                  <span className={`src ${c.kind}`} style={{ flex: 'none' }}>
+                    <i className={`ti ${icon}`} aria-hidden="true"></i>
+                    {c.kind}
+                  </span>
+                  {c.url ? (
+                    <a
+                      href={c.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--crux)', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 320 }}
+                      title={c.title}
+                    >
+                      {c.title}
+                    </a>
+                  ) : (
+                    <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text)' }}>{c.title}</span>
+                  )}
+                </div>
+                <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', margin: '0 0 var(--space-1)', lineHeight: 1.45 }}>
+                  {c.claim}
+                </p>
+                <p className="mono" style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-sub)', margin: 0 }}>
+                  {c.citation}
+                </p>
+              </div>
+            </label>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // PlanCard — Stage 2 gather states: idle | running | done | empty | error (AC5-AC8)
 // ---------------------------------------------------------------------------
 
@@ -537,6 +790,10 @@ function PlanCard({ planId, label, name, mechanism, prior, sources: initialSourc
 
   function handleAdded(newSource) {
     setSources((prev) => [...prev, newSource]);
+  }
+
+  function handleSuggestAttached() {
+    if (onGatherDone) onGatherDone();
   }
 
   async function triggerGather() {
@@ -601,18 +858,21 @@ function PlanCard({ planId, label, name, mechanism, prior, sources: initialSourc
 
       {/* Sources section — exposes all states for AC5-AC8 */}
       <div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-2)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-2)', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
           <span className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)' }}>
             SOURCES {sources.length > 0 && `· ${sources.length}`}
           </span>
-          {/* AC8: manual Add source button always visible */}
-          <button
-            className="btn btn-sm"
-            onClick={() => setShowForm(true)}
-            style={{ padding: '3px 9px', fontSize: 'var(--text-2xs)' }}
-          >
-            <i className="ti ti-plus" aria-hidden="true"></i> Add source
-          </button>
+          {/* AC10: manual Add source + AC1: Suggest sources — both always visible */}
+          <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', flexWrap: 'wrap' }}>
+            <SuggestPanel planId={planId} onAttached={handleSuggestAttached} />
+            <button
+              className="btn btn-sm"
+              onClick={() => setShowForm(true)}
+              style={{ padding: '3px 9px', fontSize: 'var(--text-2xs)' }}
+            >
+              <i className="ti ti-plus" aria-hidden="true"></i> Add source
+            </button>
+          </div>
         </div>
 
         {/* AC5: Progress state — spinner while research loop runs */}
