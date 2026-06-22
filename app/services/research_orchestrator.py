@@ -50,13 +50,19 @@ class _CustomEngine:
         self._anthropic_client = anthropic_client
 
     def run(self, plan: ResearchPlan) -> list[Source]:
+        import re as _re
         from app.research import (
             LLMQueryPlanner,
-            StubFetcher,
+            WebSearchFetcher,
+            ArticleReaderFetcher,
+            YouTubeTranscriptFetcher,
+            DuckDuckGoSearchProvider,
             ClaimExtractor,
             CitationSynthesiser,
             ResearchConfig,
         )
+        from app.research.types import SourceDocument
+
         client = self._anthropic_client
         if client is None:
             from app.claude_cli import ClaudeCLIClient
@@ -72,7 +78,6 @@ class _CustomEngine:
 
         config = ResearchConfig.from_env()
         planner = LLMQueryPlanner(llm=_llm_callable)
-        fetcher = StubFetcher()
         extractor = ClaimExtractor()
         synthesiser = CitationSynthesiser(client=client)
 
@@ -80,33 +85,64 @@ class _CustomEngine:
         if not queries:
             return []
 
-        candidates: list[dict] = []
-        from app.research.types import SourceDocument
-        for query in queries[: config.max_fetches]:
+        search_fetcher = WebSearchFetcher(
+            provider=DuckDuckGoSearchProvider(),
+            budget=len(queries),
+            timeout=10.0,
+        )
+        article_fetcher = ArticleReaderFetcher(budget=config.max_fetches, timeout=10.0)
+        yt_fetcher = YouTubeTranscriptFetcher(budget=config.max_fetches, timeout=10.0)
+
+        _YT_RE = _re.compile(r"(?:youtube\.com|youtu\.be)")
+
+        # Discovery: web-search each query to get candidate URLs
+        all_candidates = []
+        for query in queries:
             try:
-                fetch_result = fetcher.fetch(query)
-                doc = SourceDocument(
-                    kind="article",
-                    title=query.query,
-                    url=f"https://example.com/{_uuid_mod.uuid4().hex[:8]}",
-                    text=fetch_result.content,
+                results = search_fetcher.fetch(query.query)
+                all_candidates.extend(results)
+            except Exception as exc:
+                logger.warning("CustomEngine: search failed for query %r: %s", query.query, exc)
+
+        # Cap total read-fetches by config
+        candidates_to_read = all_candidates[: config.max_fetches]
+
+        # Read step: fetch each candidate; skip on failure
+        fetched_candidates: list[dict] = []
+        for candidate in candidates_to_read:
+            url = candidate.url
+            is_yt = bool(_YT_RE.search(url))
+            try:
+                if is_yt:
+                    doc = yt_fetcher.fetch(url)
+                    if doc is None:
+                        logger.warning("CustomEngine: transcript unavailable for %s", url)
+                        continue
+                else:
+                    doc = article_fetcher.fetch(url)
+
+                src_doc = SourceDocument(
+                    kind="youtube" if is_yt else "article",
+                    title=doc.title or candidate.title,
+                    url=doc.url,
+                    text=doc.text,
                 )
-                claims = extractor.extract(doc)
+                claims = extractor.extract(src_doc)
                 for claim in claims:
-                    candidates.append({
-                        "kind": doc.kind,
-                        "title": doc.title,
-                        "url": doc.url,
+                    fetched_candidates.append({
+                        "kind": src_doc.kind,
+                        "title": src_doc.title,
+                        "url": src_doc.url,
                         "claim": claim,
                     })
             except Exception as exc:
-                logger.warning("CustomEngine: fetch/extract failed for query %r: %s", query, exc)
+                logger.warning("CustomEngine: fetch failed for %s: %s", url, exc)
                 continue
 
-        if not candidates:
+        if not fetched_candidates:
             return []
 
-        return synthesiser.synthesise(plan, candidates)
+        return synthesiser.synthesise(plan, fetched_candidates)
 
 
 # ---------------------------------------------------------------------------
