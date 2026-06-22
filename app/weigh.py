@@ -4,12 +4,9 @@ PRODUCT.md §9: "LLM: Claude API for the stage prompts (sharpen, plans, weigh, p
 Stage 3 (weigh): plans + user context → re-ranked plans with ruled-in/ruled-out flags.
 """
 import json
-import os
 
-import httpx
+from app.claude_cli import ClaudeCLIError, complete
 
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-_API_URL = "https://api.anthropic.com/v1/messages"
 _MODEL = "claude-haiku-4-5-20251001"
 
 _SYSTEM = (
@@ -31,17 +28,14 @@ _SYSTEM = (
 
 
 class WeighError(Exception):
-    """Raised when the Claude API call fails or returns unparseable output."""
+    """Raised when the Claude call fails or returns unparseable output."""
 
 
 async def rerank_plans(sharpened: str, plans: list[dict], context: str) -> list[dict]:
-    """Call Claude API to re-rank plans against user context.
+    """Call Claude to re-rank plans against user context.
 
     Returns list of dicts with keys: label, rank, standing (null|"ruled-in"|"ruled-out").
     """
-    if not ANTHROPIC_API_KEY:
-        raise WeighError("ANTHROPIC_API_KEY is not configured")
-
     plans_text = "\n".join(
         f"Plan {p['label']}: {p['name']} — {p['mechanism']}" for p in plans
     )
@@ -51,29 +45,12 @@ async def rerank_plans(sharpened: str, plans: list[dict], context: str) -> list[
         f"User context: {context}"
     )
 
-    payload = {
-        "model": _MODEL,
-        "max_tokens": 512,
-        "system": _SYSTEM,
-        "messages": [{"role": "user", "content": user_message}],
-    }
-    headers = {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-    }
+    try:
+        text = await complete(_SYSTEM, user_message, _MODEL)
+    except ClaudeCLIError as exc:
+        raise WeighError(f"Claude call failed: {exc}") from exc
 
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.post(_API_URL, json=payload, headers=headers)
-        resp.raise_for_status()
-    except httpx.HTTPStatusError as exc:
-        raise WeighError(f"Claude API HTTP error {exc.response.status_code}") from exc
-    except httpx.RequestError as exc:
-        raise WeighError(f"Claude API request failed: {exc}") from exc
-
-    try:
-        text = resp.json()["content"][0]["text"]
         result = json.loads(text)
         if not isinstance(result, list) or len(result) != len(plans):
             raise ValueError(

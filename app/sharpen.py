@@ -4,12 +4,9 @@ PRODUCT.md §9: "LLM: Claude API for the stage prompts (sharpen, plans, weigh, p
 Stage 0 (sharpen): raw problem → sharpened statement + not_investigating list.
 """
 import json
-import os
 
-import httpx
+from app.claude_cli import ClaudeCLIError, complete
 
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-_API_URL = "https://api.anthropic.com/v1/messages"
 _MODEL = "claude-haiku-4-5-20251001"
 
 _SYSTEM = (
@@ -25,37 +22,17 @@ _SYSTEM = (
 
 
 class SharpenError(Exception):
-    """Raised when the Claude API call fails or returns unparseable output."""
+    """Raised when the Claude call fails or returns unparseable output."""
 
 
 async def sharpen_problem(raw_problem: str) -> dict:
-    """Call Claude API, parse response, return {sharpened, not_investigating}."""
-    if not ANTHROPIC_API_KEY:
-        raise SharpenError("ANTHROPIC_API_KEY is not configured")
-
-    payload = {
-        "model": _MODEL,
-        "max_tokens": 512,
-        "system": _SYSTEM,
-        "messages": [{"role": "user", "content": raw_problem}],
-    }
-    headers = {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-    }
+    """Call Claude, parse response, return {sharpened, not_investigating}."""
+    try:
+        text = await complete(_SYSTEM, raw_problem, _MODEL)
+    except ClaudeCLIError as exc:
+        raise SharpenError(f"Claude call failed: {exc}") from exc
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(_API_URL, json=payload, headers=headers)
-        resp.raise_for_status()
-    except httpx.HTTPStatusError as exc:
-        raise SharpenError(f"Claude API HTTP error {exc.response.status_code}") from exc
-    except httpx.RequestError as exc:
-        raise SharpenError(f"Claude API request failed: {exc}") from exc
-
-    try:
-        text = resp.json()["content"][0]["text"]
         result = json.loads(text)
         sharpened = result["sharpened"]
         not_investigating = result["not_investigating"]

@@ -1,6 +1,8 @@
 __pycache__/
 *.pyc
 .env
+settings.local.json
 *.log
 venv/
+.venv/
 .DS_Store

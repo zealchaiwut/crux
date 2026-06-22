@@ -165,10 +165,11 @@ def test_commander_spec_module_exists():
     )
 
 
-def test_generate_commander_spec_raises_on_missing_key():
-    """AC5: CommanderSpecError raised when ANTHROPIC_API_KEY is missing."""
+def test_generate_commander_spec_raises_when_cli_unavailable():
+    """AC5: CommanderSpecError raised when the claude CLI is missing/unavailable."""
     import asyncio
 
+    from app.claude_cli import ClaudeCLIError
     from app.commander_spec import CommanderSpecError, generate_commander_spec
 
     probe_data = {
@@ -177,23 +178,19 @@ def test_generate_commander_spec_raises_on_missing_key():
         "sharpened": "Why is engagement low?",
     }
 
-    with patch("app.commander_spec.ANTHROPIC_API_KEY", ""):
-        with pytest.raises(CommanderSpecError, match="ANTHROPIC_API_KEY"):
-            asyncio.get_event_loop().run_until_complete(
+    with patch("app.commander_spec.complete", new_callable=AsyncMock,
+               side_effect=ClaudeCLIError("`claude` not found on PATH")):
+        with pytest.raises(CommanderSpecError):
+            asyncio.run(
                 generate_commander_spec(probe_data)
             )
 
 
 def test_generate_commander_spec_returns_markdown():
-    """AC1/AC2: generate_commander_spec returns a markdown string when API succeeds."""
+    """AC1/AC2: generate_commander_spec returns a markdown string when the call succeeds."""
     import asyncio
-    from unittest.mock import MagicMock
 
     from app.commander_spec import generate_commander_spec
-
-    mock_response = {
-        "content": [{"text": _MOCK_COMMANDER_SPEC}]
-    }
 
     probe_data = {
         "target_metric": "task completion rate",
@@ -201,33 +198,21 @@ def test_generate_commander_spec_returns_markdown():
         "sharpened": "Why is engagement low?",
     }
 
-    # httpx Response methods (json, raise_for_status) are synchronous
-    mock_resp = MagicMock()
-    mock_resp.raise_for_status.return_value = None
-    mock_resp.json.return_value = mock_response
-
-    mock_client = AsyncMock()
-    mock_client.post = AsyncMock(return_value=mock_resp)
-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = AsyncMock(return_value=False)
-
-    with patch("app.commander_spec.ANTHROPIC_API_KEY", "test-key"):
-        with patch("app.commander_spec.httpx.AsyncClient", return_value=mock_client):
-            result = asyncio.get_event_loop().run_until_complete(
-                generate_commander_spec(probe_data)
-            )
+    with patch("app.commander_spec.complete", new_callable=AsyncMock,
+               return_value=_MOCK_COMMANDER_SPEC):
+        result = asyncio.run(
+            generate_commander_spec(probe_data)
+        )
 
     assert isinstance(result, str), "generate_commander_spec must return a string"
     assert len(result) > 0, "generate_commander_spec must return non-empty string"
 
 
 def test_generate_commander_spec_surfaces_http_error():
-    """AC5: CommanderSpecError raised on HTTP error from Claude API."""
+    """AC5: CommanderSpecError raised when the Claude call fails."""
     import asyncio
-    from unittest.mock import MagicMock
 
-    import httpx
-
+    from app.claude_cli import ClaudeCLIError
     from app.commander_spec import CommanderSpecError, generate_commander_spec
 
     probe_data = {
@@ -236,24 +221,12 @@ def test_generate_commander_spec_surfaces_http_error():
         "sharpened": "problem",
     }
 
-    mock_resp = MagicMock()
-    mock_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
-        "500 error",
-        request=httpx.Request("POST", "https://api.anthropic.com"),
-        response=httpx.Response(500),
-    )
-
-    mock_client = AsyncMock()
-    mock_client.post = AsyncMock(return_value=mock_resp)
-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = AsyncMock(return_value=False)
-
-    with patch("app.commander_spec.ANTHROPIC_API_KEY", "test-key"):
-        with patch("app.commander_spec.httpx.AsyncClient", return_value=mock_client):
-            with pytest.raises(CommanderSpecError):
-                asyncio.get_event_loop().run_until_complete(
-                    generate_commander_spec(probe_data)
-                )
+    with patch("app.commander_spec.complete", new_callable=AsyncMock,
+               side_effect=ClaudeCLIError("claude CLI exited 1")):
+        with pytest.raises(CommanderSpecError):
+            asyncio.run(
+                generate_commander_spec(probe_data)
+            )
 
 
 # ---------------------------------------------------------------------------

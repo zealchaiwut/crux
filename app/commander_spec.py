@@ -6,12 +6,8 @@ the prototype.
 
 Only called for Probe records with type='prototype'.
 """
-import os
+from app.claude_cli import ClaudeCLIError, complete
 
-import httpx
-
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-_API_URL = "https://api.anthropic.com/v1/messages"
 _MODEL = "claude-haiku-4-5-20251001"
 
 _SYSTEM = (
@@ -51,11 +47,8 @@ async def generate_commander_spec(probe_data: dict) -> str:
         A markdown string containing the commander spec.
 
     Raises:
-        CommanderSpecError: If the API call fails or returns unusable output.
+        CommanderSpecError: If the call fails or returns unusable output.
     """
-    if not ANTHROPIC_API_KEY:
-        raise CommanderSpecError("ANTHROPIC_API_KEY is not configured")
-
     target_metric = probe_data.get("target_metric", "")
     note = probe_data.get("note", "")
     sharpened = probe_data.get("sharpened", "")
@@ -76,34 +69,11 @@ async def generate_commander_spec(probe_data: dict) -> str:
         "Generate the commander spec markdown."
     )
 
-    payload = {
-        "model": _MODEL,
-        "max_tokens": 512,
-        "system": _SYSTEM,
-        "messages": [{"role": "user", "content": user_message}],
-    }
-    headers = {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-    }
-
     try:
-        # connect 10s (routing failure fast-fail), read 30s (512-token response), write/pool use 5s (small JSON payload, single connection)
-        async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=10.0, read=30.0, write=5.0, pool=5.0)) as client:
-            resp = await client.post(_API_URL, json=payload, headers=headers)
-        resp.raise_for_status()
-    except httpx.HTTPStatusError as exc:
-        raise CommanderSpecError(
-            f"Claude API HTTP error {exc.response.status_code}"
-        ) from exc
-    except httpx.RequestError as exc:
-        raise CommanderSpecError(f"Claude API request failed: {exc}") from exc
+        text = await complete(_SYSTEM, user_message, _MODEL)
+    except ClaudeCLIError as exc:
+        raise CommanderSpecError(f"Claude call failed: {exc}") from exc
 
-    try:
-        text = resp.json()["content"][0]["text"]
-        if not isinstance(text, str) or not text.strip():
-            raise ValueError("empty or non-string response text")
-        return text.strip()
-    except (KeyError, IndexError, ValueError) as exc:
-        raise CommanderSpecError(f"Failed to parse Claude response: {exc}") from exc
+    if not text.strip():
+        raise CommanderSpecError("Claude returned empty spec text")
+    return text.strip()

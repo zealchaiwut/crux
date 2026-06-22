@@ -1,6 +1,9 @@
-"""Tests for issue #32: Clarify httpx timeout semantics in commander spec generation.
+"""Tests for issue #32: Clarify httpx timeout semantics for the Claude HTTP call.
 
-AC1: app/commander_spec.py uses explicit httpx.Timeout object (already enforced by #31).
+The Claude HTTP transport now lives in app/claude_cli.py (the provider helper).
+The structured-timeout guarantee is asserted at its new home.
+
+AC1: app/claude_cli.py uses explicit httpx.Timeout object (already enforced by #31).
 AC2: All four timeout components (connect, read, write, pool) are explicitly accounted for.
 AC3: No existing behavior of spec generation is changed.
 AC4: A brief inline comment explains the rationale for the chosen timeout values.
@@ -11,7 +14,7 @@ import re
 
 
 def _get_source() -> str:
-    import app.commander_spec as mod
+    import app.claude_cli as mod
     return inspect.getsource(mod)
 
 
@@ -102,13 +105,14 @@ def test_ac2_read_component_still_present():
 # ---------------------------------------------------------------------------
 
 def test_ac3_generate_commander_spec_still_exists():
-    """AC3: generate_commander_spec function is unchanged."""
+    """AC3: generate_commander_spec is unchanged; transport helper exposes complete()."""
+    import app.claude_cli as cli
     import app.commander_spec as mod
     assert hasattr(mod, "generate_commander_spec"), (
         "generate_commander_spec must still exist"
     )
     assert hasattr(mod, "CommanderSpecError"), "CommanderSpecError must still exist"
-    assert hasattr(mod, "ANTHROPIC_API_KEY"), "ANTHROPIC_API_KEY must still exist"
+    assert hasattr(cli, "complete"), "claude_cli.complete must exist"
 
 
 def test_ac3_timeout_values_are_numeric():
