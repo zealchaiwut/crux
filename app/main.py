@@ -1,5 +1,10 @@
 from pathlib import Path
 
+# Load .env before importing app.config (which reads env at import time).
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -13,7 +18,15 @@ from app.auth import (
     verify_session_cookie,
 )
 from app.config import AUTH_SECRET, ENV
-from app.routers import cases_router, gather_router, probes_router, related_cases_router, sources_router, verdicts_router
+from app.routers import (
+    cases_router,
+    gather_router,
+    probes_router,
+    related_cases_router,
+    settings_router,
+    sources_router,
+    verdicts_router,
+)
 
 _STATIC_DIR = Path(__file__).parent / "static"
 _INDEX_HTML = _STATIC_DIR / "index.html"
@@ -54,6 +67,7 @@ app.include_router(cases_router)
 app.include_router(gather_router)
 app.include_router(probes_router)
 app.include_router(related_cases_router)
+app.include_router(settings_router)
 app.include_router(sources_router)
 app.include_router(verdicts_router)
 

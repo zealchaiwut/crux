@@ -1,8 +1,12 @@
-"""Tests for issue #31: Clarify httpx timeout semantics in commander_spec.py.
+"""Tests for issue #31: Clarify httpx timeout semantics for the Claude HTTP call.
+
+The Claude HTTP transport now lives in app/claude_cli.py (the provider helper);
+commander_spec and the other stages call through it. The structured-timeout
+guarantee is asserted at its new home.
 
 AC1: httpx.AsyncClient uses explicit httpx.Timeout object (not a bare float).
 AC2: The Timeout constructor specifies at least connect and read values separately.
-AC3: No other logic in app/commander_spec.py is changed.
+AC3: No other logic in app/claude_cli.py is changed.
 AC4: The change passes the existing test suite without modification.
 """
 import ast
@@ -12,7 +16,7 @@ import httpx
 
 
 def _get_source() -> str:
-    import app.commander_spec as mod
+    import app.claude_cli as mod
     return inspect.getsource(mod)
 
 
@@ -118,7 +122,8 @@ def test_ac2_timeout_specifies_read_kwarg():
 # ---------------------------------------------------------------------------
 
 def test_ac3_no_other_logic_changed():
-    """AC3: Only the timeout argument is changed; function signatures are unchanged."""
+    """AC3: commander_spec still exports its API; the transport helper exposes complete()."""
+    import app.claude_cli as cli
     import app.commander_spec as mod
 
     assert hasattr(mod, "generate_commander_spec"), (
@@ -127,9 +132,7 @@ def test_ac3_no_other_logic_changed():
     assert hasattr(mod, "CommanderSpecError"), (
         "CommanderSpecError class must still exist"
     )
-    assert hasattr(mod, "ANTHROPIC_API_KEY"), (
-        "ANTHROPIC_API_KEY constant must still exist"
-    )
+    assert hasattr(cli, "complete"), "claude_cli.complete must exist"
 
 
 # ---------------------------------------------------------------------------

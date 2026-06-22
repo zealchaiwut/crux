@@ -4,12 +4,9 @@ PRODUCT.md §9: "LLM: Claude API for the stage prompts (sharpen, plans, weigh, p
 Stage 4 (probe): leading Plan(s) → single probe design with type, target_metric, cost, time, note.
 """
 import json
-import os
 
-import httpx
+from app.claude_cli import ClaudeCLIError, complete
 
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-_API_URL = "https://api.anthropic.com/v1/messages"
 _MODEL = "claude-haiku-4-5-20251001"
 
 _VALID_TYPES = {"measurement", "lab-test", "behaviour-experiment", "prototype"}
@@ -61,9 +58,6 @@ async def design_probe(sharpened: str, plans: list[dict]) -> dict:
 
     Returns dict with keys: type, target_metric, cost, time, note.
     """
-    if not ANTHROPIC_API_KEY:
-        raise ProbeError("ANTHROPIC_API_KEY is not configured")
-
     # Build context from plans ordered by current rank
     plans_text = "\n".join(
         f"Plan {p['label']} (rank {p.get('current_rank', '?')}): "
@@ -76,29 +70,12 @@ async def design_probe(sharpened: str, plans: list[dict]) -> dict:
         "Design the single cheapest, most decisive probe for the leading plan(s)."
     )
 
-    payload = {
-        "model": _MODEL,
-        "max_tokens": 512,
-        "system": _SYSTEM,
-        "messages": [{"role": "user", "content": user_message}],
-    }
-    headers = {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-    }
+    try:
+        text = await complete(_SYSTEM, user_message, _MODEL)
+    except ClaudeCLIError as exc:
+        raise ProbeError(f"Claude call failed: {exc}") from exc
 
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.post(_API_URL, json=payload, headers=headers)
-        resp.raise_for_status()
-    except httpx.HTTPStatusError as exc:
-        raise ProbeError(f"Claude API HTTP error {exc.response.status_code}") from exc
-    except httpx.RequestError as exc:
-        raise ProbeError(f"Claude API request failed: {exc}") from exc
-
-    try:
-        text = resp.json()["content"][0]["text"]
         data = json.loads(text)
         if not isinstance(data, dict):
             raise ValueError(f"expected a JSON object, got {type(data).__name__}")

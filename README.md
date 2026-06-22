@@ -30,21 +30,20 @@ Seven sprints complete. All five pipeline stages are live:
 ## Local development
 
 ```bash
-# 1. Clone and create venv
+# 1. Clone
 git clone git@github.com:zealchaiwut/crux.git && cd crux
-python3 -m venv .venv && source .venv/bin/activate
 
-# 2. Install
-pip install -r requirements.txt
+# 2. Authenticate the claude CLI (Claude calls run through your subscription)
+claude            # log in once, then quit
 
-# 3. Configure — copy .env.example, fill in DATABASE_URL, AUTH_SECRET, ANTHROPIC_API_KEY
+# 3. Configure — copy .env.example, fill in DATABASE_URL and AUTH_SECRET
 cp .env.example .env
 
-# 4. Migrate
-alembic upgrade head
+# 4. Set up venv + deps + migrations in one step
+./scripts/setup.sh
 
 # 5. Run
-make dev
+source .venv/bin/activate && make dev
 ```
 
 See [docs/quickstart.md](docs/quickstart.md) for the full setup guide including troubleshooting.
@@ -68,10 +67,10 @@ python3 -c "import secrets; print(secrets.token_hex(32))"
 # Required env vars
 AUTH_SECRET=<min 16 chars — server exits at startup if missing>
 DATABASE_URL=<Neon Postgres connection string>
-ANTHROPIC_API_KEY=<Claude API key>
 
 # Optional
-EMBEDDING_MODEL=claude-haiku-4-5-20251001  # model used for related-case embeddings (issue #68)
+ANTHROPIC_API_KEY=<Claude API key>          # needed for related-case embeddings, and for the optional "Anthropic API" provider
+EMBEDDING_MODEL=claude-haiku-4-5-20251001   # model used for related-case embeddings (issue #68)
 ```
 
 After migrating an existing database, backfill embeddings for pre-existing cases:
@@ -80,7 +79,10 @@ After migrating an existing database, backfill embeddings for pre-existing cases
 python -m scripts.backfill_embeddings
 ```
 
-See `.env.example` for all variables.
+Claude pipeline calls (sharpen, bake-off, weigh, probe, commander spec, research)
+run through the `claude` CLI (Claude Code) against your subscription by default —
+no API key needed. Switch to the metered Anthropic API any time from the in-app
+Settings modal. See `.env.example` for all variables.
 
 ## API endpoints
 

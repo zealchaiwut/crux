@@ -55,7 +55,7 @@ class CitationSynthesiser:
     ----------
     client:
         An ``anthropic.Anthropic`` client instance.  If omitted, a default
-        client is created (requires ``ANTHROPIC_API_KEY`` in the environment).
+        client is created that routes through the ``claude`` CLI subscription.
     model:
         Claude model ID to use.
     max_tokens:
@@ -69,8 +69,8 @@ class CitationSynthesiser:
         max_tokens: int = 4096,
     ) -> None:
         if client is None:
-            import anthropic
-            client = anthropic.Anthropic()
+            from app.claude_cli import ClaudeCLIClient
+            client = ClaudeCLIClient()
         self._client = client
         self._model = model
         self._max_tokens = max_tokens

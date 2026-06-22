@@ -4,12 +4,9 @@ PRODUCT.md §9: "LLM: Claude API for the stage prompts (sharpen, plans, weigh, p
 Stage 1 (bake-off): sharpened problem → Plan A/B/C each with label, name, mechanism, prior.
 """
 import json
-import os
 
-import httpx
+from app.claude_cli import ClaudeCLIError, complete
 
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-_API_URL = "https://api.anthropic.com/v1/messages"
 _MODEL = "claude-haiku-4-5-20251001"
 
 _SYSTEM = (
@@ -27,37 +24,17 @@ _SYSTEM = (
 
 
 class BakeOffError(Exception):
-    """Raised when the Claude API call fails or returns unparseable output."""
+    """Raised when the Claude call fails or returns unparseable output."""
 
 
 async def generate_plans(sharpened: str) -> list[dict]:
-    """Call Claude API, parse response, return list of 3 plan dicts."""
-    if not ANTHROPIC_API_KEY:
-        raise BakeOffError("ANTHROPIC_API_KEY is not configured")
-
-    payload = {
-        "model": _MODEL,
-        "max_tokens": 1024,
-        "system": _SYSTEM,
-        "messages": [{"role": "user", "content": sharpened}],
-    }
-    headers = {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-    }
+    """Call Claude, parse response, return list of 3 plan dicts."""
+    try:
+        text = await complete(_SYSTEM, sharpened, _MODEL)
+    except ClaudeCLIError as exc:
+        raise BakeOffError(f"Claude call failed: {exc}") from exc
 
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.post(_API_URL, json=payload, headers=headers)
-        resp.raise_for_status()
-    except httpx.HTTPStatusError as exc:
-        raise BakeOffError(f"Claude API HTTP error {exc.response.status_code}") from exc
-    except httpx.RequestError as exc:
-        raise BakeOffError(f"Claude API request failed: {exc}") from exc
-
-    try:
-        text = resp.json()["content"][0]["text"]
         plans = json.loads(text)
         if not isinstance(plans, list) or len(plans) != 3:
             raise ValueError(

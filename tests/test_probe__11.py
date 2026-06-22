@@ -417,31 +417,10 @@ def test_probe_service_rejects_invalid_type():
         "note": "some note",
     }
 
-    async def _run():
-        with patch("app.probe.ANTHROPIC_API_KEY", "test-key"):
-            with patch("httpx.AsyncClient.post") as mock_post:
-                import json
-                mock_post.return_value.__aenter__ = AsyncMock(
-                    return_value=_make_mock_response(json.dumps(bad_response))
-                )
-                mock_post.return_value.__aexit__ = AsyncMock(return_value=False)
-                mock_resp = _make_mock_response(json.dumps(bad_response))
-                mock_post.return_value = mock_resp
-                await design_probe("problem", [{"label": "A", "name": "Plan A", "mechanism": "mech"}])
-
-    # Just test the validation directly
+    # Validation is exercised directly; the LLM transport is covered elsewhere.
     from app.probe import _validate_probe_response, ProbeError
     with pytest.raises(ProbeError):
         _validate_probe_response(bad_response)
-
-
-def _make_mock_response(text: str):
-    """Helper: create a mock httpx response with given text."""
-    from unittest.mock import MagicMock
-    resp = MagicMock()
-    resp.json.return_value = {"content": [{"text": text}]}
-    resp.raise_for_status = MagicMock()
-    return resp
 
 
 def test_probe_service_rejects_missing_fields():

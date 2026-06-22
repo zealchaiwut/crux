@@ -57,17 +57,10 @@ class _CustomEngine:
             CitationSynthesiser,
             ResearchConfig,
         )
-        import os
-
         client = self._anthropic_client
         if client is None:
-            import anthropic
-            api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-            if not api_key:
-                raise OrchestratorError(
-                    "ANTHROPIC_API_KEY is not configured for custom research engine"
-                )
-            client = anthropic.Anthropic(api_key=api_key)
+            from app.claude_cli import ClaudeCLIClient
+            client = ClaudeCLIClient()
 
         def _llm_callable(prompt: str) -> str:
             msg = client.messages.create(
