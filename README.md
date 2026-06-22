@@ -15,7 +15,7 @@ Companion to [commander](https://github.com/zealchaiwut/commander) (which builds
 
 ## Status
 
-Seven sprints complete. All five pipeline stages are live:
+Eight sprints complete. All five pipeline stages are live:
 
 | Stage | Status |
 |---|---|
@@ -99,8 +99,10 @@ POST /api/cases/{case_id}/verdict      # log a verdict for the active probe
 
 GET  /api/sources?plan_id={id}         # list sources for a plan
 POST /api/sources                      # manually add a source
+POST /api/sources/batch                # add multiple sources in one transaction
 
-POST /api/plans/{plan_id}/gather       # run research loop for a plan
+POST /api/plans/{plan_id}/gather         # run research loop for a plan
+POST /api/plans/{plan_id}/gather/suggest # return up to 5 ranked candidates without persisting
 POST /api/cases/{case_id}/gather       # run research loop for all plans
 GET  /api/plans/{plan_id}/gather-status
 

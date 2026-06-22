@@ -3,6 +3,13 @@
 Per-sprint changelog for crux. Entries are written by the documentor when a
 sprint finishes. Dated per-sprint files live under [docs/changelog/](docs/changelog/).
 
+## Sprint 8 (2026-06-22)
+
+- #81: Wire real web fetchers into custom research engine
+- #82: Add suggest endpoint for non-persisting candidate sources
+- #83: Add POST /api/sources/batch to attach multiple sources
+- #84: Add pick-to-attach UI for suggested sources in Gather
+
 ## Sprint 7 (2026-06-21)
 
 - #68: Replace TF-IDF with Claude embedding-based similarity for related cases
