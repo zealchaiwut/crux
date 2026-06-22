@@ -1735,8 +1735,8 @@ function CaseDetailScreen({ caseId, onBack, onNavigateToCase, theme, onToggleThe
           );
         })()}
 
-        {/* WEIGH — only at stage >= 3 (AC10: no regression) */}
-        {stage >= 3 && (
+        {/* WEIGH — gather (2) and weigh (3) only */}
+        {(stage === 2 || stage === 3) && (
           <>
             <SectionLabel>WEIGH · RE-RANK AGAINST YOUR DATA</SectionLabel>
             <WeighPanel caseId={caseId} initialContext={caseData.weigh_context || ''} onRerankDone={loadCase} />
