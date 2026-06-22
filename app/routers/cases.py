@@ -16,6 +16,18 @@ from app.probe import ProbeError, design_probe
 from app.sharpen import SharpenError, sharpen_problem
 from app.weigh import WeighError, rerank_plans
 
+
+def _latest_probe(probes):
+    """Return the most recently created probe from a list, or None."""
+    if not probes:
+        return None
+    with_ts = [p for p in probes if p.created_at is not None]
+    without_ts = [p for p in probes if p.created_at is None]
+    if with_ts:
+        return max(with_ts, key=lambda p: p.created_at)
+    return without_ts[0] if without_ts else None
+
+
 router = APIRouter(prefix="/api")
 
 _STAGE_ORDER = {
@@ -101,7 +113,7 @@ def list_cases(
 
     result = []
     for case in cases:
-        probe = case.probes[0] if case.probes else None
+        probe = _latest_probe(case.probes)
         verdict_obj = (probe.verdicts[0] if probe and probe.verdicts else None)
 
         if verdict_obj:
@@ -157,7 +169,7 @@ def get_case(case_id: str, db: Session = Depends(get_db)):
     if case is None:
         raise HTTPException(status_code=404, detail="Case not found")
 
-    probe = case.probes[0] if case.probes else None
+    probe = _latest_probe(case.probes)
     verdict_obj = (probe.verdicts[0] if probe and probe.verdicts else None)
 
     not_investigating = []
@@ -482,18 +494,20 @@ async def design_probe_for_case(case_id: str, db: Session = Depends(get_db)):
     if not plans:
         raise HTTPException(status_code=422, detail="Case has no plans to design a probe for")
 
-    if case.probes:
-        probe = case.probes[0]
-        return {
-            "id": probe.id,
-            "type": probe.type,
-            "target_metric": probe.target_metric or "",
-            "cost": probe.cost or "",
-            "time": probe.time or "",
-            "note": probe.note or "",
-            "status": probe.status,
-            "commander_spec": probe.commander_spec,
-        }
+    existing = _latest_probe(case.probes)
+    if existing:
+        existing_verdict = existing.verdicts[0] if existing.verdicts else None
+        if not (existing_verdict and existing_verdict.outcome == "inconclusive"):
+            return {
+                "id": existing.id,
+                "type": existing.type,
+                "target_metric": existing.target_metric or "",
+                "cost": existing.cost or "",
+                "time": existing.time or "",
+                "note": existing.note or "",
+                "status": existing.status,
+                "commander_spec": existing.commander_spec,
+            }
 
     plans_input = [
         {
@@ -512,6 +526,7 @@ async def design_probe_for_case(case_id: str, db: Session = Depends(get_db)):
     except ProbeError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 
+    is_reprobe = existing is not None
     probe = models.Probe(
         id=str(_uuid_mod.uuid4()),
         case_id=case.id,
@@ -521,9 +536,11 @@ async def design_probe_for_case(case_id: str, db: Session = Depends(get_db)):
         time=result["time"],
         note=result["note"],
         status="designed",
+        created_at=datetime.now(tz=timezone.utc),
     )
     db.add(probe)
-    case.stage = "probe"
+    if not is_reprobe:
+        case.stage = "probe"
     db.commit()
     db.refresh(probe)
 
@@ -572,7 +589,7 @@ def log_verdict(case_id: str, body: LogVerdictRequest, db: Session = Depends(get
     if case is None:
         raise HTTPException(status_code=404, detail="Case not found")
 
-    probe = case.probes[0] if case.probes else None
+    probe = _latest_probe(case.probes)
     if probe is None:
         raise HTTPException(status_code=422, detail="Case has no probe; cannot log a verdict")
 
@@ -626,7 +643,7 @@ async def generate_probe_commander_spec(
     if case is None:
         raise HTTPException(status_code=404, detail="Case not found")
 
-    probe = case.probes[0] if case.probes else None
+    probe = _latest_probe(case.probes)
     if probe is None:
         raise HTTPException(status_code=422, detail="Case has no probe; design one first")
 
