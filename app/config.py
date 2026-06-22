@@ -1,7 +1,7 @@
 import os
 import sys
 
-PORT: int = int(os.environ.get("PORT", "8000"))
+PORT: int = int(os.environ.get("PORT", "7001"))
 ENV: str = os.environ.get("ENV", "development")
 
 _raw_secret = os.environ.get("AUTH_SECRET", "")

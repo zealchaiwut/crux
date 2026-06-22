@@ -112,18 +112,28 @@ def _alias(model: str | None) -> str:
 
 
 def _strip_fences(text: str) -> str:
-    """Remove a single wrapping ```...``` markdown fence if present."""
+    """Return the payload from a ```...``` fenced block, ignoring any prose
+    the model adds around it.
+
+    `claude -p` often wraps structured output in a fence and sometimes prepends
+    a sentence ("Here are the plans:"), which breaks json.loads at char 0. If a
+    fenced block exists anywhere, return its inner content; otherwise return the
+    stripped text unchanged.
+    """
     text = text.strip()
-    if text.startswith("```"):
-        text = re.sub(r"^```[^\n]*\n?", "", text)
-        text = re.sub(r"\n?```$", "", text.rstrip())
-    return text.strip()
+    m = re.search(r"```[^\n]*\n(.*?)```", text, re.DOTALL)
+    if m:
+        return m.group(1).strip()
+    return text
 
 
 def _build_args(system: str, model: str | None) -> list[str]:
+    # --system-prompt REPLACES Claude Code's default agent prompt. We need that:
+    # appending leaves the conversational coding-agent prompt in control, which
+    # ignores "return only JSON" and replies with prose/clarifying questions.
     args = [_CLI, "-p", "--output-format", "text", "--model", _alias(model)]
     if system:
-        args += ["--append-system-prompt", system]
+        args += ["--system-prompt", system]
     return args
 
 

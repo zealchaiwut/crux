@@ -24,14 +24,17 @@ def test_auth_secret_readable_from_env():
 
 # AC2 — App refuses to start without valid AUTH_SECRET
 
-def test_startup_fails_without_auth_secret():
+def test_startup_fails_without_auth_secret(tmp_path):
+    # Run outside the repo (PYTHONPATH keeps `app` importable) so main.py's
+    # load_dotenv() does not pick AUTH_SECRET back up from a real .env file.
     env = {k: v for k, v in os.environ.items() if k != "AUTH_SECRET"}
+    env["PYTHONPATH"] = str(REPO_ROOT)
     result = subprocess.run(
         [sys.executable, "-c", "from app.main import app"],
         env=env,
         capture_output=True,
         text=True,
-        cwd=str(REPO_ROOT),
+        cwd=str(tmp_path),
     )
     assert result.returncode != 0
     combined = result.stdout + result.stderr
@@ -62,14 +65,15 @@ def test_startup_fails_with_empty_auth_secret():
     assert result.returncode != 0
 
 
-def test_startup_error_message_is_descriptive():
+def test_startup_error_message_is_descriptive(tmp_path):
     env = {k: v for k, v in os.environ.items() if k != "AUTH_SECRET"}
+    env["PYTHONPATH"] = str(REPO_ROOT)
     result = subprocess.run(
         [sys.executable, "-c", "from app.main import app"],
         env=env,
         capture_output=True,
         text=True,
-        cwd=str(REPO_ROOT),
+        cwd=str(tmp_path),
     )
     combined = result.stdout + result.stderr
     # Error must mention the variable and the constraint

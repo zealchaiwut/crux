@@ -1351,6 +1351,7 @@ function CaseDetailScreen({ caseId, onBack, onNavigateToCase, theme, onToggleThe
   const stage = typeof caseData.stage === 'number' ? caseData.stage : 0;
 
   return (
+    <>
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       {/* Top nav */}
       <header style={{ padding: 'var(--space-4) var(--space-6)', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--space-4)' }}>
@@ -1574,6 +1575,7 @@ function CaseDetailScreen({ caseId, onBack, onNavigateToCase, theme, onToggleThe
         onDismiss={() => setToast(null)}
       />
     )}
+    </>
   );
 }
 
@@ -1980,7 +1982,3 @@ function CasesScreen({ theme, onToggleTheme, onCaseCreated }) {
     </div>
   );
 }
-
-// Mount — runs after both shell.js and cases.js have been parsed, so all
-// components (App, CasesScreen, CaseDetailScreen, etc.) are in scope.
-ReactDOM.createRoot(document.getElementById('app')).render(<App />);

@@ -59,7 +59,7 @@ def upgrade() -> None:
         sa.Column("raw_problem", sa.Text(), nullable=False),
         sa.Column("sharpened", sa.Text()),
         sa.Column("not_investigating", sa.Text()),
-        sa.Column("stage", sa.Enum(name="stage_enum", create_type=False), nullable=False),
+        sa.Column("stage", postgresql.ENUM(name="stage_enum", create_type=False), nullable=False),
         sa.Column(
             "created_at",
             sa.TIMESTAMP(timezone=True),
@@ -83,7 +83,7 @@ def upgrade() -> None:
             sa.ForeignKey("case.id", ondelete="CASCADE"),
             nullable=False,
         ),
-        sa.Column("label", sa.Enum(name="plan_label_enum", create_type=False), nullable=False),
+        sa.Column("label", postgresql.ENUM(name="plan_label_enum", create_type=False), nullable=False),
         sa.Column("mechanism", sa.Text()),
         sa.Column("prior", sa.Text()),
         sa.Column("current_rank", sa.Integer()),
@@ -104,7 +104,7 @@ def upgrade() -> None:
             sa.ForeignKey("plan.id", ondelete="CASCADE"),
             nullable=False,
         ),
-        sa.Column("kind", sa.Enum(name="source_kind_enum", create_type=False), nullable=False),
+        sa.Column("kind", postgresql.ENUM(name="source_kind_enum", create_type=False), nullable=False),
         sa.Column("title", sa.Text()),
         sa.Column("url", sa.Text()),
         sa.Column("claim", sa.Text()),
@@ -126,11 +126,11 @@ def upgrade() -> None:
             sa.ForeignKey("case.id", ondelete="CASCADE"),
             nullable=False,
         ),
-        sa.Column("type", sa.Enum(name="probe_type_enum", create_type=False), nullable=False),
+        sa.Column("type", postgresql.ENUM(name="probe_type_enum", create_type=False), nullable=False),
         sa.Column("target_metric", sa.Text()),
         sa.Column(
             "status",
-            sa.Enum(name="probe_status_enum", create_type=False),
+            postgresql.ENUM(name="probe_status_enum", create_type=False),
             nullable=False,
             server_default="designed",
         ),
@@ -153,7 +153,7 @@ def upgrade() -> None:
             sa.ForeignKey("probe.id", ondelete="RESTRICT"),
             nullable=False,
         ),
-        sa.Column("outcome", sa.Enum(name="verdict_outcome_enum", create_type=False), nullable=False),
+        sa.Column("outcome", postgresql.ENUM(name="verdict_outcome_enum", create_type=False), nullable=False),
         sa.Column("notes", sa.Text()),
         sa.Column(
             "decided_at",
@@ -173,9 +173,9 @@ def downgrade() -> None:
     op.drop_table("case")
 
     # Drop Postgres ENUM types created in upgrade
-    sa.Enum(name="verdict_outcome_enum").drop(op.get_bind(), checkfirst=True)
-    sa.Enum(name="probe_status_enum").drop(op.get_bind(), checkfirst=True)
-    sa.Enum(name="probe_type_enum").drop(op.get_bind(), checkfirst=True)
-    sa.Enum(name="source_kind_enum").drop(op.get_bind(), checkfirst=True)
-    sa.Enum(name="plan_label_enum").drop(op.get_bind(), checkfirst=True)
-    sa.Enum(name="stage_enum").drop(op.get_bind(), checkfirst=True)
+    postgresql.ENUM(name="verdict_outcome_enum").drop(op.get_bind(), checkfirst=True)
+    postgresql.ENUM(name="probe_status_enum").drop(op.get_bind(), checkfirst=True)
+    postgresql.ENUM(name="probe_type_enum").drop(op.get_bind(), checkfirst=True)
+    postgresql.ENUM(name="source_kind_enum").drop(op.get_bind(), checkfirst=True)
+    postgresql.ENUM(name="plan_label_enum").drop(op.get_bind(), checkfirst=True)
+    postgresql.ENUM(name="stage_enum").drop(op.get_bind(), checkfirst=True)
