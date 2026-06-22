@@ -6,7 +6,6 @@ from html.parser import HTMLParser
 from typing import Protocol
 
 import httpx
-from youtube_transcript_api import YouTubeTranscriptApi
 
 from .types import (
     EMPTY_CONTENT_THRESHOLD,
@@ -304,6 +303,7 @@ class YouTubeTranscriptFetcher(ResearchFetcherBase):
             return None
 
         try:
+            from youtube_transcript_api import YouTubeTranscriptApi
             transcript = YouTubeTranscriptApi().fetch(video_id)
             entries = list(transcript)
         except Exception as exc:

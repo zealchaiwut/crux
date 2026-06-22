@@ -463,6 +463,8 @@ async def rerank_case(case_id: str, body: RerankRequest, db: Session = Depends(g
             plan.standing = item["standing"]
 
     case.weigh_context = body.context
+    if case.stage == "gather":
+        case.stage = "weigh"
     db.commit()
 
     db.refresh(case)

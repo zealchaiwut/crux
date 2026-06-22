@@ -534,7 +534,7 @@ function SuggestPanel({ planId, onAttached }) {
     setState('loading');
     setAddError('');
     try {
-      const resp = await fetch(`/api/plans/${planId}/gather/suggest`, { method: 'POST' });
+      const resp = await fetch(`/api/gather/${planId}/suggest`, { method: 'POST' });
       const data = await resp.json().catch(() => ({}));
       if (!resp.ok) {
         setState('error');
@@ -1735,8 +1735,8 @@ function CaseDetailScreen({ caseId, onBack, onNavigateToCase, theme, onToggleThe
           );
         })()}
 
-        {/* WEIGH — only at stage >= 3 (AC10: no regression) */}
-        {stage >= 3 && (
+        {/* WEIGH — at gather (2) and weigh (3) only; absent at probe/verdict */}
+        {(stage === 2 || stage === 3) && (
           <>
             <SectionLabel>WEIGH · RE-RANK AGAINST YOUR DATA</SectionLabel>
             <WeighPanel caseId={caseId} initialContext={caseData.weigh_context || ''} onRerankDone={loadCase} />

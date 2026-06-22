@@ -155,6 +155,16 @@ def suggest_plan_sources(plan_id: str, db: Session = Depends(get_db)):
 
 
 # ---------------------------------------------------------------------------
+# POST /api/gather/{plan_id}/suggest  (alias without /api/plans prefix)
+# ---------------------------------------------------------------------------
+
+@router.post("/gather/{plan_id}/suggest")
+def suggest_plan_sources_alias(plan_id: str, db: Session = Depends(get_db)):
+    """Alias for /api/plans/{plan_id}/gather/suggest used by the frontend."""
+    return suggest_plan_sources(plan_id=plan_id, db=db)
+
+
+# ---------------------------------------------------------------------------
 # POST /api/plans/{plan_id}/gather
 # ---------------------------------------------------------------------------
 
