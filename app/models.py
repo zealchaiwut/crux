@@ -85,6 +85,9 @@ class Probe(Base):
     cost = Column(Text)
     time = Column(Text)
     note = Column(Text)
+    steps = Column(JSON)
+    duration = Column(Text)
+    decision_rule = Column(Text)
     status = Column(
         Enum(*_PROBE_STATUS, name="probe_status_enum"),
         nullable=False,

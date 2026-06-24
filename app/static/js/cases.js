@@ -1198,6 +1198,41 @@ function ProbeCard({ probe, loading, error, caseId, hasVerdict, onProbeSpecUpdat
         {probe.note}
       </p>
 
+      {/* run this outside crux — steps, duration, decision rule */}
+      {(probe.steps && probe.steps.length > 0 || probe.duration || probe.decision_rule) && (
+        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 'var(--space-4)', marginBottom: 'var(--space-4)' }}>
+          <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, letterSpacing: '.05em', color: 'var(--text-sub)', marginBottom: 'var(--space-3)', textTransform: 'uppercase' }}>
+            run this outside crux
+          </div>
+
+          {probe.steps && probe.steps.length > 0 && (
+            <ol style={{ margin: '0 0 var(--space-3)', paddingLeft: 'var(--space-5)', listStyleType: 'decimal' }}>
+              {probe.steps.map((step, i) => (
+                <li key={i} style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', lineHeight: 1.55, marginBottom: 'var(--space-1)' }}>
+                  {step}
+                </li>
+              ))}
+            </ol>
+          )}
+
+          {probe.duration && (
+            <div style={{ marginBottom: 'var(--space-3)' }}>
+              <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 2 }}>DURATION</div>
+              <div className="mono" style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--text)' }}>{probe.duration}</div>
+            </div>
+          )}
+
+          {probe.decision_rule && (
+            <div>
+              <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 2 }}>DECISION RULE</div>
+              <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', lineHeight: 1.55, margin: 0 }}>
+                {probe.decision_rule}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Mark as running — only when status=designed and no verdict logged */}
       {showMarkAsRunning && (
         <div style={{ marginBottom: isPrototype ? 'var(--space-3)' : 0 }}>
