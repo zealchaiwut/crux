@@ -6,3 +6,4 @@ settings.local.json
 venv/
 .venv/
 .DS_Store
+codedb.snapshot
