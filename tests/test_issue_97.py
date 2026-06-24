@@ -305,9 +305,9 @@ def test_existing_rows_get_unverified_default(sqlite_migration_db):
     with engine.connect() as conn:
         # Insert a row without the new columns (simulate pre-existing data by
         # temporarily inserting directly via SQL)
-        rows = list(conn.execute(sa.text(
+        conn.execute(sa.text(
             "SELECT support_status, support_rationale FROM source"
-        )))
+        ))
     # If no rows exist, seed one and verify the default applies
     with engine.connect() as conn:
         # Check the column default by looking at table info
