@@ -205,6 +205,9 @@ def get_case(case_id: str, db: Session = Depends(get_db)):
                     "url": s.url,
                     "claim": s.claim,
                     "citation": s.citation,
+                    "support_status": s.support_status,
+                    "rationale": s.rationale,
+                    "manually_overridden": bool(s.manually_overridden),
                 }
                 for s in (plan.sources or [])
             ],

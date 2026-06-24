@@ -1,10 +1,14 @@
 """Sources API router.
 
-GET  /api/sources?plan_id=<id>       — list all sources for a plan.
-POST /api/sources                    — add a source to a plan (manual paste fallback).
-POST /api/sources/batch              — add multiple sources in a single transaction.
-POST /api/sources/{id}/verify        — record verification result for a single source.
-POST /api/plans/{id}/verify-sources  — batch summary of verification state for a plan.
+GET  /api/sources?plan_id=<id>          — list all sources for a plan.
+POST /api/sources                       — add a source to a plan (manual paste fallback).
+POST /api/sources/batch                 — add multiple sources in a single transaction.
+POST /api/sources/{id}/verify           — record verification result for a single source.
+POST /api/plans/{id}/verify-sources     — batch summary of verification state for a plan.
+POST /api/sources/{id}/run-verify       — trigger AI verification for a single source.
+POST /api/plans/{id}/run-verify-all     — trigger AI verification for every source on a plan.
+PATCH /api/sources/{id}/status-override — manual accept/override of support_status.
+POST /api/sources/{id}/accept-status    — clear manual override flag (accept AI result).
 """
 import re
 import uuid as _uuid_mod
@@ -152,6 +156,7 @@ def _source_to_dict(source: models.Source) -> dict:
         "citation": source.citation,
         "support_status": source.support_status,
         "rationale": source.rationale,
+        "manually_overridden": bool(source.manually_overridden),
     }
 
 
@@ -265,17 +270,136 @@ def list_sources(plan_id: str = Query(...), db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Plan not found")
 
     sources = db.query(models.Source).filter(models.Source.plan_id == plan_id).all()
-    return {
-        "sources": [
-            {
-                "id": s.id,
-                "plan_id": s.plan_id,
-                "kind": s.kind,
-                "title": s.title,
-                "url": s.url,
-                "claim": s.claim,
-                "citation": s.citation,
-            }
-            for s in sources
-        ]
-    }
+    return {"sources": [_source_to_dict(s) for s in sources]}
+
+
+# ---------------------------------------------------------------------------
+# Source verifier stub — replaced by real AI service when available (issue #98)
+# ---------------------------------------------------------------------------
+
+def _run_verifier(source: models.Source) -> tuple[str, str]:
+    """Return (support_status, rationale) for a source.
+
+    Uses the real verifier service when VERIFIER_ENGINE is set to 'ai'; falls
+    back to a deterministic stub that marks every source as 'neutral' with an
+    explanatory rationale so the UI can be exercised end-to-end.
+    """
+    import os
+
+    engine = os.environ.get("VERIFIER_ENGINE", "stub")
+    if engine == "ai":
+        # Placeholder for future AI verifier integration (issue #98)
+        raise HTTPException(status_code=503, detail="AI verifier not configured")
+
+    # Stub: deterministic result based on claim text length (for test variety)
+    claim = (source.claim or "").strip().lower()
+    if not claim:
+        return ("neutral", "No claim text provided for verification.")
+    if "not" in claim or "contradict" in claim or "false" in claim:
+        return ("contradicts", "Stub: claim appears to contradict the source.")
+    if "support" in claim or "confirm" in claim or "evidence" in claim:
+        return ("supports", "Stub: claim appears supported by the source.")
+    return ("neutral", "Stub: automated verification unavailable — review manually.")
+
+
+# ---------------------------------------------------------------------------
+# POST /api/sources/{id}/run-verify
+# ---------------------------------------------------------------------------
+
+@router.post("/sources/{source_id}/run-verify")
+def run_verify_source(source_id: str, db: Session = Depends(get_db)):
+    """Trigger AI verification for a single source.
+
+    Skips re-verification if the source has been manually overridden.
+    """
+    source = db.query(models.Source).filter(models.Source.id == source_id).first()
+    if source is None:
+        raise HTTPException(status_code=404, detail="Source not found")
+
+    if source.manually_overridden:
+        return _source_to_dict(source)
+
+    status, rationale = _run_verifier(source)
+    source.support_status = status
+    source.rationale = rationale
+    source.manually_overridden = False
+    db.commit()
+    db.refresh(source)
+    return _source_to_dict(source)
+
+
+# ---------------------------------------------------------------------------
+# POST /api/plans/{id}/run-verify-all
+# ---------------------------------------------------------------------------
+
+@router.post("/plans/{plan_id}/run-verify-all")
+def run_verify_all_sources(plan_id: str, db: Session = Depends(get_db)):
+    """Trigger AI verification for every source on a plan.
+
+    Sources that have been manually overridden are returned as-is without
+    re-running the verifier.
+    """
+    plan = db.query(models.Plan).filter(models.Plan.id == plan_id).first()
+    if plan is None:
+        raise HTTPException(status_code=404, detail="Plan not found")
+
+    sources = db.query(models.Source).filter(models.Source.plan_id == plan_id).all()
+    results = []
+    for source in sources:
+        if not source.manually_overridden:
+            status, rationale = _run_verifier(source)
+            source.support_status = status
+            source.rationale = rationale
+            source.manually_overridden = False
+        results.append(_source_to_dict(source))
+
+    db.commit()
+    for source in sources:
+        db.refresh(source)
+
+    return {"results": [_source_to_dict(s) for s in sources]}
+
+
+# ---------------------------------------------------------------------------
+# PATCH /api/sources/{id}/status-override
+# ---------------------------------------------------------------------------
+
+class StatusOverrideRequest(BaseModel):
+    support_status: Literal["supports", "contradicts", "neutral", "inconclusive"]
+    rationale: str = Field(..., min_length=1, max_length=2000)
+
+
+@router.patch("/sources/{source_id}/status-override")
+def status_override(
+    source_id: str,
+    body: StatusOverrideRequest,
+    db: Session = Depends(get_db),
+):
+    """Manually accept or override the AI-assigned support_status."""
+    source = db.query(models.Source).filter(models.Source.id == source_id).first()
+    if source is None:
+        raise HTTPException(status_code=404, detail="Source not found")
+
+    source.support_status = body.support_status
+    source.rationale = body.rationale
+    source.manually_overridden = True
+    db.commit()
+    db.refresh(source)
+    return _source_to_dict(source)
+
+
+# ---------------------------------------------------------------------------
+# POST /api/sources/{id}/accept-status
+# ---------------------------------------------------------------------------
+
+@router.post("/sources/{source_id}/accept-status")
+def accept_status(source_id: str, db: Session = Depends(get_db)):
+    """Confirm the current AI-assigned status, clearing the manual override flag."""
+    source = db.query(models.Source).filter(models.Source.id == source_id).first()
+    if source is None:
+        raise HTTPException(status_code=404, detail="Source not found")
+
+    source.manually_overridden = False
+    db.commit()
+    db.refresh(source)
+    return _source_to_dict(source)
