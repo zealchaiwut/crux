@@ -41,6 +41,8 @@ class Case(Base):
     created_at = Column(TIMESTAMP(timezone=True))
     weigh_context = Column(Text)
 
+    summary = Column(Text)
+
     plans = relationship("Plan", back_populates="case", cascade="all, delete-orphan")
     probes = relationship("Probe", back_populates="case", cascade="all, delete-orphan")
 

@@ -14,6 +14,7 @@ from app.commander_spec import CommanderSpecError, generate_commander_spec
 from app.db import get_db
 from app.probe import ProbeError, design_probe
 from app.sharpen import SharpenError, sharpen_problem
+from app.summary import SummaryError, generate_summary
 from app.weigh import WeighError, rerank_plans
 from app.services.embeddings import upsert_embedding, EmbeddingError
 
@@ -714,3 +715,95 @@ async def generate_probe_commander_spec(
     db.refresh(probe)
 
     return {"commander_spec": probe.commander_spec}
+
+
+# ---------------------------------------------------------------------------
+# POST /api/cases/{id}/summary
+# ---------------------------------------------------------------------------
+
+_PRE_PROBE_STAGES = {"sharpened", "bake_off", "gather", "weigh"}
+
+
+@router.post("/cases/{case_id}/summary")
+async def generate_case_summary(
+    case_id: str,
+    force: bool = False,
+    db: Session = Depends(get_db),
+):
+    """Generate and cache an AI-powered synthesis for a case at the probe stage.
+
+    Returns a JSON object with four sections:
+      problem_statement, option_ranking, recommended_plan, probe_plan.
+
+    Pass ?force=true to discard the cached value and regenerate.
+    """
+    import json as _json
+
+    case = (
+        db.query(models.Case)
+        .options(
+            joinedload(models.Case.plans).joinedload(models.Plan.sources),
+            joinedload(models.Case.probes).joinedload(models.Probe.verdicts),
+        )
+        .filter(models.Case.id == case_id)
+        .first()
+    )
+    if case is None:
+        raise HTTPException(status_code=404, detail="Case not found")
+
+    if case.stage in _PRE_PROBE_STAGES:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                f"Summary is only available from the probe stage onward; "
+                f"this case is at stage '{case.stage}'."
+            ),
+        )
+
+    if case.summary and not force:
+        return _json.loads(case.summary)
+
+    probe = _latest_probe(case.probes)
+    probe_data = None
+    if probe:
+        probe_data = {
+            "type": probe.type,
+            "target_metric": probe.target_metric or "",
+            "note": probe.note or "",
+        }
+
+    plans_input = [
+        {
+            "label": p.label,
+            "name": p.name or f"Plan {p.label}",
+            "mechanism": p.mechanism or "",
+            "current_rank": p.current_rank,
+            "sources": [
+                {
+                    "id": s.id,
+                    "title": s.title or "",
+                    "claim": s.claim or "",
+                    "citation": s.citation or "",
+                }
+                for s in (p.sources or [])
+            ],
+        }
+        for p in sorted(case.plans, key=lambda p: p.current_rank or 99)
+    ]
+
+    case_data = {
+        "sharpened": case.sharpened or case.raw_problem,
+        "raw_problem": case.raw_problem,
+        "plans": plans_input,
+        "probe": probe_data,
+    }
+
+    try:
+        summary_json = await generate_summary(case_data)
+    except SummaryError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    case.summary = summary_json
+    db.commit()
+
+    return _json.loads(summary_json)
