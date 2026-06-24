@@ -6,6 +6,7 @@ against both Neon Postgres (production) and SQLite in-memory (tests).
 import uuid
 
 from sqlalchemy import (
+    Boolean,
     Column,
     Date,
     Enum,
@@ -76,6 +77,7 @@ class Source(Base):
     citation = Column(Text)
     support_status = Column(Enum(*_SUPPORT_STATUS, name="support_status_enum"), nullable=True)
     rationale = Column(Text, nullable=True)
+    manually_overridden = Column(Boolean, nullable=False, default=False)
 
     plan = relationship("Plan", back_populates="sources")
 
