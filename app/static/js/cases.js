@@ -619,40 +619,328 @@ function NewCaseModal({ onClose, onCaseCreated }) {
 }
 
 // ---------------------------------------------------------------------------
-// SourceChip — colour-coded chip per source kind; link when URL present (AC4)
+// SourceChip — colour-coded by support_status; expandable with Verify actions
 // ---------------------------------------------------------------------------
 
-function SourceChip({ kind, title, url, claim }) {
-  const iconMap = {
-    book: "ti-book",
-    article: "ti-article",
-    youtube: "ti-brand-youtube",
-  };
+const _CHIP_COLORS = {
+  supports:    { border: "var(--green)",  bg: "var(--green-bg)",  text: "var(--green)" },
+  contradicts: { border: "var(--red)",    bg: "var(--red-bg)",    text: "var(--red)" },
+  neutral:     { border: "var(--amber)",  bg: "var(--amber-bg)",  text: "var(--amber)" },
+  inconclusive:{ border: "var(--amber)",  bg: "var(--amber-bg)",  text: "var(--amber)" },
+};
+const _CHIP_UNVERIFIED = { border: "var(--border)", bg: "var(--surface-2)", text: "var(--text-muted)" };
+
+const _STATUS_LABEL = {
+  supports:    "Supports",
+  contradicts: "Contradicts",
+  neutral:     "Partial",
+  inconclusive:"Partial",
+};
+
+function SourceChip({
+  id,
+  kind,
+  title,
+  url,
+  claim,
+  support_status: initialStatus,
+  rationale: initialRationale,
+  manually_overridden: initialOverridden,
+  onUpdate,
+}) {
+  const [expanded, setExpanded] = React.useState(false);
+  const [currentStatus, setCurrentStatus] = React.useState(initialStatus || null);
+  const [currentRationale, setCurrentRationale] = React.useState(initialRationale || "");
+  const [currentOverridden, setCurrentOverridden] = React.useState(!!initialOverridden);
+  const [verifying, setVerifying] = React.useState(false);
+  const [verifyError, setVerifyError] = React.useState("");
+
+  React.useEffect(() => {
+    setCurrentStatus(initialStatus || null);
+    setCurrentRationale(initialRationale || "");
+    setCurrentOverridden(!!initialOverridden);
+  }, [initialStatus, initialRationale, initialOverridden]);
+
+  const iconMap = { book: "ti-book", article: "ti-article", youtube: "ti-brand-youtube" };
   const icon = iconMap[kind] || "ti-file";
-  const tooltipText = claim ? `${title}\n${claim}` : title;
-  const inner = (
-    <>
-      <i className={`ti ${icon}`} aria-hidden="true"></i>
-      {title}
-    </>
-  );
-  if (url) {
+  const colors = _CHIP_COLORS[currentStatus] || _CHIP_UNVERIFIED;
+  const statusLabel = _STATUS_LABEL[currentStatus] || "Unverified";
+
+  function _applyUpdate(data) {
+    setCurrentStatus(data.support_status || null);
+    setCurrentRationale(data.rationale || "");
+    setCurrentOverridden(!!data.manually_overridden);
+    if (onUpdate) onUpdate(data);
+  }
+
+  async function handleVerify() {
+    if (!id) return;
+    setVerifying(true);
+    setVerifyError("");
+    try {
+      const resp = await fetch(`/api/sources/${id}/run-verify`, { method: "POST" });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data.detail || `Error ${resp.status}`);
+      _applyUpdate(data);
+    } catch (err) {
+      setVerifyError(err.message || "Verification failed.");
+    } finally {
+      setVerifying(false);
+    }
+  }
+
+  async function handleOverride(newStatus) {
+    if (!id || !newStatus) return;
+    const rat = currentRationale || "Manually set.";
+    try {
+      const resp = await fetch(`/api/sources/${id}/status-override`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ support_status: newStatus, rationale: rat }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) return;
+      _applyUpdate(data);
+    } catch (_) {}
+  }
+
+  async function handleAccept() {
+    if (!id) return;
+    try {
+      const resp = await fetch(`/api/sources/${id}/accept-status`, { method: "POST" });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) return;
+      _applyUpdate(data);
+    } catch (_) {}
+  }
+
+  // Collapsed chip — button so it is keyboard-focusable by default
+  if (!expanded) {
     return (
-      <a
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
+      <button
         className={`src ${kind}`}
-        title={tooltipText}
+        onClick={() => setExpanded(true)}
+        aria-expanded={false}
+        aria-label={`${title}: ${statusLabel}. Expand for details.`}
+        style={{
+          cursor: "pointer",
+          border: `1px solid ${colors.border}`,
+          background: colors.bg,
+        }}
       >
-        {inner}
-      </a>
+        <i className={`ti ${icon}`} aria-hidden="true"></i>
+        {title}
+        <span
+          className="mono"
+          style={{ fontSize: "var(--text-2xs)", color: colors.text }}
+          aria-label={`Status: ${statusLabel}`}
+        >
+          {statusLabel}
+        </span>
+        {currentOverridden && (
+          <i
+            className="ti ti-lock"
+            aria-label="Manually overridden"
+            title="Manually overridden"
+            style={{ fontSize: 10, color: colors.text }}
+          ></i>
+        )}
+      </button>
     );
   }
+
+  // Expanded state — full-width panel (flex-basis:100% breaks out of chip row)
   return (
-    <span className={`src ${kind}`} title={tooltipText}>
-      {inner}
-    </span>
+    <div
+      style={{
+        flexBasis: "100%",
+        border: `1px solid ${colors.border}`,
+        background: colors.bg,
+        borderRadius: "var(--radius-sm)",
+        padding: "var(--space-3)",
+      }}
+    >
+      {/* Header row */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "var(--space-2)",
+          marginBottom: "var(--space-2)",
+          flexWrap: "wrap",
+        }}
+      >
+        <button
+          onClick={() => setExpanded(false)}
+          aria-expanded={true}
+          aria-label={`Collapse ${title}`}
+          style={{
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            padding: 0,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 5,
+            fontFamily: "var(--font-mono)",
+            fontSize: "var(--text-sm)",
+            color: "var(--text)",
+          }}
+        >
+          <i className={`ti ${icon}`} aria-hidden="true"></i>
+          {title}
+          <i className="ti ti-chevron-up" aria-hidden="true" style={{ fontSize: 10 }}></i>
+        </button>
+
+        <span
+          className="mono"
+          style={{
+            fontSize: "var(--text-2xs)",
+            color: colors.text,
+            fontWeight: 700,
+          }}
+        >
+          {statusLabel}
+        </span>
+
+        {currentOverridden && (
+          <span
+            className="mono"
+            style={{
+              fontSize: "var(--text-2xs)",
+              color: colors.text,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 3,
+            }}
+            aria-label="Manually overridden"
+          >
+            <i className="ti ti-lock" aria-hidden="true" style={{ fontSize: 10 }}></i>
+            Overridden
+          </span>
+        )}
+
+        {url && (
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`Open source: ${title}`}
+            style={{
+              marginLeft: "auto",
+              fontSize: "var(--text-2xs)",
+              color: "var(--text-muted)",
+            }}
+          >
+            <i className="ti ti-external-link" aria-hidden="true"></i>
+          </a>
+        )}
+      </div>
+
+      {/* Rationale */}
+      <p
+        style={{
+          fontSize: "var(--text-sm)",
+          color: "var(--text-muted)",
+          lineHeight: 1.5,
+          margin: "0 0 var(--space-2)",
+        }}
+      >
+        {currentRationale ? (
+          currentRationale
+        ) : (
+          <span style={{ fontStyle: "italic", color: "var(--text-sub)" }}>
+            No rationale yet. Click Verify to analyse this source.
+          </span>
+        )}
+      </p>
+
+      {verifyError && (
+        <p
+          role="alert"
+          style={{
+            fontSize: "var(--text-sm)",
+            color: "var(--red)",
+            margin: "0 0 var(--space-2)",
+          }}
+        >
+          <i className="ti ti-alert-circle" aria-hidden="true"></i> {verifyError}
+        </p>
+      )}
+
+      {/* Action row */}
+      <div
+        style={{
+          display: "flex",
+          gap: "var(--space-2)",
+          flexWrap: "wrap",
+          alignItems: "center",
+        }}
+      >
+        <button
+          className="btn btn-sm"
+          onClick={handleVerify}
+          disabled={verifying}
+          aria-label="Verify this source"
+          style={{ fontSize: "var(--text-2xs)", padding: "3px 9px" }}
+        >
+          {verifying ? (
+            <>
+              <i className="ti ti-loader-2 crux-spin" aria-hidden="true"></i>
+              Verifying…
+            </>
+          ) : (
+            <>
+              <i className="ti ti-shield-check" aria-hidden="true"></i>
+              Verify
+            </>
+          )}
+        </button>
+
+        <label
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 4,
+            fontSize: "var(--text-2xs)",
+            color: "var(--text-muted)",
+          }}
+        >
+          <span className="mono">Status:</span>
+          <select
+            value={currentStatus || ""}
+            onChange={(e) => handleOverride(e.target.value)}
+            aria-label="Override support status"
+            style={{
+              fontSize: "var(--text-2xs)",
+              padding: "2px 4px",
+              borderRadius: "var(--radius-sm)",
+              border: "1px solid var(--border)",
+              background: "var(--surface)",
+              color: "var(--text)",
+              cursor: "pointer",
+            }}
+          >
+            <option value="">Unverified</option>
+            <option value="supports">Supports</option>
+            <option value="neutral">Partial</option>
+            <option value="contradicts">Contradicts</option>
+            <option value="inconclusive">Inconclusive</option>
+          </select>
+        </label>
+
+        {currentOverridden && (
+          <button
+            className="btn btn-sm"
+            onClick={handleAccept}
+            aria-label="Accept AI-assigned status and clear override"
+            style={{ fontSize: "var(--text-2xs)", padding: "3px 9px" }}
+          >
+            <i className="ti ti-check" aria-hidden="true"></i> Accept
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -1517,6 +1805,7 @@ function PlanCard({
     initialGatherError || "",
   );
   const [showForm, setShowForm] = React.useState(false);
+  const [verifyingAll, setVerifyingAll] = React.useState(false);
   const ruledOut = standing === "ruled-out";
   const ruledIn = standing === "ruled-in";
 
@@ -1530,8 +1819,34 @@ function PlanCard({
     setSources((prev) => [...prev, newSource]);
   }
 
+  function handleSourceUpdate(updatedSource) {
+    setSources((prev) =>
+      prev.map((s) => (s.id === updatedSource.id ? { ...s, ...updatedSource } : s))
+    );
+  }
+
   function handleSuggestAttached() {
     if (onGatherDone) onGatherDone();
+  }
+
+  async function triggerVerifyAll() {
+    setVerifyingAll(true);
+    try {
+      const resp = await fetch(`/api/plans/${planId}/run-verify-all`, { method: "POST" });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) return;
+      if (data.results) {
+        setSources((prev) =>
+          prev.map((s) => {
+            const updated = data.results.find((r) => r.id === s.id);
+            return updated ? { ...s, ...updated } : s;
+          })
+        );
+      }
+    } catch (_) {
+    } finally {
+      setVerifyingAll(false);
+    }
   }
 
   async function triggerGather() {
@@ -1675,7 +1990,7 @@ function PlanCard({
           >
             SOURCES {sources.length > 0 && `· ${sources.length}`}
           </span>
-          {/* AC10: manual Add source + AC1: Suggest sources — both always visible */}
+          {/* Add source + Suggest sources + Verify all */}
           <div
             style={{
               display: "flex",
@@ -1684,6 +1999,28 @@ function PlanCard({
               flexWrap: "wrap",
             }}
           >
+            {sources.length > 0 && (
+              <button
+                className="btn btn-sm"
+                onClick={triggerVerifyAll}
+                disabled={verifyingAll}
+                aria-label="Verify all sources on this plan"
+                aria-busy={verifyingAll}
+                style={{ padding: "3px 9px", fontSize: "var(--text-2xs)" }}
+              >
+                {verifyingAll ? (
+                  <>
+                    <i className="ti ti-loader-2 crux-spin" aria-hidden="true"></i>
+                    Verifying…
+                  </>
+                ) : (
+                  <>
+                    <i className="ti ti-shield-check" aria-hidden="true"></i>
+                    Verify all
+                  </>
+                )}
+              </button>
+            )}
             <SuggestPanel planId={planId} onAttached={handleSuggestAttached} />
             <button
               className="btn btn-sm"
@@ -1749,7 +2086,7 @@ function PlanCard({
           </div>
         )}
 
-        {/* Sources list (done state) — SourceChips with name, URL, and snippet (AC4) */}
+        {/* Sources list (done state) — SourceChips coloured by support_status */}
         {gatherStatus !== "running" && sources.length > 0 && (
           <div
             style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap" }}
@@ -1757,10 +2094,15 @@ function PlanCard({
             {sources.map((s) => (
               <SourceChip
                 key={s.id || s.title}
+                id={s.id}
                 kind={s.kind}
                 title={s.title}
                 url={s.url}
                 claim={s.claim}
+                support_status={s.support_status || null}
+                rationale={s.rationale || ""}
+                manually_overridden={!!s.manually_overridden}
+                onUpdate={handleSourceUpdate}
               />
             ))}
           </div>
