@@ -12,7 +12,7 @@ POST /api/sources/{id}/accept-status    — clear manual override flag (accept A
 """
 import re
 import uuid as _uuid_mod
-from typing import Any, List, Literal, Optional
+from typing import Any, List, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, ValidationError, field_validator
