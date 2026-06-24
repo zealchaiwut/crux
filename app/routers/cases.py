@@ -416,12 +416,14 @@ async def run_bake_off(case_id: str, db: Session = Depends(get_db)):
 
 
 class RerankRequest(BaseModel):
-    context: str
+    context: str | None = None
 
     @field_validator("context")
     @classmethod
-    def not_blank(cls, v: str) -> str:
-        if not v or not v.strip():
+    def not_blank(cls, v: str | None) -> str | None:
+        if v == "":
+            return None
+        if v is not None and not v.strip():
             raise ValueError("context must not be blank")
         return v
 
@@ -463,6 +465,7 @@ async def rerank_case(case_id: str, body: RerankRequest, db: Session = Depends(g
             plan.standing = item["standing"]
 
     case.weigh_context = body.context
+    case.stage = "weigh"
     db.commit()
 
     db.refresh(case)
