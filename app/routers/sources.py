@@ -1,15 +1,17 @@
 """Sources API router.
 
-GET  /api/sources?plan_id=<id>   — list all sources for a plan.
-POST /api/sources                — add a source to a plan (manual paste fallback).
-POST /api/sources/batch          — add multiple sources in a single transaction.
+GET  /api/sources?plan_id=<id>       — list all sources for a plan.
+POST /api/sources                    — add a source to a plan (manual paste fallback).
+POST /api/sources/batch              — add multiple sources in a single transaction.
+POST /api/sources/{id}/verify        — record verification result for a single source.
+POST /api/plans/{id}/verify-sources  — batch summary of verification state for a plan.
 """
 import re
 import uuid as _uuid_mod
-from typing import Any, List
+from typing import Any, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, ValidationError, field_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator
 from sqlalchemy.orm import Session
 
 from app import models
@@ -148,7 +150,66 @@ def _source_to_dict(source: models.Source) -> dict:
         "url": source.url,
         "claim": source.claim,
         "citation": source.citation,
+        "support_status": source.support_status,
+        "rationale": source.rationale,
     }
+
+
+# ---------------------------------------------------------------------------
+# Verification models
+# ---------------------------------------------------------------------------
+
+_SUPPORT_STATUS_VALUES = ("supports", "contradicts", "neutral", "inconclusive")
+
+
+class VerifySourceRequest(BaseModel):
+    support_status: Literal["supports", "contradicts", "neutral", "inconclusive"]
+    rationale: str = Field(..., min_length=1, max_length=2000)
+
+
+# ---------------------------------------------------------------------------
+# POST /api/sources/{id}/verify
+# ---------------------------------------------------------------------------
+
+@router.post("/sources/{source_id}/verify")
+def verify_source(
+    source_id: str,
+    body: VerifySourceRequest,
+    db: Session = Depends(get_db),
+):
+    source = db.query(models.Source).filter(models.Source.id == source_id).first()
+    if source is None:
+        raise HTTPException(status_code=404, detail="Source not found")
+
+    source.support_status = body.support_status
+    source.rationale = body.rationale
+    db.commit()
+    db.refresh(source)
+    return _source_to_dict(source)
+
+
+# ---------------------------------------------------------------------------
+# POST /api/plans/{id}/verify-sources
+# ---------------------------------------------------------------------------
+
+@router.post("/plans/{plan_id}/verify-sources")
+def batch_verify_sources(plan_id: str, db: Session = Depends(get_db)):
+    plan = db.query(models.Plan).filter(models.Plan.id == plan_id).first()
+    if plan is None:
+        raise HTTPException(status_code=404, detail="Plan not found")
+
+    sources = db.query(models.Source).filter(models.Source.plan_id == plan_id).all()
+    total = len(sources)
+    verified = sum(1 for s in sources if s.support_status is not None)
+    results = [
+        {
+            "source_id": s.id,
+            "support_status": s.support_status,
+            "rationale": s.rationale,
+        }
+        for s in sources
+    ]
+    return {"total": total, "verified": verified, "failed": 0, "results": results}
 
 
 @router.post("/sources/batch", status_code=201)
