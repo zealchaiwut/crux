@@ -22,7 +22,7 @@ Base = declarative_base()
 _STAGE = ("sharpened", "bake_off", "gather", "weigh", "probe", "verdict")
 _PLAN_LABEL = ("A", "B", "C")
 _SOURCE_KIND = ("book", "article", "youtube")
-_SUPPORT_STATUS = ("supports", "contradicts", "neutral", "inconclusive")
+_SUPPORT_STATUS = ("supports", "partial", "contradicts", "unverified")
 _PROBE_TYPE = ("measurement", "lab-test", "behaviour-experiment", "prototype")
 _PROBE_STATUS = ("designed", "running", "confirmed", "killed", "inconclusive")
 _VERDICT_OUTCOME = ("confirmed", "killed", "inconclusive")
@@ -75,8 +75,14 @@ class Source(Base):
     url = Column(Text)
     claim = Column(Text)
     citation = Column(Text)
-    support_status = Column(Enum(*_SUPPORT_STATUS, name="support_status_enum"), nullable=True)
+    support_status = Column(
+        Enum(*_SUPPORT_STATUS, name="support_status_enum", validate_strings=True),
+        nullable=False,
+        default="unverified",
+        server_default="unverified",
+    )
     rationale = Column(Text, nullable=True)
+    support_rationale = Column(Text, nullable=True)
     manually_overridden = Column(Boolean, nullable=False, default=False)
 
     plan = relationship("Plan", back_populates="sources")
