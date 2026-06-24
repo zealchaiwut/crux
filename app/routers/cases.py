@@ -234,6 +234,13 @@ def get_case(case_id: str, db: Session = Depends(get_db)):
             "decided_at": str(verdict_obj.decided_at) if verdict_obj.decided_at else None,
         }
 
+    summary_out = None
+    if case.summary:
+        try:
+            summary_out = json.loads(case.summary)
+        except (ValueError, TypeError):
+            summary_out = None
+
     return {
         "id": case.id,
         "raw_problem": case.raw_problem,
@@ -247,6 +254,7 @@ def get_case(case_id: str, db: Session = Depends(get_db)):
         "weigh_context": case.weigh_context or "",
         "plans": plans_out,
         "probe": probe_out,
+        "summary": summary_out,
     }
 
 
