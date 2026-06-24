@@ -1277,15 +1277,14 @@ function WeighPanel({ caseId, initialContext, onRerankDone }) {
 
   React.useEffect(() => { setContext(initialContext || ''); }, [initialContext]);
 
-  async function handleRerank() {
-    if (!context.trim()) return;
+  async function _postRerank(body) {
     setState('loading');
     setError('');
     try {
       const resp = await fetch(`/api/cases/${caseId}/rerank`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ context }),
+        body: JSON.stringify(body),
       });
       if (!resp.ok) {
         const data = await resp.json().catch(() => ({}));
@@ -1297,6 +1296,15 @@ function WeighPanel({ caseId, initialContext, onRerankDone }) {
       setError(err.message || 'Re-rank failed. Please try again.');
       setState('error');
     }
+  }
+
+  function handleRerank() {
+    if (!context.trim()) return;
+    _postRerank({ context });
+  }
+
+  function handleSkip() {
+    _postRerank({ context: null });
   }
 
   const isLoading = state === 'loading';
@@ -1314,7 +1322,10 @@ function WeighPanel({ caseId, initialContext, onRerankDone }) {
         style={{ width: '100%', resize: 'vertical', padding: 'var(--space-3)', fontSize: 'var(--text-base)', color: 'var(--text)', background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', lineHeight: 1.55, boxSizing: 'border-box', opacity: isLoading ? 0.6 : 1 }}
       />
       {error && <p role="alert" style={{ color: 'var(--red)', fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}>{error}</p>}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'var(--space-3)' }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)', marginTop: 'var(--space-3)' }}>
+        <button className="btn" onClick={handleSkip} disabled={isLoading} aria-busy={isLoading}>
+          {isLoading ? <><i className="ti ti-loader-2 crux-spin" aria-hidden="true"></i> Re-ranking…</> : <>Skip — weigh on sources only</>}
+        </button>
         <button className="btn btn-crux" onClick={handleRerank} disabled={!context.trim() || isLoading} aria-busy={isLoading}>
           {isLoading ? <><i className="ti ti-loader-2 crux-spin" aria-hidden="true"></i> Re-ranking…</> : <><i className="ti ti-arrows-sort" aria-hidden="true"></i> Re-rank for me</>}
         </button>
