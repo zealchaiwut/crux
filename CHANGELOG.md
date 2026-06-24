@@ -3,6 +3,14 @@
 Per-sprint changelog for crux. Entries are written by the documentor when a
 sprint finishes. Dated per-sprint files live under [docs/changelog/](docs/changelog/).
 
+## Sprint 10 (2026-06-24)
+
+- #92: Make Weigh stage optional: skip context input
+- #93: Expand Probe into full structured experiment plan
+- #94: Add AI-powered Case Summary generator
+- #95: Show Case Summary section at probe stage
+- #96: Split case gate: Summary pre-verdict, ActionPlan stays locked
+
 ## Sprint 8 (2026-06-22)
 
 - #81: Wire real web fetchers into custom research engine

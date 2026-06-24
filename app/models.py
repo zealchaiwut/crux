@@ -41,6 +41,8 @@ class Case(Base):
     created_at = Column(TIMESTAMP(timezone=True))
     weigh_context = Column(Text)
 
+    summary = Column(Text)
+
     plans = relationship("Plan", back_populates="case", cascade="all, delete-orphan")
     probes = relationship("Probe", back_populates="case", cascade="all, delete-orphan")
 
@@ -85,6 +87,9 @@ class Probe(Base):
     cost = Column(Text)
     time = Column(Text)
     note = Column(Text)
+    steps = Column(JSON)
+    duration = Column(Text)
+    decision_rule = Column(Text)
     status = Column(
         Enum(*_PROBE_STATUS, name="probe_status_enum"),
         nullable=False,

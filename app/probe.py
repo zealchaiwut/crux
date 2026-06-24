@@ -26,13 +26,18 @@ _SYSTEM = (
     "- Be honest: if the right answer is a blood test, say 'lab-test' and direct the user "
     "to see a doctor. Do NOT suggest a fictional app or invented solution.\n"
     "- Name exactly ONE target metric — the single number or observation that will settle the question.\n"
-    "- Keep cost and time estimates realistic and brief (e.g. 'free', '~£30', '7 days', '2 weeks').\n\n"
+    "- Keep cost and time estimates realistic and brief (e.g. 'free', '~£30', '7 days', '2 weeks').\n"
+    "- Provide 3–6 concrete, ordered steps someone can follow to run this probe outside the app.\n"
+    "- State a clear decision rule with BOTH a confirmatory outcome AND a kill condition.\n\n"
     "Return ONLY a JSON object — no markdown fences, no commentary — with these fields:\n"
     '  "type": "<measurement|lab-test|behaviour-experiment|prototype>"\n'
     '  "target_metric": "<the one metric to measure>"\n'
     '  "cost": "<cost estimate>"\n'
     '  "time": "<time estimate>"\n'
     '  "note": "<brief honest instruction>"\n'
+    '  "steps": ["<step 1>", "<step 2>", ...]  (3–6 ordered action steps)\n'
+    '  "duration": "<how long to run the probe, e.g. \'7 days\', \'2 weeks\'>"\n'
+    '  "decision_rule": "<if X ≥ Y → proceed with Plan A; if X < Y → discard Plan A>"\n'
 )
 
 
@@ -50,6 +55,13 @@ def _validate_probe_response(data: dict) -> dict:
         raise ProbeError(
             f"Invalid probe type {data['type']!r}; must be one of {sorted(_VALID_TYPES)}"
         )
+    # Normalise optional new fields to safe defaults if absent
+    if "steps" not in data or data["steps"] is None:
+        data["steps"] = []
+    if "duration" not in data or data["duration"] is None:
+        data["duration"] = ""
+    if "decision_rule" not in data or data["decision_rule"] is None:
+        data["decision_rule"] = ""
     return data
 
 

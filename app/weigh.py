@@ -12,8 +12,9 @@ _MODEL = "claude-haiku-4-5-20251001"
 _SYSTEM = (
     "You are a plan-ranking assistant. "
     "Given a sharpened problem statement, a set of competing Plans (each with a label, name, and mechanism), "
-    "and a user's personal context (numbers, constraints, situation), re-rank the Plans from most to least "
-    "likely given the user's specific context. Also flag any Plans that can be confidently ruled in or ruled out.\n\n"
+    "and optionally a user's personal context (numbers, constraints, situation), re-rank the Plans from most "
+    "to least likely. If no user context is provided, rank based on the problem statement and plans alone. "
+    "Also flag any Plans that can be confidently ruled in or ruled out.\n\n"
     "Output ONLY a JSON array with one object per Plan. Each object must have these fields:\n"
     '  "label": the plan label ("A", "B", or "C")\n'
     '  "rank": integer 1–3 (1 = best fit for this user)\n'
@@ -21,8 +22,8 @@ _SYSTEM = (
     "Rules:\n"
     "- Every plan must appear exactly once.\n"
     "- Ranks must be unique integers from 1 to the number of plans.\n"
-    "- Use 'ruled-in' only when the user's data strongly supports this plan as the cause.\n"
-    "- Use 'ruled-out' only when the user's data clearly contradicts this plan.\n"
+    "- Use 'ruled-in' only when the evidence strongly supports this plan as the cause.\n"
+    "- Use 'ruled-out' only when the evidence clearly contradicts this plan.\n"
     "- Return only the JSON array — no markdown fences, no commentary."
 )
 
@@ -31,18 +32,23 @@ class WeighError(Exception):
     """Raised when the Claude call fails or returns unparseable output."""
 
 
-async def rerank_plans(sharpened: str, plans: list[dict], context: str) -> list[dict]:
+async def rerank_plans(sharpened: str, plans: list[dict], context: str | None) -> list[dict]:
     """Call Claude to re-rank plans against user context.
 
+    context may be None or empty — in that case ranking is done on gathered sources alone.
     Returns list of dicts with keys: label, rank, standing (null|"ruled-in"|"ruled-out").
     """
     plans_text = "\n".join(
         f"Plan {p['label']}: {p['name']} — {p['mechanism']}" for p in plans
     )
+    context_section = (
+        f"User context: {context}" if context and context.strip()
+        else "User context: (none — rank based on the problem and gathered sources only)"
+    )
     user_message = (
         f"Problem: {sharpened}\n\n"
         f"Plans:\n{plans_text}\n\n"
-        f"User context: {context}"
+        f"{context_section}"
     )
 
     try:
