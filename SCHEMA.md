@@ -9,6 +9,7 @@ Database: Neon Postgres. Migrations managed by Alembic (revision `i9j0k1l2m3n4`)
 | `stage_enum` | `sharpened`, `bake_off`, `gather`, `weigh`, `probe`, `verdict` |
 | `plan_label_enum` | `A`, `B`, `C` |
 | `source_kind_enum` | `book`, `article`, `youtube` |
+| `support_status_enum` | `supports`, `contradicts`, `neutral`, `inconclusive` |
 | `probe_type_enum` | `measurement`, `lab-test`, `behaviour-experiment`, `prototype` |
 | `probe_status_enum` | `designed`, `running`, `confirmed`, `killed`, `inconclusive` |
 | `verdict_outcome_enum` | `confirmed`, `killed`, `inconclusive` |
@@ -52,6 +53,8 @@ Database: Neon Postgres. Migrations managed by Alembic (revision `i9j0k1l2m3n4`)
 | `url` | text | |
 | `claim` | text | |
 | `citation` | text | |
+| `support_status` | support_status_enum | nullable — set via POST /api/sources/{id}/verify (issue #99) |
+| `rationale` | text | nullable — free-text explanation of verification result (issue #99) |
 
 ### `probe`
 
