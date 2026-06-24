@@ -218,6 +218,9 @@ def get_case(case_id: str, db: Session = Depends(get_db)):
             "cost": probe.cost or "",
             "time": probe.time or "",
             "note": probe.note or "",
+            "steps": probe.steps if probe.steps is not None else [],
+            "duration": probe.duration or "",
+            "decision_rule": probe.decision_rule or "",
             "status": probe.status,
             "commander_spec": probe.commander_spec,
         }
@@ -515,6 +518,9 @@ async def design_probe_for_case(case_id: str, db: Session = Depends(get_db)):
                 "cost": existing.cost or "",
                 "time": existing.time or "",
                 "note": existing.note or "",
+                "steps": existing.steps if existing.steps is not None else [],
+                "duration": existing.duration or "",
+                "decision_rule": existing.decision_rule or "",
                 "status": existing.status,
                 "commander_spec": existing.commander_spec,
             }
@@ -545,6 +551,9 @@ async def design_probe_for_case(case_id: str, db: Session = Depends(get_db)):
         cost=result["cost"],
         time=result["time"],
         note=result["note"],
+        steps=result.get("steps") or [],
+        duration=result.get("duration") or "",
+        decision_rule=result.get("decision_rule") or "",
         status="designed",
         created_at=datetime.now(tz=timezone.utc),
     )
@@ -561,6 +570,9 @@ async def design_probe_for_case(case_id: str, db: Session = Depends(get_db)):
         "cost": probe.cost or "",
         "time": probe.time or "",
         "note": probe.note or "",
+        "steps": probe.steps if probe.steps is not None else [],
+        "duration": probe.duration or "",
+        "decision_rule": probe.decision_rule or "",
         "status": probe.status,
         "commander_spec": probe.commander_spec,
     }
