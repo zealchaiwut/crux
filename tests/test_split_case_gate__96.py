@@ -167,7 +167,6 @@ def test_ac7_gate_logic_is_split_not_combined():
 
     # The key is: CASE SUMMARY should appear OUTSIDE or before any verdict_log check
     summary_idx = CASES_JS.find("CASE SUMMARY")
-    first_verdict_log = CASES_JS.find("verdict_log")
 
     # For proper separation: Summary must exist independent of verdict checks
     assert summary_idx < action_plan_idx, (
