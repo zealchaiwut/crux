@@ -1863,9 +1863,10 @@ function CaseDetailScreen({ caseId, onBack, onNavigateToCase, theme, onToggleThe
           />
         )}
 
-        {/* ACTION PLAN */}
-        <SectionLabel>ACTION PLAN</SectionLabel>
-        {caseData.verdict_log ? (
+        {/* ACTION PLAN — only at probe stage; verdict_log further gates content vs LockedPlan */}
+        {stage >= 4 && (<>
+          <SectionLabel>ACTION PLAN</SectionLabel>
+          {caseData.verdict_log ? (
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 'var(--space-5)', marginBottom: 'var(--space-6)' }}>
             <div style={{ marginBottom: 'var(--space-4)' }}>
               <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 'var(--space-2)' }}>VERDICT</div>
@@ -1899,6 +1900,8 @@ function CaseDetailScreen({ caseId, onBack, onNavigateToCase, theme, onToggleThe
           </div>
         ) : (
           <LockedPlan onLogVerdict={() => setShowLogVerdictModal(true)} />
+        )}
+        </>
         )}
 
         {showLogVerdictModal && (
