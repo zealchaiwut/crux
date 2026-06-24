@@ -1407,6 +1407,51 @@ function StageBar({ stage = 0 }) {
 }
 
 // ---------------------------------------------------------------------------
+// CaseSummarySection — renders at stage >= 4 (probe) regardless of verdict
+// ---------------------------------------------------------------------------
+
+function CaseSummarySection({ summary, hasVerdict, onLogVerdict }) {
+  return (
+    <>
+      <SectionLabel>CASE SUMMARY</SectionLabel>
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 'var(--space-5)', marginBottom: 'var(--space-6)' }}>
+        {summary ? (
+          <div>
+            <div style={{ marginBottom: 'var(--space-4)' }}>
+              <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 'var(--space-2)' }}>PROBLEM STATEMENT</div>
+              <p style={{ fontSize: 'var(--text-base)', color: 'var(--text)', lineHeight: 1.55, margin: 0 }}>{summary.problem_statement}</p>
+            </div>
+            <div style={{ marginBottom: 'var(--space-4)' }}>
+              <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 'var(--space-2)' }}>OPTION RANKING</div>
+              <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', lineHeight: 1.55, margin: 0 }}>{summary.option_ranking}</p>
+            </div>
+            <div style={{ marginBottom: 'var(--space-4)' }}>
+              <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 'var(--space-2)' }}>RECOMMENDED PLAN</div>
+              <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', lineHeight: 1.55, margin: 0 }}>{summary.recommended_plan}</p>
+            </div>
+            <div style={{ marginBottom: hasVerdict ? 0 : 'var(--space-4)' }}>
+              <div className="mono" style={{ fontSize: 'var(--text-2xs)', fontWeight: 700, color: 'var(--text-sub)', marginBottom: 'var(--space-2)' }}>PROBE PLAN</div>
+              <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', lineHeight: 1.55, margin: 0 }}>{summary.probe_plan}</p>
+            </div>
+            {!hasVerdict && (
+              <div style={{ borderTop: '1px solid var(--border)', paddingTop: 'var(--space-4)', marginTop: 'var(--space-4)' }}>
+                <button className="btn btn-crux" onClick={onLogVerdict}>
+                  <i className="ti ti-gavel" aria-hidden="true"></i> Log verdict
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-sub)', margin: 0 }}>
+            No summary generated yet.
+          </p>
+        )}
+      </div>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // LockedPlan
 // ---------------------------------------------------------------------------
 
@@ -1807,6 +1852,15 @@ function CaseDetailScreen({ caseId, onBack, onNavigateToCase, theme, onToggleThe
           />
         ) : (
           <EmptySection label="STAGE 4 — PROBE" message="Complete the Weigh stage first." />
+        )}
+
+        {/* CASE SUMMARY — shown at probe stage (4) regardless of verdict */}
+        {stage >= 4 && (
+          <CaseSummarySection
+            summary={caseData.summary || null}
+            hasVerdict={!!caseData.verdict_log}
+            onLogVerdict={() => setShowLogVerdictModal(true)}
+          />
         )}
 
         {/* ACTION PLAN */}
