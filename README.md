@@ -15,7 +15,7 @@ Companion to [commander](https://github.com/zealchaiwut/commander) (which builds
 
 ## Status
 
-Eight sprints complete. All five pipeline stages are live:
+Ten sprints complete. All five pipeline stages are live:
 
 | Stage | Status |
 |---|---|
@@ -94,7 +94,8 @@ POST /api/cases                        # create a case
 POST /api/cases/sharpen                # sharpen a raw problem statement
 POST /api/cases/{case_id}/bake-off     # generate competing plans A/B/C
 POST /api/cases/{case_id}/rerank       # re-rank plans against user context
-POST /api/cases/{case_id}/probe        # design the cheapest decisive test
+POST /api/cases/{case_id}/probe        # design the cheapest decisive test (returns steps, duration, decision_rule)
+POST /api/cases/{case_id}/summary      # generate/cache AI case summary (probe stage onward); ?force=true regenerates
 POST /api/cases/{case_id}/verdict      # log a verdict for the active probe
 
 GET  /api/sources?plan_id={id}         # list sources for a plan

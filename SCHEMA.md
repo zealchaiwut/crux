@@ -1,6 +1,6 @@
 # Schema
 
-Database: Neon Postgres. Migrations managed by Alembic (revision `f6g7h8i9j0k1`).
+Database: Neon Postgres. Migrations managed by Alembic (revision `i9j0k1l2m3n4`).
 
 ## Enum types
 
@@ -26,6 +26,7 @@ Database: Neon Postgres. Migrations managed by Alembic (revision `f6g7h8i9j0k1`)
 | `stage` | stage_enum | NOT NULL |
 | `created_at` | timestamptz | NOT NULL, default `now()` |
 | `weigh_context` | text | Persisted user context from Stage 3 re-rank (issue #10) |
+| `summary` | text | JSON-encoded AI-generated case summary; cached after first generation (issue #94) |
 
 ### `plan`
 
@@ -63,6 +64,9 @@ Database: Neon Postgres. Migrations managed by Alembic (revision `f6g7h8i9j0k1`)
 | `cost` | text | |
 | `time` | text | |
 | `note` | text | |
+| `steps` | JSON | Ordered list of 3–6 action steps for running the probe (issue #93) |
+| `duration` | text | How long to run the probe, e.g. "7 days" (issue #93) |
+| `decision_rule` | text | Confirmatory outcome and kill condition, e.g. "if X ≥ Y → proceed" (issue #93) |
 | `status` | probe_status_enum | NOT NULL, default `designed` |
 | `due_date` | date | |
 | `commander_spec` | text | |
