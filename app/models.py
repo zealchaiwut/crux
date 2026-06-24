@@ -80,6 +80,26 @@ class Source(Base):
     manually_overridden = Column(Boolean, nullable=False, default=False)
 
     plan = relationship("Plan", back_populates="sources")
+    verifications = relationship(
+        "SourceVerification", back_populates="source", cascade="all, delete-orphan"
+    )
+
+
+class SourceVerification(Base):
+    """Result of a fetch → Claude analysis → DB write pipeline run for one source."""
+
+    __tablename__ = "source_verification"
+
+    id = Column(String(36), primary_key=True, default=_uuid)
+    source_id = Column(
+        String(36), ForeignKey("source.id", ondelete="CASCADE"), nullable=False
+    )
+    verdict = Column(String(32), nullable=False)  # 'supports' | 'contradicts' | 'unverified'
+    summary = Column(Text, nullable=True)   # non-null when verdict in ('supports', 'contradicts')
+    reason = Column(Text, nullable=True)    # non-null when verdict == 'unverified'
+    created_at = Column(TIMESTAMP(timezone=True), nullable=True)
+
+    source = relationship("Source", back_populates="verifications")
 
 
 class Probe(Base):
