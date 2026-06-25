@@ -68,7 +68,7 @@ def list_verdicts(
             "id": v.id,
             "outcome": v.outcome,
             "notes": v.notes or "",
-            "created_at": str(v.decided_at) if v.decided_at else None,
+            "created_at": str(v.decided_at or v.created_at) if (v.decided_at or v.created_at) else None,
             "probe": {
                 "type": probe.type if probe else None,
                 "target_metric": probe.target_metric or "" if probe else "",
