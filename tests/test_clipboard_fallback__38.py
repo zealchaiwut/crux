@@ -1,11 +1,15 @@
 """Tests for issue #38: [follow-up] Replace deprecated navigator.clipboard fallback.
 
 AC coverage (static analysis of cases.js):
-  AC1 – document.execCommand('copy') fallback is wrapped in a try/catch block.
-  AC2 – When the fallback succeeds, existing copy success behavior (visual feedback) is preserved.
-  AC3 – When the fallback throws or returns false, a user-visible error message is displayed.
+  AC1 – (updated by #42) document.execCommand fallback is removed entirely.
+  AC2 – (updated by #42) Fallback path now shows an error; execCommand path gone.
+  AC3 – When copy fails, a user-visible error message is displayed.
   AC4 – The primary navigator.clipboard.writeText() path is unchanged.
   AC5 – No new dependencies; the fix is pure vanilla JS.
+
+Note: issue #42 completed the clean-up that #38 began — execCommand has been
+removed entirely. Tests for AC1 and AC2 that previously verified execCommand's
+presence have been updated to verify its absence.
 """
 import re
 import pathlib
@@ -36,101 +40,85 @@ def _outer_catch_body(block):
 
 
 # ---------------------------------------------------------------------------
-# AC1: document.execCommand fallback is wrapped in try/catch
+# AC1: execCommand fallback is removed (updated by issue #42)
 # ---------------------------------------------------------------------------
 
-def test_ac1_execCommand_is_wrapped_in_try():
-    """AC1: document.execCommand('copy') appears inside a try block in the fallback path."""
+def test_ac1_no_execCommand_in_catch():
+    """AC1 (updated by #42): document.execCommand is NOT in the catch path.
+
+    Issue #42 removed the deprecated fallback entirely; the catch now shows
+    a user-visible error message directly.
+    """
     src = _src()
     block = _handleCopy_block(src)
     catch_body = _outer_catch_body(block)
-    inner_try_pos = catch_body.find("try")
-    exec_pos = catch_body.find("execCommand")
-    assert inner_try_pos != -1, "No inner try block found in the fallback catch body"
-    assert exec_pos != -1, "document.execCommand not found in the fallback catch body"
-    assert inner_try_pos < exec_pos, \
-        "document.execCommand('copy') must be inside the inner try block"
+    assert "execCommand" not in catch_body, \
+        "document.execCommand must NOT appear in the catch body (removed per #42)"
 
 
-def test_ac1_execCommand_try_has_catch():
-    """AC1: The inner try around execCommand has a catch clause."""
+def test_ac1_catch_is_flat_no_nested_try():
+    """AC1 (updated by #42): The catch body has no nested try block.
+
+    The inner try/catch that wrapped execCommand was removed; the catch is now
+    a simple single-statement error handler.
+    """
     src = _src()
     block = _handleCopy_block(src)
     catch_body = _outer_catch_body(block)
-    assert re.search(r'execCommand.+?\}\s*catch\s*\(', catch_body, re.DOTALL), \
-        "document.execCommand fallback must have its own catch block"
-
-
-# ---------------------------------------------------------------------------
-# AC2: When fallback succeeds, existing copy success behavior is preserved
-# ---------------------------------------------------------------------------
-
-def test_ac2_success_sets_copied_state_in_fallback():
-    """AC2: setCopyState transitions to copied when execCommand succeeds."""
-    src = _src()
-    block = _handleCopy_block(src)
-    catch_body = _outer_catch_body(block)
-    # The inner try body (before the inner catch) must set the copied state
-    inner_try_match = re.search(r'\btry\s*\{(.+?)\}\s*catch\s*\(', catch_body, re.DOTALL)
-    assert inner_try_match, "Inner try block not found in fallback"
-    inner_try_body = inner_try_match.group(1)
-    sets_copied = (
-        "setCopyState('copied')" in inner_try_body
-        or 'setCopyState("copied")' in inner_try_body
-        or "setCopyState(STATES.COPIED)" in inner_try_body
-    )
-    assert sets_copied, \
-        "setCopyState(STATES.COPIED) must be called in the inner try (fallback success path)"
-
-
-def test_ac2_success_resets_after_timeout_in_fallback():
-    """AC2: setTimeout(...IDLE) is called on the fallback success path."""
-    src = _src()
-    block = _handleCopy_block(src)
-    catch_body = _outer_catch_body(block)
-    inner_try_match = re.search(r'\btry\s*\{(.+?)\}\s*catch\s*\(', catch_body, re.DOTALL)
-    assert inner_try_match, "Inner try block not found in fallback"
-    inner_try_body = inner_try_match.group(1)
-    assert "setTimeout" in inner_try_body, \
-        "setTimeout must be called on the fallback success path to reset state"
+    assert "try" not in catch_body, \
+        "catch body must not contain a nested try block (execCommand complexity gone per #42)"
 
 
 # ---------------------------------------------------------------------------
-# AC3: When fallback throws or returns false, user-visible error is shown
+# AC2: Failure path shows error (no execCommand success path exists any more)
 # ---------------------------------------------------------------------------
 
-def test_ac3_false_return_throws_or_is_handled():
-    """AC3: A false return from execCommand is treated as a failure (throws or branched)."""
+def test_ac2_catch_shows_error_not_success():
+    """AC2 (updated by #42): The catch body calls setCopyError, not setCopyState.
+
+    There is no longer a fallback success path; the only catch behaviour is
+    to surface a user-visible error message.
+    """
     src = _src()
     block = _handleCopy_block(src)
     catch_body = _outer_catch_body(block)
-    inner_try_match = re.search(r'\btry\s*\{(.+?)\}\s*catch\s*\(', catch_body, re.DOTALL)
-    assert inner_try_match, "Inner try block not found in fallback"
-    inner_try_body = inner_try_match.group(1)
-    # Either an if/throw when ok is false, or the return value is checked
-    handles_false = (
-        "if (!ok)" in inner_try_body
-        or re.search(r'if\s*\(\s*!\s*ok\s*\)', inner_try_body)
-        or re.search(r'ok\s*===\s*false', inner_try_body)
-    )
-    assert handles_false, \
-        "execCommand returning false must be treated as a failure (e.g. `if (!ok) throw ...`)"
+    assert "setCopyError" in catch_body, \
+        "catch body must call setCopyError to inform the user that copy failed"
+    # Success state must NOT be set in the catch
+    assert "setCopyState(STATES.COPIED)" not in catch_body, \
+        "setCopyState(STATES.COPIED) must not appear in the catch body (no fallback success path)"
 
 
-def test_ac3_error_message_shown_when_inner_catch_fires():
-    """AC3: setCopyError is called in the inner catch to display an error message."""
+def test_ac2_no_setTimeout_in_catch():
+    """AC2 (updated by #42): No setTimeout in the catch body (success-path reset removed)."""
     src = _src()
     block = _handleCopy_block(src)
     catch_body = _outer_catch_body(block)
-    inner_catch_match = re.search(
-        r'execCommand.*?\}\s*catch\s*\([^)]*\)\s*\{([^}]+)\}',
-        catch_body,
-        re.DOTALL,
-    )
-    assert inner_catch_match, "Inner catch block (after execCommand) not found"
-    inner_catch_body = inner_catch_match.group(1)
-    assert "setCopyError" in inner_catch_body, \
-        "setCopyError must be called in the inner catch to surface the failure to the user"
+    assert "setTimeout" not in catch_body, \
+        "catch body must not call setTimeout (fallback success path was removed per #42)"
+
+
+# ---------------------------------------------------------------------------
+# AC3: Copy failure → user-visible error message shown
+# ---------------------------------------------------------------------------
+
+def test_ac3_false_return_not_needed():
+    """AC3 (updated by #42): No execCommand return-value check needed; catch is flat."""
+    src = _src()
+    block = _handleCopy_block(src)
+    catch_body = _outer_catch_body(block)
+    # No `ok` variable or false-return guard since execCommand is gone
+    assert "if (!ok)" not in catch_body, \
+        "execCommand false-return guard must be absent (execCommand removed per #42)"
+
+
+def test_ac3_error_message_shown_when_catch_fires():
+    """AC3: setCopyError is called in the catch to display an error message."""
+    src = _src()
+    block = _handleCopy_block(src)
+    catch_body = _outer_catch_body(block)
+    assert "setCopyError" in catch_body, \
+        "setCopyError must be called in the catch to surface the failure to the user"
 
 
 def test_ac3_error_message_text():
@@ -165,14 +153,18 @@ def test_ac4_primary_clipboard_path_present():
         "Primary navigator.clipboard.writeText path must be present"
 
 
-def test_ac4_primary_path_is_first_attempt():
-    """AC4: navigator.clipboard.writeText is attempted before the execCommand fallback."""
+def test_ac4_primary_path_is_only_attempt():
+    """AC4 (updated by #42): navigator.clipboard.writeText is the ONLY copy attempt.
+
+    execCommand was removed by #42 so there is no fallback path to order
+    against; this test verifies writeText is present and execCommand is absent.
+    """
     src = _src()
     block = _handleCopy_block(src)
-    clip_pos = block.find("navigator.clipboard.writeText")
-    exec_pos = block.find("execCommand")
-    assert clip_pos < exec_pos, \
-        "navigator.clipboard.writeText must appear before execCommand (primary-then-fallback order)"
+    assert "navigator.clipboard.writeText" in block, \
+        "navigator.clipboard.writeText must be present as the sole copy method"
+    assert "execCommand" not in block, \
+        "execCommand must be absent — removed per #42, writeText is now the only copy path"
 
 
 def test_ac4_primary_success_does_not_call_execCommand():
@@ -183,7 +175,7 @@ def test_ac4_primary_success_does_not_call_execCommand():
     first_catch = re.search(r'\}\s*catch', block).start()
     try_body = block[try_pos:first_catch]
     assert "execCommand" not in try_body, \
-        "execCommand must not appear in the primary try block — it belongs only in the fallback"
+        "execCommand must not appear in the primary try block"
 
 
 # ---------------------------------------------------------------------------

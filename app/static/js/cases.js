@@ -2212,20 +2212,7 @@ function CommanderSpecModal({ caseId, initialSpec, onClose, onSpecUpdated }) {
       setCopyState(STATES.COPIED);
       setTimeout(() => setCopyState(STATES.IDLE), 2000);
     } catch (_) {
-      const el = document.createElement("textarea");
-      el.value = spec;
-      document.body.appendChild(el);
-      el.select();
-      try {
-        const ok = document.execCommand("copy");
-        document.body.removeChild(el);
-        if (!ok) throw new Error("execCommand returned false");
-        setCopyState(STATES.COPIED);
-        setTimeout(() => setCopyState(STATES.IDLE), 2000);
-      } catch (err) {
-        document.body.removeChild(el);
-        setCopyError("Copy failed. Please copy the text manually.");
-      }
+      setCopyError("Copy failed. Please copy the text manually.");
     }
   }
 
