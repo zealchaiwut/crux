@@ -1396,7 +1396,7 @@ function SuggestPanel({ planId, onAttached }) {
       });
       const data = await resp.json().catch(() => ({}));
       if (!resp.ok) {
-        setState("error");
+        setState(STATES.ERROR);
         return;
       }
       const cands = data.candidates || [];
@@ -1404,7 +1404,7 @@ function SuggestPanel({ planId, onAttached }) {
       setSelected(new Set());
       setState(cands.length === 0 ? "empty" : "results");
     } catch {
-      setState("error");
+      setState(STATES.ERROR);
     }
   }
 
@@ -1450,7 +1450,7 @@ function SuggestPanel({ planId, onAttached }) {
         setAddError(
           errData.detail || `Could not attach sources (${resp.status})`,
         );
-        setAddState("error");
+        setAddState(STATES.ERROR);
         return;
       }
       setAddState(STATES.IDLE);
@@ -1460,7 +1460,7 @@ function SuggestPanel({ planId, onAttached }) {
       if (onAttached) onAttached();
     } catch (err) {
       setAddError(err.message || "Network error. Please try again.");
-      setAddState("error");
+      setAddState(STATES.ERROR);
     }
   }
 
@@ -1504,7 +1504,7 @@ function SuggestPanel({ planId, onAttached }) {
     );
   }
 
-  if (state === "error") {
+  if (state === STATES.ERROR) {
     return (
       <div
         style={{
@@ -1652,7 +1652,7 @@ function SuggestPanel({ planId, onAttached }) {
       </div>
 
       {/* Error from batch add */}
-      {addState === "error" && (
+      {addState === STATES.ERROR && (
         <div
           role="alert"
           style={{
@@ -1856,7 +1856,7 @@ function PlanCard({
       const resp = await fetch(`/api/gather/${planId}`, { method: "POST" });
       const data = await resp.json().catch(() => ({}));
       if (!resp.ok) {
-        setGatherStatus("error");
+        setGatherStatus(STATES.ERROR);
         setGatherError(data.detail || `Gather failed (${resp.status})`);
         return;
       }
@@ -1867,7 +1867,7 @@ function PlanCard({
       }
       if (onGatherDone) onGatherDone();
     } catch (err) {
-      setGatherStatus("error");
+      setGatherStatus(STATES.ERROR);
       setGatherError(err.message || "Research loop failed. Please retry.");
     }
   }
@@ -2055,7 +2055,7 @@ function PlanCard({
         )}
 
         {/* AC7: Failure state with explanatory message and retry */}
-        {gatherStatus === "error" && (
+        {gatherStatus === STATES.ERROR && (
           <div
             style={{
               background: "var(--red-bg)",
@@ -2919,7 +2919,7 @@ function WeighPanel({ caseId, initialContext, onRerankDone }) {
       if (onRerankDone) onRerankDone();
     } catch (err) {
       setError(err.message || "Re-rank failed. Please try again.");
-      setState("error");
+      setState(STATES.ERROR);
     }
   }
 
@@ -3732,7 +3732,7 @@ function CaseDetailScreen({
         })
         .catch((err) => {
           setProbeError(err.message || "Probe design failed.");
-          setProbeState("error");
+          setProbeState(STATES.ERROR);
         });
     }
   }, [caseData]);
@@ -3748,7 +3748,7 @@ function CaseDetailScreen({
       setBakeOffError(
         err.message || "Plan generation failed. Please try again.",
       );
-      setBakeOffState("error");
+      setBakeOffState(STATES.ERROR);
     }
   }
 
@@ -3763,7 +3763,7 @@ function CaseDetailScreen({
       setReProbeError(
         err.message || "Could not design a new probe. Please try again.",
       );
-      setReProbeState("error");
+      setReProbeState(STATES.ERROR);
     }
   }
 
@@ -4095,7 +4095,7 @@ function CaseDetailScreen({
                   Generate three competing root-cause plans to race against each
                   other.
                 </p>
-                {bakeOffState === "error" && (
+                {bakeOffState === STATES.ERROR && (
                   <p
                     role="alert"
                     style={{
