@@ -293,7 +293,7 @@ function NewCaseModal({ onClose, onCaseCreated }) {
 
   async function handleSharpen() {
     if (!raw.trim()) return;
-    setStep("loading");
+    setStep(STATES.LOADING);
     setError("");
     setPriorLearnings([]);
     try {
@@ -356,7 +356,7 @@ function NewCaseModal({ onClose, onCaseCreated }) {
     }
   }
 
-  const isLoading = step === "loading";
+  const isLoading = step === STATES.LOADING;
   const isCreating = step === "creating";
 
   return (
@@ -415,7 +415,7 @@ function NewCaseModal({ onClose, onCaseCreated }) {
           </button>
         </div>
 
-        {(step === "input" || step === "loading") && (
+        {(step === "input" || step === STATES.LOADING) && (
           <div>
             <label
               style={{
@@ -1375,10 +1375,10 @@ function PriorLearnings({ matches, onNavigate }) {
 // ---------------------------------------------------------------------------
 
 function SuggestPanel({ planId, onAttached }) {
-  const [state, setState] = React.useState("idle"); // idle | loading | results | empty | error
+  const [state, setState] = React.useState(STATES.IDLE); // idle | loading | results | empty | error
   const [candidates, setCandidates] = React.useState([]);
   const [selected, setSelected] = React.useState(new Set());
-  const [addState, setAddState] = React.useState("idle"); // idle | loading | error
+  const [addState, setAddState] = React.useState(STATES.IDLE); // idle | loading | error
   const [addError, setAddError] = React.useState("");
 
   const iconMap = {
@@ -1388,7 +1388,7 @@ function SuggestPanel({ planId, onAttached }) {
   };
 
   async function handleSuggest() {
-    setState("loading");
+    setState(STATES.LOADING);
     setAddError("");
     try {
       const resp = await fetch(`/api/plans/${planId}/gather/suggest`, {
@@ -1428,7 +1428,7 @@ function SuggestPanel({ planId, onAttached }) {
   async function handleAddSelected() {
     const chosen = candidates.filter((c) => selected.has(c.candidate_id));
     if (chosen.length === 0) return;
-    setAddState("loading");
+    setAddState(STATES.LOADING);
     setAddError("");
     try {
       const resp = await fetch("/api/sources/batch", {
@@ -1453,10 +1453,10 @@ function SuggestPanel({ planId, onAttached }) {
         setAddState("error");
         return;
       }
-      setAddState("idle");
+      setAddState(STATES.IDLE);
       setCandidates([]);
       setSelected(new Set());
-      setState("idle");
+      setState(STATES.IDLE);
       if (onAttached) onAttached();
     } catch (err) {
       setAddError(err.message || "Network error. Please try again.");
@@ -1467,9 +1467,9 @@ function SuggestPanel({ planId, onAttached }) {
   const allSelected =
     candidates.length > 0 && selected.size === candidates.length;
   const noneSelected = selected.size === 0;
-  const adding = addState === "loading";
+  const adding = addState === STATES.LOADING;
 
-  if (state === "idle") {
+  if (state === STATES.IDLE) {
     return (
       <button
         className="btn btn-sm"
@@ -1482,7 +1482,7 @@ function SuggestPanel({ planId, onAttached }) {
     );
   }
 
-  if (state === "loading") {
+  if (state === STATES.LOADING) {
     return (
       <div
         style={{
@@ -1527,7 +1527,7 @@ function SuggestPanel({ planId, onAttached }) {
         </button>
         <button
           className="btn btn-sm"
-          onClick={() => setState("idle")}
+          onClick={() => setState(STATES.IDLE)}
           style={{ fontSize: "var(--text-2xs)" }}
         >
           Cancel
@@ -1551,7 +1551,7 @@ function SuggestPanel({ planId, onAttached }) {
         </span>
         <button
           className="btn btn-sm"
-          onClick={() => setState("idle")}
+          onClick={() => setState(STATES.IDLE)}
           style={{ fontSize: "var(--text-2xs)", padding: "2px 7px" }}
         >
           Dismiss
@@ -1642,7 +1642,7 @@ function SuggestPanel({ planId, onAttached }) {
         </button>
         <button
           className="btn btn-sm"
-          onClick={() => setState("idle")}
+          onClick={() => setState(STATES.IDLE)}
           disabled={adding}
           aria-label="Dismiss suggest panel"
           style={{ fontSize: "var(--text-2xs)", padding: "3px 7px" }}
@@ -1799,7 +1799,7 @@ function PlanCard({
   const priorNum = parseFloat(prior) || 0;
   const [sources, setSources] = React.useState(initialSources || []);
   const [gatherStatus, setGatherStatus] = React.useState(
-    initialGatherStatus || "idle",
+    initialGatherStatus || STATES.IDLE,
   );
   const [gatherError, setGatherError] = React.useState(
     initialGatherError || "",
@@ -1811,7 +1811,7 @@ function PlanCard({
 
   React.useEffect(() => {
     setSources(initialSources || []);
-    setGatherStatus(initialGatherStatus || "idle");
+    setGatherStatus(initialGatherStatus || STATES.IDLE);
     setGatherError(initialGatherError || "");
   }, [initialSources, initialGatherStatus, initialGatherError]);
 
@@ -2118,7 +2118,7 @@ function PlanCard({
         )}
 
         {/* Idle / idle-with-no-sources fallback */}
-        {(gatherStatus === "idle" || gatherStatus === "done") &&
+        {(gatherStatus === STATES.IDLE || gatherStatus === "done") &&
           sources.length === 0 &&
           gatherStatus !== "empty" && (
             <span
@@ -2442,7 +2442,7 @@ function ProbeCard({
   const [probeStatus, setProbeStatus] = React.useState(
     probe ? probe.status : null,
   );
-  const [markRunningState, setMarkRunningState] = React.useState("idle"); // 'idle'|'loading'|'error'
+  const [markRunningState, setMarkRunningState] = React.useState(STATES.IDLE); // 'idle'|'loading'|'error'
   const [markRunningError, setMarkRunningError] = React.useState("");
 
   React.useEffect(() => {
@@ -2458,7 +2458,7 @@ function ProbeCard({
 
   async function handleMarkAsRunning() {
     if (!probe) return;
-    setMarkRunningState("loading");
+    setMarkRunningState(STATES.LOADING);
     setMarkRunningError("");
     try {
       const resp = await fetch(`/api/probes/${probe.id}/status`, {
@@ -2471,11 +2471,11 @@ function ProbeCard({
         throw new Error(data.detail || `Error ${resp.status}`);
       }
       setProbeStatus("running");
-      setMarkRunningState("idle");
+      setMarkRunningState(STATES.IDLE);
       if (onStatusUpdated) onStatusUpdated("running");
     } catch (err) {
       setMarkRunningError(err.message || "Could not update probe status.");
-      setMarkRunningState("idle");
+      setMarkRunningState(STATES.IDLE);
     }
   }
 
@@ -2559,9 +2559,9 @@ function ProbeCard({
   const isPrototype = probe.type === "prototype";
   const typeLabel = TYPE_LABELS[probe.type] || probe.type;
   const showMarkAsRunning = probeStatus === "designed" && !hasVerdict;
-  const isMarkingRunning = markRunningState === "loading";
+  const isMarkingRunning = markRunningState === STATES.LOADING;
   const showReProbe = verdict === "inconclusive";
-  const reProbeLoading = reProbeState === "loading";
+  const reProbeLoading = reProbeState === STATES.LOADING;
 
   return (
     <div
@@ -2908,7 +2908,7 @@ function ProbeCard({
 
 function WeighPanel({ caseId, initialContext, onRerankDone }) {
   const [context, setContext] = React.useState(initialContext || "");
-  const [state, setState] = React.useState("idle");
+  const [state, setState] = React.useState(STATES.IDLE);
   const [error, setError] = React.useState("");
 
   React.useEffect(() => {
@@ -2916,7 +2916,7 @@ function WeighPanel({ caseId, initialContext, onRerankDone }) {
   }, [initialContext]);
 
   async function _postRerank(body) {
-    setState("loading");
+    setState(STATES.LOADING);
     setError("");
     try {
       const resp = await fetch(`/api/cases/${caseId}/rerank`, {
@@ -2928,7 +2928,7 @@ function WeighPanel({ caseId, initialContext, onRerankDone }) {
         const data = await resp.json().catch(() => ({}));
         throw new Error(data.detail || `API error ${resp.status}`);
       }
-      setState("idle");
+      setState(STATES.IDLE);
       if (onRerankDone) onRerankDone();
     } catch (err) {
       setError(err.message || "Re-rank failed. Please try again.");
@@ -2945,7 +2945,7 @@ function WeighPanel({ caseId, initialContext, onRerankDone }) {
     _postRerank({ context: null });
   }
 
-  const isLoading = state === "loading";
+  const isLoading = state === STATES.LOADING;
 
   return (
     <div
@@ -3666,11 +3666,11 @@ function CaseDetailScreen({
 }) {
   const [caseData, setCaseData] = React.useState(null);
   const [notFound, setNotFound] = React.useState(false);
-  const [bakeOffState, setBakeOffState] = React.useState("idle");
+  const [bakeOffState, setBakeOffState] = React.useState(STATES.IDLE);
   const [bakeOffError, setBakeOffError] = React.useState("");
-  const [probeState, setProbeState] = React.useState("idle");
+  const [probeState, setProbeState] = React.useState(STATES.IDLE);
   const [probeError, setProbeError] = React.useState("");
-  const [reProbeState, setReProbeState] = React.useState("idle");
+  const [reProbeState, setReProbeState] = React.useState(STATES.IDLE);
   const [reProbeError, setReProbeError] = React.useState("");
   const [showLogVerdictModal, setShowLogVerdictModal] = React.useState(false);
   const [priorLearnings, setPriorLearnings] = React.useState([]);
@@ -3719,7 +3719,7 @@ function CaseDetailScreen({
     plans.forEach((plan) => {
       // Only trigger for plans that haven't started yet and haven't been triggered this session
       if (
-        plan.gather_status === "idle" &&
+        plan.gather_status === STATES.IDLE &&
         !gatherTriggered.current.has(plan.id)
       ) {
         gatherTriggered.current.add(plan.id);
@@ -3735,13 +3735,13 @@ function CaseDetailScreen({
   React.useEffect(() => {
     if (!caseData) return;
     const stage = typeof caseData.stage === "number" ? caseData.stage : 0;
-    if (stage >= 4 && !caseData.probe && probeState === "idle") {
-      setProbeState("loading");
+    if (stage >= 4 && !caseData.probe && probeState === STATES.IDLE) {
+      setProbeState(STATES.LOADING);
       setProbeError("");
       _postProbe(caseId)
         .then(() => {
           loadCase();
-          setProbeState("idle");
+          setProbeState(STATES.IDLE);
         })
         .catch((err) => {
           setProbeError(err.message || "Probe design failed.");
@@ -3751,12 +3751,12 @@ function CaseDetailScreen({
   }, [caseData]);
 
   async function handleGeneratePlans() {
-    setBakeOffState("loading");
+    setBakeOffState(STATES.LOADING);
     setBakeOffError("");
     try {
       await _postBakeOff(caseId);
       loadCase();
-      setBakeOffState("idle");
+      setBakeOffState(STATES.IDLE);
     } catch (err) {
       setBakeOffError(
         err.message || "Plan generation failed. Please try again.",
@@ -3766,12 +3766,12 @@ function CaseDetailScreen({
   }
 
   async function handleReProbe() {
-    setReProbeState("loading");
+    setReProbeState(STATES.LOADING);
     setReProbeError("");
     try {
       await _postProbe(caseId);
       loadCase();
-      setReProbeState("idle");
+      setReProbeState(STATES.IDLE);
     } catch (err) {
       setReProbeError(
         err.message || "Could not design a new probe. Please try again.",
@@ -4047,7 +4047,7 @@ function CaseDetailScreen({
                 </div>
               );
             }
-            if (bakeOffState === "loading") {
+            if (bakeOffState === STATES.LOADING) {
               return (
                 <div
                   style={{
@@ -4123,8 +4123,8 @@ function CaseDetailScreen({
                 <button
                   className="btn btn-crux"
                   onClick={handleGeneratePlans}
-                  disabled={bakeOffState === "loading"}
-                  aria-busy={bakeOffState === "loading"}
+                  disabled={bakeOffState === STATES.LOADING}
+                  aria-busy={bakeOffState === STATES.LOADING}
                 >
                   <i className="ti ti-sparkles" aria-hidden="true"></i> Generate
                   plans
@@ -4150,7 +4150,7 @@ function CaseDetailScreen({
           {stage >= 4 ? (
             <ProbeCard
               probe={caseData.probe || null}
-              loading={probeState === "loading"}
+              loading={probeState === STATES.LOADING}
               error={probeError}
               caseId={caseId}
               hasVerdict={!!caseData.verdict_log}
