@@ -182,6 +182,7 @@ class Verdict(Base):
         nullable=False)
     notes = Column(Text)
     decided_at = Column(TIMESTAMP(timezone=True))
+    created_at = Column(TIMESTAMP(timezone=True))
 
     probe = relationship("Probe", back_populates="verdicts")
 
