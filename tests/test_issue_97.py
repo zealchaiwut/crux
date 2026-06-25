@@ -22,7 +22,8 @@ from sqlalchemy import inspect as sa_inspect
 
 os.environ.setdefault("AUTH_SECRET", "test_auth_secret_12345678901")
 
-ALEMBIC_VERSIONS_DIR = pathlib.Path(__file__).parent.parent / "alembic" / "versions"
+ALEMBIC_VERSIONS_DIR = pathlib.Path(
+    __file__).parent.parent / "alembic" / "versions"
 _SUPPORT_STATUS_VALUES = {"supports", "partial", "contradicts", "unverified"}
 
 
@@ -254,7 +255,9 @@ def sqlite_migration_db():
         cwd=str(pathlib.Path(__file__).parent.parent),
     )
     assert result.returncode == 0, (
-        f"alembic upgrade head failed (AC4):\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+        f"alembic upgrade head failed (AC4):\nSTDOUT:\n{
+            result.stdout}\nSTDERR:\n{
+            result.stderr}"
     )
 
     engine = sa.create_engine(db_url)
@@ -271,7 +274,9 @@ def sqlite_migration_db():
         cwd=str(pathlib.Path(__file__).parent.parent),
     )
     assert result.returncode == 0, (
-        f"alembic downgrade -1 failed (AC5):\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+        f"alembic downgrade -1 failed (AC5):\nSTDOUT:\n{
+            result.stdout}\nSTDERR:\n{
+            result.stderr}"
     )
 
     os.unlink(db_path)
@@ -320,7 +325,8 @@ def test_existing_rows_get_unverified_default(sqlite_migration_db):
         # dflt_value is at index 4 in PRAGMA table_info
         dflt = support_status_info[4]
         assert dflt is not None and "unverified" in str(dflt), (
-            f"support_status must have default 'unverified' in schema; got dflt_value={dflt!r}"
+            f"support_status must have default 'unverified' in schema; got dflt_value={
+                dflt!r}"
         )
 
 
@@ -343,7 +349,9 @@ def test_downgrade_removes_support_rationale_column(sqlite_migration_db):
         cwd=str(pathlib.Path(__file__).parent.parent),
     )
     assert result.returncode == 0, (
-        f"alembic downgrade -1 failed:\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+        f"alembic downgrade -1 failed:\nSTDOUT:\n{
+            result.stdout}\nSTDERR:\n{
+            result.stderr}"
     )
     engine.dispose()
     db_url = f"sqlite:///{db_path}"
@@ -387,7 +395,8 @@ def test_source_defaults_to_unverified_when_status_omitted():
         f"got {src.support_status!r}"
     )
     assert src.support_rationale is None, (
-        f"Source.support_rationale must default to None; got {src.support_rationale!r}"
+        f"Source.support_rationale must default to None; got {
+            src.support_rationale!r}"
     )
 
     session.close()
@@ -471,7 +480,8 @@ def test_source_accepts_all_four_valid_statuses():
         session.commit()
         session.expire(src)
         assert src.support_status == status, (
-            f"support_status='{status}' must persist; got {src.support_status!r}"
+            f"support_status='{status}' must persist; got {
+                src.support_status!r}"
         )
         session.close()
 

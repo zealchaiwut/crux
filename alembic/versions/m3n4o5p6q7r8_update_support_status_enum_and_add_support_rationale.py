@@ -59,7 +59,8 @@ def upgrade() -> None:
             "ALTER TABLE source ALTER COLUMN support_status SET NOT NULL"
         ))
     else:
-        # SQLite: batch alter recreates the table with the new column definition.
+        # SQLite: batch alter recreates the table with the new column
+        # definition.
         with op.batch_alter_table("source") as batch_op:
             batch_op.alter_column(
                 "support_status",
