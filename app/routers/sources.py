@@ -164,11 +164,11 @@ def _source_to_dict(source: models.Source) -> dict:
 # Verification models
 # ---------------------------------------------------------------------------
 
-_SUPPORT_STATUS_VALUES = ("supports", "contradicts", "neutral", "inconclusive")
+_SUPPORT_STATUS_VALUES = ("supports", "partial", "contradicts", "unverified")
 
 
 class VerifySourceRequest(BaseModel):
-    support_status: Literal["supports", "contradicts", "neutral", "inconclusive"]
+    support_status: Literal["supports", "partial", "contradicts", "unverified"]
     rationale: str = Field(..., min_length=1, max_length=2000)
 
 
@@ -205,7 +205,7 @@ def batch_verify_sources(plan_id: str, db: Session = Depends(get_db)):
 
     sources = db.query(models.Source).filter(models.Source.plan_id == plan_id).all()
     total = len(sources)
-    verified = sum(1 for s in sources if s.support_status is not None)
+    verified = sum(1 for s in sources if s.rationale is not None)
     results = [
         {
             "source_id": s.id,
@@ -291,15 +291,15 @@ def _run_verifier(source: models.Source) -> tuple[str, str]:
         # Placeholder for future AI verifier integration (issue #98)
         raise HTTPException(status_code=503, detail="AI verifier not configured")
 
-    # Stub: deterministic result based on claim text length (for test variety)
+    # Stub: deterministic result based on claim text content (for test variety)
     claim = (source.claim or "").strip().lower()
     if not claim:
-        return ("neutral", "No claim text provided for verification.")
+        return ("unverified", "No claim text provided for verification.")
     if "not" in claim or "contradict" in claim or "false" in claim:
         return ("contradicts", "Stub: claim appears to contradict the source.")
     if "support" in claim or "confirm" in claim or "evidence" in claim:
         return ("supports", "Stub: claim appears supported by the source.")
-    return ("neutral", "Stub: automated verification unavailable — review manually.")
+    return ("unverified", "Stub: automated verification unavailable — review manually.")
 
 
 # ---------------------------------------------------------------------------
@@ -365,7 +365,7 @@ def run_verify_all_sources(plan_id: str, db: Session = Depends(get_db)):
 # ---------------------------------------------------------------------------
 
 class StatusOverrideRequest(BaseModel):
-    support_status: Literal["supports", "contradicts", "neutral", "inconclusive"]
+    support_status: Literal["supports", "partial", "contradicts", "unverified"]
     rationale: str = Field(..., min_length=1, max_length=2000)
 
 

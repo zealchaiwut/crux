@@ -138,7 +138,7 @@ def test_verify_source_returns_full_source_object(api_client, db_session):
 
     r = api_client.post(
         f"/api/sources/{source.id}/verify",
-        json={"support_status": "neutral", "rationale": "Not directly related."},
+        json={"support_status": "partial", "rationale": "Not directly related."},
     )
     assert r.status_code == 200, r.text
     data = r.json()
@@ -186,11 +186,11 @@ def test_verify_source_persisted_to_db(api_client, db_session):
 
     api_client.post(
         f"/api/sources/{source.id}/verify",
-        json={"support_status": "inconclusive", "rationale": "Ambiguous results."},
+        json={"support_status": "unverified", "rationale": "Ambiguous results."},
     )
     db_session.expire_all()
     src = db_session.query(models.Source).filter_by(id=source.id).first()
-    assert src.support_status == "inconclusive"
+    assert src.support_status == "unverified"
     assert src.rationale == "Ambiguous results."
 
 

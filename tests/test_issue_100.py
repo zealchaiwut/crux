@@ -127,7 +127,7 @@ class TestGetSourcesIncludesVerificationFields:
         assert resp.status_code == 200
         data = resp.json()
         src = next(s for s in data["sources"] if s["id"] == source_ids[0])
-        assert src["support_status"] is None
+        assert src["support_status"] == "unverified"
         assert src["rationale"] is None
         assert src["manually_overridden"] is False
 
@@ -174,7 +174,7 @@ class TestCaseDetailIncludesVerificationFields:
         plans = resp.json()["plans"]
         sources = next(p for p in plans if p["id"] == plan_id)["sources"]
         for src in sources:
-            assert src["support_status"] is None
+            assert src["support_status"] == "unverified"
             assert src["rationale"] is None
             assert src["manually_overridden"] is False
 
@@ -344,6 +344,6 @@ class TestNewSourceDefaults:
         )
         assert resp.status_code == 201
         data = resp.json()
-        assert data["support_status"] is None
+        assert data["support_status"] == "unverified"
         assert data["rationale"] is None
         assert data["manually_overridden"] is False
