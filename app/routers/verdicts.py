@@ -76,7 +76,7 @@ def list_verdicts(
             ),
             "probe": {
                 "type": probe.type if probe else None,
-                "target_metric": probe.target_metric or "" if probe else "",
+                "target_metric": probe.target_metric if probe else None,
             },
             "case": {
                 "id": case.id if case else None,
