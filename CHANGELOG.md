@@ -3,6 +3,16 @@
 Per-sprint changelog for crux. Entries are written by the documentor when a
 sprint finishes. Dated per-sprint files live under [docs/changelog/](docs/changelog/).
 
+## Sprint 11.1 (2026-06-24)
+
+- #98: Add source-verifier service for claim support detection
+
+## Sprint 11 (2026-06-24)
+
+- #99: Add source verification endpoints (single & batch)
+- #100: Colour SourceChip by support_status with Verify actions
+- #101: Add integration tests for source verification pipeline
+
 ## Sprint 10 (2026-06-24)
 
 - #92: Make Weigh stage optional: skip context input

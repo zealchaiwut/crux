@@ -1,6 +1,6 @@
 # Schema
 
-Database: Neon Postgres. Migrations managed by Alembic (revision `i9j0k1l2m3n4`).
+Database: Neon Postgres. Migrations managed by Alembic (revision `l2m3n4o5p6q7`).
 
 ## Enum types
 
@@ -9,6 +9,7 @@ Database: Neon Postgres. Migrations managed by Alembic (revision `i9j0k1l2m3n4`)
 | `stage_enum` | `sharpened`, `bake_off`, `gather`, `weigh`, `probe`, `verdict` |
 | `plan_label_enum` | `A`, `B`, `C` |
 | `source_kind_enum` | `book`, `article`, `youtube` |
+| `support_status_enum` | `supports`, `contradicts`, `neutral`, `inconclusive` |
 | `probe_type_enum` | `measurement`, `lab-test`, `behaviour-experiment`, `prototype` |
 | `probe_status_enum` | `designed`, `running`, `confirmed`, `killed`, `inconclusive` |
 | `verdict_outcome_enum` | `confirmed`, `killed`, `inconclusive` |
@@ -52,6 +53,22 @@ Database: Neon Postgres. Migrations managed by Alembic (revision `i9j0k1l2m3n4`)
 | `url` | text | |
 | `claim` | text | |
 | `citation` | text | |
+| `support_status` | support_status_enum | nullable — set via POST /api/sources/{id}/verify (issue #99) |
+| `rationale` | text | nullable — free-text explanation of verification result (issue #99) |
+| `manually_overridden` | boolean | NOT NULL, default false — true when support_status was set by user override (issue #100) |
+
+### `source_verification`
+
+Added in sprint 11 (issue #99). Stores raw pipeline results from the fetch→Claude→DB verification run before the status is accepted onto the source row.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | varchar(36) | PK |
+| `source_id` | varchar(36) | FK → source.id ON DELETE CASCADE, NOT NULL |
+| `verdict` | varchar(32) | NOT NULL — mirrors support_status_enum values |
+| `summary` | text | nullable — brief summary of source content |
+| `reason` | text | nullable — Claude's reasoning for the verdict |
+| `created_at` | timestamptz | nullable |
 
 ### `probe`
 

@@ -15,7 +15,7 @@ Companion to [commander](https://github.com/zealchaiwut/commander) (which builds
 
 ## Status
 
-Ten sprints complete. All five pipeline stages are live:
+Eleven sprints complete. All five pipeline stages are live:
 
 | Stage | Status |
 |---|---|
@@ -101,6 +101,12 @@ POST /api/cases/{case_id}/verdict      # log a verdict for the active probe
 GET  /api/sources?plan_id={id}         # list sources for a plan
 POST /api/sources                      # manually add a source
 POST /api/sources/batch                # add multiple sources in one transaction
+POST /api/sources/{id}/verify          # set support_status + rationale manually (issue #99)
+POST /api/plans/{plan_id}/verify-sources  # batch-set support_status for all sources in a plan (issue #99)
+POST /api/sources/{id}/run-verify      # run fetch→Claude pipeline on one source; stores result in source_verification (issue #100)
+POST /api/plans/{plan_id}/run-verify-all  # run pipeline on all sources in a plan (issue #100)
+PATCH /api/sources/{id}/status-override   # override support_status, sets manually_overridden=true (issue #100)
+POST /api/sources/{id}/accept-status   # accept pipeline verdict onto the source row (issue #100)
 
 POST /api/plans/{plan_id}/gather         # run research loop for a plan
 POST /api/plans/{plan_id}/gather/suggest # return up to 5 ranked candidates without persisting
