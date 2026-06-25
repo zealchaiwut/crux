@@ -67,7 +67,7 @@ def api_client(db_session):
 
 
 def _seed_verdict_with_probe(session, probe_type="lab-test",
-                              target_metric="weight kg"):
+                             target_metric="weight kg"):
     """Seed a full Case → Probe → Verdict chain."""
     from app import models
 
@@ -164,7 +164,7 @@ def test_probe_absent_both_fields_same_python_type():
     mock_db = _make_mock_db([_make_mock_verdict_with_no_probe()])
     result = _call_list_verdicts(mock_db)
     probe_obj = result[0]["probe"]
-    assert type(probe_obj["type"]) == type(probe_obj["target_metric"]), (
+    assert type(probe_obj["type"]) is type(probe_obj["target_metric"]), (
         f"type and target_metric must share the same Python type when probe "
         f"is absent; got type={type(probe_obj['type'])}, "
         f"target_metric={type(probe_obj['target_metric'])}"
