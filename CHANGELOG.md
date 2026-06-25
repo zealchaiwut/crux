@@ -3,6 +3,20 @@
 Per-sprint changelog for crux. Entries are written by the documentor when a
 sprint finishes. Dated per-sprint files live under [docs/changelog/](docs/changelog/).
 
+## Sprint 12 (2026-06-25)
+
+- #36: [follow-up] Clarify httpx timeout semantics in commander spec generation
+- #37: [follow-up] Validate plan presence before spec generation
+- #38: [follow-up] Replace deprecated navigator.clipboard fallback
+- #39: [follow-up] Extract UI state constants
+- #40: [follow-up] Clarify httpx timeout semantics
+- #41: [follow-up] Validate plan presence before spec generation
+- #42: [follow-up] Replace deprecated clipboard fallback
+- #43: [follow-up] Extract UI state constants
+- #54: [follow-up] GET /api/verdicts keyword search should filter at database layer
+- #55: [follow-up] GET /api/verdicts timestamp field null-handling
+- #56: [follow-up] GET /api/verdicts inconsistent empty-string vs None defaults
+
 ## Sprint 11.1 (2026-06-24)
 
 - #98: Add source-verifier service for claim support detection
