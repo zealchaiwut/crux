@@ -29,19 +29,22 @@ _NEW_VALUES = ("supports", "partial", "contradicts", "unverified")
 def upgrade() -> None:
     bind = op.get_bind()
 
-    # Data migration before altering the column type constraint.
-    op.execute(sa.text(
-        "UPDATE source SET support_status = 'partial' WHERE support_status = 'neutral'"
-    ))
-    op.execute(sa.text(
-        "UPDATE source SET support_status = 'unverified' "
-        "WHERE support_status = 'inconclusive' OR support_status IS NULL"
-    ))
-
     if bind.dialect.name == "postgresql":
+        # Detach the column from the enum first so we can migrate the data to
+        # the new value set (the old enum has no 'partial'/'unverified', so the
+        # UPDATEs must run while the column is plain text).
         op.execute(sa.text(
-            "ALTER TYPE support_status_enum RENAME TO support_status_enum_old"
+            "ALTER TABLE source ALTER COLUMN support_status TYPE text "
+            "USING support_status::text"
         ))
+        op.execute(sa.text(
+            "UPDATE source SET support_status = 'partial' WHERE support_status = 'neutral'"
+        ))
+        op.execute(sa.text(
+            "UPDATE source SET support_status = 'unverified' "
+            "WHERE support_status = 'inconclusive' OR support_status IS NULL"
+        ))
+        op.execute(sa.text("DROP TYPE support_status_enum"))
         op.execute(sa.text(
             "CREATE TYPE support_status_enum AS ENUM "
             "('supports', 'partial', 'contradicts', 'unverified')"
@@ -49,9 +52,8 @@ def upgrade() -> None:
         op.execute(sa.text(
             "ALTER TABLE source "
             "ALTER COLUMN support_status TYPE support_status_enum "
-            "USING support_status::text::support_status_enum"
+            "USING support_status::support_status_enum"
         ))
-        op.execute(sa.text("DROP TYPE support_status_enum_old"))
         op.execute(sa.text(
             "ALTER TABLE source ALTER COLUMN support_status SET DEFAULT 'unverified'"
         ))
@@ -59,8 +61,15 @@ def upgrade() -> None:
             "ALTER TABLE source ALTER COLUMN support_status SET NOT NULL"
         ))
     else:
-        # SQLite: batch alter recreates the table with the new column
-        # definition.
+        # SQLite stores the enum as VARCHAR + CHECK; migrate the data first,
+        # then batch alter recreates the table with the new CHECK constraint.
+        op.execute(sa.text(
+            "UPDATE source SET support_status = 'partial' WHERE support_status = 'neutral'"
+        ))
+        op.execute(sa.text(
+            "UPDATE source SET support_status = 'unverified' "
+            "WHERE support_status = 'inconclusive' OR support_status IS NULL"
+        ))
         with op.batch_alter_table("source") as batch_op:
             batch_op.alter_column(
                 "support_status",

@@ -19,13 +19,14 @@ _SUPPORT_STATUS = ("supports", "contradicts", "neutral", "inconclusive")
 
 
 def upgrade() -> None:
+    # op.add_column does NOT auto-emit CREATE TYPE for sa.Enum on Postgres
+    # (unlike create_table), so create the type explicitly first. checkfirst
+    # makes it idempotent; .create is a no-op on SQLite (no native enum type).
+    support_status_enum = sa.Enum(*_SUPPORT_STATUS, name="support_status_enum")
+    support_status_enum.create(op.get_bind(), checkfirst=True)
     op.add_column(
         "source",
-        sa.Column(
-            "support_status",
-            sa.Enum(*_SUPPORT_STATUS, name="support_status_enum"),
-            nullable=True,
-        ),
+        sa.Column("support_status", support_status_enum, nullable=True),
     )
     op.add_column("source", sa.Column("rationale", sa.Text(), nullable=True))
 
