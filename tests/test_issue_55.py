@@ -9,7 +9,8 @@ AC coverage:
   AC3 – If non-null fallback, created_at is populated at creation time so
          no existing or future record can produce a null response.
   AC5 – A test creates a verdict with decided_at=null and asserts the API
-         response returns a valid ISO string for created_at (fallback strategy).
+         response returns a valid ISO string for created_at
+         (fallback strategy).
 """
 import os
 import re
@@ -73,8 +74,8 @@ def _seed_verdict(session, outcome="confirmed", notes="note", sharpened="snip",
                   decided_at="__now__"):
     """Seed a Case → Probe → Verdict chain.
 
-    Pass decided_at=None to simulate a verdict with no decided_at (the null case
-    the issue is about). Pass the sentinel "__now__" to use the current time.
+    Pass decided_at=None to simulate a verdict with no decided_at (the
+    null case the issue is about). Pass "__now__" to use current time.
     """
     from app import models
 
@@ -125,7 +126,9 @@ def test_created_at_present_on_normal_verdict(api_client, db_session):
     assert r.status_code == 200
     data = r.json()
     assert len(data) == 1
-    assert "created_at" in data[0], "created_at must be present on every verdict"
+    assert "created_at" in data[0], (
+        "created_at must be present on every verdict"
+    )
 
 
 def test_created_at_is_iso_string_when_decided_at_set(api_client, db_session):
@@ -146,20 +149,23 @@ def test_created_at_is_iso_string_when_decided_at_set(api_client, db_session):
 
 
 def test_created_at_not_null_when_decided_at_is_null(api_client, db_session):
-    """AC5: When decided_at is null, created_at falls back to a valid ISO string."""
+    """AC5: When decided_at is null, created_at falls back to a valid ISO."""
     _seed_verdict(db_session, decided_at=None)
     r = api_client.get("/api/verdicts")
     assert r.status_code == 200
     data = r.json()
     assert len(data) == 1
     v = data[0]
-    assert "created_at" in v, "created_at must be present even when decided_at is null"
+    assert "created_at" in v, (
+        "created_at must be present even when decided_at is null"
+    )
     assert v["created_at"] is not None, (
         "created_at must NOT be null when decided_at is null — "
         "expected a non-null fallback (e.g. verdict's created_at timestamp)"
     )
     assert ISO_8601_RE.match(str(v["created_at"])), (
-        f"created_at fallback must be a valid ISO 8601 string, got: {v['created_at']!r}"
+        "created_at fallback must be a valid ISO 8601 string, got: "
+        f"{v['created_at']!r}"
     )
 
 
@@ -174,7 +180,7 @@ def test_verdict_model_has_created_at_column(db_session):
 
 
 def test_created_at_populated_at_verdict_creation(db_session):
-    """AC3: created_at is populated when a verdict is created (never null on new records)."""
+    """AC3: created_at is populated at creation (never null on new records)."""
     from app import models
 
     case = models.Case(
@@ -209,12 +215,13 @@ def test_created_at_populated_at_verdict_creation(db_session):
     db_session.refresh(verdict)
 
     assert verdict.created_at is not None, (
-        "created_at must not be null after commit — it must be set at creation time"
+        "created_at must not be null after commit — "
+        "it must be set at creation time"
     )
 
 
 def test_api_uses_created_at_fallback_not_decided_at(api_client, db_session):
-    """AC2: When decided_at is null, API response created_at comes from the fallback."""
+    """AC2: When decided_at is null, created_at comes from the fallback."""
     fallback_ts = datetime(2025, 1, 15, 10, 30, 0, tzinfo=timezone.utc)
 
     from app import models
@@ -257,5 +264,6 @@ def test_api_uses_created_at_fallback_not_decided_at(api_client, db_session):
     assert v["created_at"] is not None
     # The fallback timestamp should appear in the response
     assert "2025-01-15" in v["created_at"], (
-        f"Expected fallback timestamp 2025-01-15 in created_at, got: {v['created_at']!r}"
+        "Expected fallback timestamp 2025-01-15 in created_at, got: "
+        f"{v['created_at']!r}"
     )
