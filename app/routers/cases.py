@@ -700,6 +700,11 @@ async def generate_probe_commander_spec(
             status_code=422,
             detail="At least one plan is required for spec generation.",
         )
+    if not any(p.current_rank is not None for p in plans):
+        raise HTTPException(
+            status_code=422,
+            detail="At least one ranked plan is required for spec generation.",
+        )
     plans_input = [
         {
             "label": p.label,
