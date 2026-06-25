@@ -9,6 +9,7 @@ from typing import Sequence, Union
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision: str = "l2m3n4o5p6q7"
 down_revision: Union[str, None] = "k1l2m3n4o5p6"
@@ -19,10 +20,15 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     op.create_table(
         "source_verification",
-        sa.Column("id", sa.String(36), primary_key=True),
+        sa.Column(
+            "id",
+            postgresql.UUID(as_uuid=False),
+            server_default=sa.text("gen_random_uuid()"),
+            primary_key=True,
+        ),
         sa.Column(
             "source_id",
-            sa.String(36),
+            postgresql.UUID(as_uuid=False),
             sa.ForeignKey("source.id", ondelete="CASCADE"),
             nullable=False,
         ),
