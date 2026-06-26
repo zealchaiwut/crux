@@ -207,7 +207,7 @@ def test_open_chip_contains_progress():
 def test_open_chip_covers_all_api_open_verdicts(api_client, db_session):
     """AC3: Every verdict string the API returns for open cases is in the Open chip mapping."""
     # Create one case per open-verdict scenario
-    c1 = _add_case(db_session, sharpened="No probe")
+    _add_case(db_session, sharpened="No probe")
     c2 = _add_case(db_session, sharpened="Running probe")
     _add_probe(db_session, c2.id, status="running")
     db_session.commit()
@@ -232,7 +232,7 @@ def test_open_chip_covers_all_api_open_verdicts(api_client, db_session):
 
 def test_open_cases_visible_under_open_filter(api_client, db_session):
     """AC4: Open cases with verdict="awaiting" or "progress" are returned by /api/cases."""
-    c1 = _add_case(db_session, sharpened="Awaiting case")
+    _add_case(db_session, sharpened="Awaiting case")
     c2 = _add_case(db_session, sharpened="Progress case")
     _add_probe(db_session, c2.id, status="running")
     db_session.commit()
