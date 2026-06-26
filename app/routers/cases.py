@@ -112,7 +112,7 @@ def list_cases(
                 .with_entities(models.Probe.case_id)
             )
             query = query.filter(models.Case.id.notin_(cases_with_verdict))
-        else:
+        elif verdict in {"confirmed", "killed", "inconclusive"}:
             cases_with_outcome = (
                 db.query(models.Probe.case_id)
                 .join(models.Verdict, models.Verdict.probe_id == models.Probe.id)
