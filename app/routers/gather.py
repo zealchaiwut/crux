@@ -142,9 +142,10 @@ def suggest_plan_sources(plan_id: str, db: Session = Depends(get_db)):
 
     top_sources = result_sources[:_MAX_SUGGEST_CANDIDATES]
 
+    n = len(top_sources)
     candidates = []
     for i, src in enumerate(top_sources):
-        score = round(1.0 - i * 0.1, 1)
+        score = round((n - i) / n, 2)
         candidate = _build_suggest_candidate(src, score)
         if candidate is not None:
             candidates.append(candidate)
