@@ -1800,6 +1800,7 @@ function PlanCard({
   name,
   mechanism,
   prior,
+  rationale: initialRationaleText,
   sources: initialSources,
   isLead,
   standing,
@@ -1809,6 +1810,7 @@ function PlanCard({
 }) {
   const priorNum = parseFloat(prior) || 0;
   const [sources, setSources] = React.useState(initialSources || []);
+  const [rationaleText, setRationaleText] = React.useState(initialRationaleText || "");
   const [gatherStatus, setGatherStatus] = React.useState(
     initialGatherStatus || STATES.IDLE,
   );
@@ -1822,9 +1824,10 @@ function PlanCard({
 
   React.useEffect(() => {
     setSources(initialSources || []);
+    setRationaleText(initialRationaleText || "");
     setGatherStatus(initialGatherStatus || STATES.IDLE);
     setGatherError(initialGatherError || "");
-  }, [initialSources, initialGatherStatus, initialGatherError]);
+  }, [initialSources, initialRationaleText, initialGatherStatus, initialGatherError]);
 
   function handleAdded(newSource) {
     setSources((prev) => [...prev, newSource]);
@@ -2139,6 +2142,41 @@ function PlanCard({
             </span>
           )}
       </div>
+
+      {/* Rationale — shown only when non-empty */}
+      {rationaleText && (
+        <div
+          data-testid="plan-rationale"
+          style={{
+            marginTop: "var(--space-3)",
+            borderTop: "1px solid var(--border)",
+            paddingTop: "var(--space-3)",
+          }}
+        >
+          <span
+            className="mono"
+            style={{
+              display: "block",
+              fontSize: "var(--text-2xs)",
+              fontWeight: 700,
+              color: "var(--text-sub)",
+              marginBottom: "var(--space-2)",
+            }}
+          >
+            RATIONALE
+          </span>
+          <p
+            style={{
+              fontSize: "var(--text-sm)",
+              color: "var(--text-muted)",
+              lineHeight: 1.5,
+              margin: 0,
+            }}
+          >
+            {rationaleText}
+          </p>
+        </div>
+      )}
 
       {showForm && (
         <SourceForm
@@ -4034,6 +4072,7 @@ function CaseDetailScreen({
                       name={p.name}
                       mechanism={p.mechanism}
                       prior={p.prior}
+                      rationale={p.rationale || ""}
                       sources={p.sources || []}
                       isLead={p.current_rank === 1}
                       standing={p.standing}
