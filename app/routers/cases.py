@@ -782,7 +782,7 @@ async def generate_case_summary(
 
     if case.stage in _PRE_PROBE_STAGES:
         raise HTTPException(
-            status_code=403,
+            status_code=422,
             detail=(
                 f"Summary is only available from the probe stage onward; "
                 f"this case is at stage '{case.stage}'."
@@ -790,7 +790,7 @@ async def generate_case_summary(
         )
 
     if case.summary and not force:
-        return _json.loads(case.summary)
+        return {"summary": _json.loads(case.summary), "cached": True}
 
     probe = _latest_probe(case.probes)
     probe_data = None
@@ -835,4 +835,4 @@ async def generate_case_summary(
     case.summary = summary_json
     db.commit()
 
-    return _json.loads(summary_json)
+    return {"summary": _json.loads(summary_json), "cached": False}
