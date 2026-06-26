@@ -11,7 +11,14 @@ import logging
 import uuid as _uuid_mod
 from typing import Protocol, runtime_checkable
 
-from app.research.types import Plan as ResearchPlan, Source
+from app.research.types import (
+    Plan as ResearchPlan,
+    Source,
+    FetchTimeoutError,
+    FetchBlockedError,
+    FetchRateLimitError,
+    FetchEmptyContentError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +108,7 @@ class _CustomEngine:
             try:
                 results = search_fetcher.fetch(query.query)
                 all_candidates.extend(results)
-            except Exception as exc:
+            except (FetchTimeoutError, FetchBlockedError, FetchRateLimitError) as exc:
                 logger.warning("CustomEngine: search failed for query %r: %s", query.query, exc)
 
         # Cap total read-fetches by config
@@ -135,7 +142,7 @@ class _CustomEngine:
                         "url": src_doc.url,
                         "claim": claim,
                     })
-            except Exception as exc:
+            except (FetchTimeoutError, FetchBlockedError, FetchRateLimitError, FetchEmptyContentError) as exc:
                 logger.warning("CustomEngine: fetch failed for %s: %s", url, exc)
                 continue
 
