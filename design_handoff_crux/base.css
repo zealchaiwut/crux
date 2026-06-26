@@ -1,0 +1,22 @@
+/* ============================================================
+   crux · base layer
+   Reset, body defaults, the .mono data register, and the
+   accessibility floor (visible focus ring, reduced motion).
+   ============================================================ */
+
+* { box-sizing:border-box; margin:0; padding:0; }
+
+body {
+  background:var(--bg); color:var(--text);
+  font-family:var(--font-sans); font-size:var(--text-md);
+  -webkit-font-smoothing:antialiased;
+}
+
+/* the data register: any class="mono" gets the mono stack + tracking */
+.mono { font-family:var(--font-mono); letter-spacing:var(--tracking-mono); }
+
+/* Accessibility floor */
+:focus-visible { outline:none; box-shadow:var(--ring); border-radius:var(--radius-sm); }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation:none !important; transition:none !important; }
+}

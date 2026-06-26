@@ -1,0 +1,41 @@
+/* ============================================================
+   crux · global primitives
+   Small, reused-everywhere utility classes. React components
+   layer on top of these; raw HTML can use them directly.
+   ============================================================ */
+
+/* Buttons */
+.btn {
+  border:1px solid var(--border); background:var(--surface); color:var(--text);
+  padding:8px 14px; border-radius:var(--radius-sm);
+  font-size:var(--text-base); font-weight:var(--fw-semibold); cursor:pointer;
+  display:inline-flex; align-items:center; gap:7px; transition:background var(--speed);
+}
+.btn:hover { background:var(--surface-hover); }
+.btn-crux { background:var(--crux); color:#fff; border-color:var(--crux); }
+.btn-crux:hover { background:var(--crux-strong); }
+.btn-sm { padding:6px 11px; font-size:var(--text-sm); }
+
+/* Pills — verdict + status. Add a state class. */
+.pill {
+  font-family:var(--font-mono); font-size:var(--text-2xs); font-weight:var(--fw-bold);
+  letter-spacing:.04em; padding:3px 9px; border-radius:var(--radius-pill);
+  white-space:nowrap; display:inline-flex; align-items:center; gap:5px;
+}
+.pill::before { content:''; width:5px; height:5px; border-radius:50%; background:currentColor; }
+.pill.confirmed    { background:var(--green-bg); color:var(--green); }
+.pill.killed       { background:var(--red-bg);   color:var(--red); }
+.pill.inconclusive { background:var(--amber-bg); color:var(--amber); }
+.pill.awaiting     { background:var(--surface-2);color:var(--text-muted); }
+.pill.awaiting::before { background:var(--amber); }
+.pill.progress     { background:var(--surface-2);color:var(--blue); }
+
+/* Source chips — the citation register (book / article / youtube) */
+.src {
+  font-family:var(--font-mono); font-size:var(--text-2xs);
+  padding:3px 8px; border-radius:var(--radius-sm); background:var(--surface-2);
+  color:var(--text-muted); display:inline-flex; align-items:center; gap:5px;
+}
+.src.book i    { color:var(--amber); }
+.src.article i { color:var(--blue); }
+.src.youtube i { color:var(--red); }

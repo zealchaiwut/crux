@@ -1,1 +1,136 @@
 # crux
+
+A personal research-and-diagnosis tool. It sharpens a messy problem into a falsifiable statement, generates competing root-cause hypotheses (A/B/C), researches each with cited sources, re-ranks them against your own data, designs the single cheapest experiment that settles it — then refuses to show an action plan until you log a test result.
+
+Companion to [commander](https://github.com/zealchaiwut/commander) (which builds the probe prototypes) and perf-coach (where winning prototypes graduate).
+
+## Docs
+
+- [Quick Start](docs/quickstart.md) — run it locally in 10 minutes
+- [Architecture](docs/architecture.md) — how the system is built
+- [Milestones](docs/milestones.md) — sprint history
+- [PRODUCT.md](PRODUCT.md) — what crux is and why
+- [DESIGN.md](DESIGN.md) — design system and component specs
+- [SCHEMA.md](SCHEMA.md) — full database schema reference
+
+## Status
+
+<<<<<<< HEAD
+Thirteen sprints complete. All five pipeline stages are live:
+=======
+Twelve sprints complete. All five pipeline stages are live:
+>>>>>>> origin/develop
+
+| Stage | Status |
+|---|---|
+| 0 — Sharpen | ✓ |
+| 1 — Bake-off (Plans A/B/C) | ✓ |
+| 2 — Gather (custom research loop) | ✓ |
+| 3 — Weigh (re-rank against your data) | ✓ |
+| 4 — Probe design + Commander spec | ✓ |
+| 5 — Verdict gate + action plan | ✓ |
+| Prior learnings (related-case recall) | ✓ |
+
+## Local development
+
+```bash
+# 1. Clone
+git clone git@github.com:zealchaiwut/crux.git && cd crux
+
+# 2. Authenticate the claude CLI (Claude calls run through your subscription)
+claude            # log in once, then quit
+
+# 3. Configure — copy .env.example, fill in DATABASE_URL and AUTH_SECRET
+cp .env.example .env
+
+# 4. Set up venv + deps + migrations in one step
+./scripts/setup.sh
+
+# 5. Run
+source .venv/bin/activate && make dev
+```
+
+See [docs/quickstart.md](docs/quickstart.md) for the full setup guide including troubleshooting.
+
+## Health check
+
+```
+GET /healthz  →  {"status": "ok", "env": "development"}
+```
+
+## Authentication
+
+All routes except `/login` require a valid session cookie. The login password is the value of `AUTH_SECRET`.
+
+```bash
+# Generate a strong secret
+python3 -c "import secrets; print(secrets.token_hex(32))"
+```
+
+```bash
+# Required env vars
+AUTH_SECRET=<min 16 chars — server exits at startup if missing>
+DATABASE_URL=<Neon Postgres connection string>
+
+# Optional
+ANTHROPIC_API_KEY=<Claude API key>          # needed for related-case embeddings, and for the optional "Anthropic API" provider
+EMBEDDING_MODEL=claude-haiku-4-5-20251001   # model used for related-case embeddings (issue #68)
+VERIFIER_ENGINE=stub                        # verification backend: stub (default, dev/testing only) or ai (issue #115)
+```
+
+After migrating an existing database, backfill embeddings for pre-existing cases:
+
+```bash
+python -m scripts.backfill_embeddings
+```
+
+Claude pipeline calls (sharpen, bake-off, weigh, probe, commander spec, research)
+run through the `claude` CLI (Claude Code) against your subscription by default —
+no API key needed. Switch to the metered Anthropic API any time from the in-app
+Settings modal. See `.env.example` for all variables.
+
+## API endpoints
+
+```
+GET  /api/cases                        # list all cases; ?q=<keyword> ?stage=<stage> ?verdict=confirmed|killed|inconclusive|open
+GET  /api/cases/{case_id}              # full case with plans, sources, probe, verdict
+PATCH /api/cases/{case_id}            # edit sharpened statement and/or not-investigating list (locked at verdict stage)
+POST /api/cases                        # create a case
+POST /api/cases/sharpen                # sharpen a raw problem statement
+POST /api/cases/{case_id}/bake-off     # generate competing plans A/B/C
+POST /api/cases/{case_id}/rerank       # re-rank plans against user context
+POST /api/cases/{case_id}/probe        # design the cheapest decisive test (returns steps, duration, decision_rule)
+POST /api/cases/{case_id}/summary      # generate/cache AI case summary (probe stage onward); ?force=true regenerates
+POST /api/cases/{case_id}/verdict      # log a verdict for the active probe
+
+GET  /api/sources?plan_id={id}         # list sources for a plan
+POST /api/sources                      # manually add a source
+POST /api/sources/batch                # add multiple sources in one transaction
+POST /api/sources/{id}/verify          # set support_status + rationale manually (issue #99)
+POST /api/plans/{plan_id}/verify-sources  # batch-set support_status for all sources in a plan (issue #99)
+POST /api/sources/{id}/run-verify      # run fetch→Claude pipeline on one source; stores result in source_verification (issue #100)
+POST /api/plans/{plan_id}/run-verify-all  # run pipeline on all sources in a plan (issue #100)
+PATCH /api/sources/{id}/status-override   # override support_status, sets manually_overridden=true (issue #100)
+POST /api/sources/{id}/accept-status   # accept pipeline verdict onto the source row (issue #100)
+
+POST /api/plans/{plan_id}/gather         # run research loop for a plan
+POST /api/plans/{plan_id}/gather/suggest # return up to 5 ranked candidates without persisting
+POST /api/cases/{case_id}/gather       # run research loop for all plans
+GET  /api/plans/{plan_id}/gather-status
+
+GET  /api/cases/{case_id}/related          # list prior cases ranked by similarity
+POST /api/cases/related-text               # find related cases by raw text (pre-case-creation)
+POST /api/cases/{case_id}/probe/commander-spec  # generate/cache commander spec; ?force=true regenerates
+
+PATCH /api/probes/{probe_id}/status        # update probe status; only designed→running is supported
+
+GET  /api/verdicts                         # list all verdicts; ?outcome=confirmed|killed|inconclusive  ?q=keyword  ?keyword=keyword
+```
+
+## Running tests
+
+```bash
+make test
+```
+
+Tests use SQLite in-memory — no Postgres connection required.
