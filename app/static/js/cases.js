@@ -705,7 +705,7 @@ function SourceChip({
       const data = await resp.json().catch(() => ({}));
       if (!resp.ok) return;
       _applyUpdate(data);
-    } catch (_) {}
+    } catch (e) { console.warn("Source override failed:", e); }
   }
 
   async function handleAccept() {
@@ -715,7 +715,7 @@ function SourceChip({
       const data = await resp.json().catch(() => ({}));
       if (!resp.ok) return;
       _applyUpdate(data);
-    } catch (_) {}
+    } catch (e) { console.warn("Accept status failed:", e); }
   }
 
   // Collapsed chip — button so it is keyboard-focusable by default
