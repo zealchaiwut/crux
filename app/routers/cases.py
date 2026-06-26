@@ -73,6 +73,15 @@ def list_cases(
             ),
         )
 
+    if verdict is not None and verdict not in _VALID_VERDICT_PARAMS:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Invalid verdict value {verdict!r}. "
+                f"Valid values: {', '.join(sorted(_VALID_VERDICT_PARAMS))}"
+            ),
+        )
+
     query = db.query(models.Case).options(
         joinedload(models.Case.plans),
         joinedload(models.Case.probes).joinedload(models.Probe.verdicts),
@@ -103,7 +112,7 @@ def list_cases(
                 .with_entities(models.Probe.case_id)
             )
             query = query.filter(models.Case.id.notin_(cases_with_verdict))
-        elif verdict in {"confirmed", "killed", "inconclusive"}:
+        else:
             cases_with_outcome = (
                 db.query(models.Probe.case_id)
                 .join(models.Verdict, models.Verdict.probe_id == models.Probe.id)
