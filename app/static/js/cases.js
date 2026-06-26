@@ -4492,13 +4492,13 @@ function EditCaseModal({
       });
       if (!resp.ok) {
         const data = await resp.json().catch(() => ({}));
-        throw new Error(data.detail || `Error ${resp.status}`);
+        throw new Error(data.detail || "An unexpected error occurred.");
       }
       const data = await resp.json();
       onSaved(data);
       onClose();
     } catch (err) {
-      setError(err.message || "Save failed. Please try again.");
+      setError(err.message || "An unexpected error occurred.");
     } finally {
       setSaving(false);
     }
