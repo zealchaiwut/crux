@@ -653,6 +653,15 @@ function SourceChip({
   onUpdate,
 }) {
   const [expanded, setExpanded] = React.useState(false);
+  // currentStatus, currentRationale, and currentOverridden are intentional local state.
+  // Persistence scope: these survive re-renders of the SourceChip itself (same component
+  // instance), but RESET whenever the parent PlanCard unmounts and remounts.
+  // What triggers a reset: parent unmount — for example, a case-detail refetch that
+  // replaces the component tree, or navigating away and back to the case page.
+  // User-facing consequence: an in-session UI override appears to clear on remount, but
+  // because overrides are persisted to the DB via PATCH /api/sources/{id}/status-override,
+  // the useEffect below re-syncs state from the fresh DB-sourced props after the next
+  // refetch, automatically restoring the correct override without user intervention.
   const [currentStatus, setCurrentStatus] = React.useState(initialStatus || null);
   const [currentRationale, setCurrentRationale] = React.useState(initialRationale || "");
   const [currentOverridden, setCurrentOverridden] = React.useState(!!initialOverridden);
