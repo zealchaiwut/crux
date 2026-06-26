@@ -3732,15 +3732,9 @@ function CaseDetailScreen({
   // Auto-trigger probe at stage >= 4
   React.useEffect(() => {
     if (!caseData) return;
-<<<<<<< HEAD
     const stage = stageNum(caseData.stage);
-    if (stage >= 4 && !caseData.probe && probeState === "idle") {
-      setProbeState("loading");
-=======
-    const stage = typeof caseData.stage === "number" ? caseData.stage : 0;
     if (stage >= 4 && !caseData.probe && probeState === STATES.IDLE) {
       setProbeState(STATES.LOADING);
->>>>>>> origin/develop
       setProbeError("");
       _postProbe(caseId)
         .then(() => {
@@ -3835,7 +3829,7 @@ function CaseDetailScreen({
   }
 
   const notInvestigating = caseData.not_investigating || [];
-  const stage = typeof caseData.stage === "number" ? caseData.stage : 0;
+  const stage = stageNum(caseData.stage);
 
   return (
     <>
