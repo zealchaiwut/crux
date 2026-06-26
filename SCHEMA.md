@@ -98,6 +98,12 @@ Added in sprint 11 (issue #99). Stores raw pipeline results from the fetch→Cla
 | `notes` | text | |
 | `decided_at` | timestamptz | NOT NULL, default `now()` |
 
+## Environment variables
+
+| Variable | Values | Notes |
+|---|---|---|
+| `VERIFIER_ENGINE` | `stub` (default), `ai` | Controls which verification backend is used. **`stub` is for development and testing only — it is not production-ready.** The stub uses hardcoded keyword matching to produce deterministic results so the UI can be exercised without a live AI service. Set to `ai` when a real AI verifier is configured (tracked in issue #98). |
+
 ### `case_embedding`
 
 Added in sprint 7 (issue #68). Stores pre-computed Claude embedding vectors for semantic related-case matching.
