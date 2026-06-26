@@ -1,10 +1,14 @@
 """Case summary generation using Claude.
 
-Generates a structured synthesis of a case at the probe stage, covering:
-  1. Sharpened problem statement
-  2. A/B/C option ranking with per-option reasoning citing source documents
-  3. Recommended plan
-  4. Suggested probe plan
+Provides two interfaces:
+
+  run(problem, ranking, recommended_plan, probe_plan) -> str
+    Pipeline-orchestrator interface. Accepts explicit stage outputs and returns
+    a GitHub-flavoured markdown conclusion document.
+
+  generate_summary(case_data: dict) -> str
+    Web-API interface. Accepts the raw case dict (as assembled by the router)
+    and returns a JSON-encoded summary string.
 
 All summary logic lives here; the router calls generate_summary() and handles
 persistence and caching.
@@ -14,6 +18,24 @@ import json
 from app.claude_cli import ClaudeCLIError, complete
 
 _MODEL = "claude-haiku-4-5-20251001"
+
+_MARKDOWN_SYSTEM = """\
+You are a decision-support analyst. Given a structured case investigation, produce a \
+concise conclusion document in GitHub-flavoured markdown.
+
+Structure your response with exactly these four sections (use ## headings):
+  ## Problem Statement
+  ## A/B/C Option Ranking
+  ## Recommended Plan
+  ## Probe Plan
+
+Rules:
+- Use GitHub-flavoured markdown (##, **bold**, bullet lists)
+- In the Option Ranking section, include each option's rank, core reasoning, and cite \
+any source documents by title or ID
+- Every section must be non-empty
+- Return only the markdown document — no preamble or trailing commentary
+"""
 
 _SYSTEM = """\
 You are a decision-support analyst. Given a structured case investigation, produce a concise \
@@ -36,6 +58,75 @@ Rules:
 
 class SummaryError(Exception):
     """Raised when Claude fails to return a usable summary."""
+
+
+def _build_ranking_text(ranking: dict) -> str:
+    """Format the ranking dict into readable text for the prompt."""
+    if not ranking:
+        return "No ranking data provided."
+    lines = []
+    for label in sorted(ranking, key=lambda k: ranking[k].get("rank", 99)):
+        opt = ranking[label]
+        rank = opt.get("rank", "?")
+        rationale = opt.get("rationale", "")
+        sources = opt.get("sources", [])
+        line = f"Option {label} (Rank {rank}): {rationale}"
+        for src in sources:
+            title = src.get("title") or src.get("id") or "untitled"
+            src_id = src.get("id") or ""
+            line += f" [Source: {title}" + (f" ({src_id})" if src_id else "") + "]"
+        lines.append(line)
+    return "\n".join(lines)
+
+
+async def run(
+    problem: str,
+    ranking: dict,
+    recommended_plan: str,
+    probe_plan: str,
+) -> str:
+    """Synthesise a GitHub-flavoured markdown conclusion from pipeline stage outputs.
+
+    Args:
+        problem: Sharpened problem statement from the sharpen stage.
+        ranking: Dict mapping option labels (A/B/C) to rank, rationale, and sources.
+        recommended_plan: Text description of the top-ranked plan to pursue.
+        probe_plan: Text description of the probe design.
+
+    Returns:
+        A GitHub-flavoured markdown string covering all four sections.
+
+    Raises:
+        SummaryError: if recommended_plan is empty, the Claude call fails, or the
+            response is blank/unparseable.
+    """
+    if not recommended_plan or not recommended_plan.strip():
+        raise SummaryError(
+            "recommended_plan must be a non-empty string; "
+            "cannot synthesise a conclusion without a recommended plan."
+        )
+
+    ranking_text = _build_ranking_text(ranking)
+    user_message = (
+        f"## Problem Being Investigated\n\n{problem}\n\n"
+        f"## Option Ranking\n\n{ranking_text}\n\n"
+        f"## Recommended Plan\n\n{recommended_plan}\n\n"
+        f"## Probe Plan\n\n{probe_plan}\n\n"
+        "Produce the case conclusion document."
+    )
+
+    try:
+        raw = await complete(_MARKDOWN_SYSTEM, user_message, _MODEL)
+    except ClaudeCLIError as exc:
+        raise SummaryError(f"Claude call failed: {exc}") from exc
+
+    stripped = raw.strip()
+    if not stripped:
+        raise SummaryError(
+            "Claude returned a blank response; cannot produce a valid markdown summary."
+        )
+
+    return stripped
 
 
 async def generate_summary(case_data: dict) -> str:
