@@ -54,42 +54,45 @@ def test_ac1_clipboard_try_has_catch():
 
 
 # ---------------------------------------------------------------------------
-# AC2: catch falls back to document.execCommand('copy')
+# AC2: catch handles failure gracefully — execCommand removed by issue #42
 # ---------------------------------------------------------------------------
 
-def test_ac2_fallback_execCommand_in_catch():
-    """AC2: document.execCommand('copy') appears in the catch/fallback path."""
+def test_ac2_no_execCommand_in_catch():
+    """AC2 (updated by #42): document.execCommand is no longer in the catch path.
+
+    Issue #42 removed the deprecated execCommand fallback entirely; the catch
+    now shows a user-visible error message directly instead.
+    """
     src = _src()
     block = _handleCopy_block(src)
     catch_match = re.search(r'\}\s*catch\s*\([^)]*\)\s*\{(.+)', block, re.DOTALL)
     assert catch_match, "No catch block found in handleCopy"
     catch_body = catch_match.group(1)
-    assert "execCommand" in catch_body, \
-        "document.execCommand fallback must be inside the catch block"
+    assert "execCommand" not in catch_body, \
+        "document.execCommand must NOT be in the catch block (removed per #42)"
 
 
 # ---------------------------------------------------------------------------
-# AC3: document.execCommand fallback is itself wrapped in try/catch
+# AC3: catch is a simple error handler — no nested try/catch
 # ---------------------------------------------------------------------------
 
-def test_ac3_execCommand_wrapped_in_inner_try_catch():
-    """AC3: The document.execCommand call is inside its own try/catch."""
+def test_ac3_no_nested_try_in_catch():
+    """AC3 (updated by #42): The catch body is a flat error handler, no nested try.
+
+    Issue #42 removed the inner try/catch that wrapped execCommand; the catch
+    now directly calls setCopyError without any nested control flow.
+    """
     src = _src()
     block = _handleCopy_block(src)
-    # After the first catch we need another try...catch wrapping execCommand
     catch_match = re.search(r'\}\s*catch\s*\([^)]*\)\s*\{(.+)', block, re.DOTALL)
     assert catch_match, "No outer catch block found in handleCopy"
     catch_body = catch_match.group(1)
-    inner_try_pos = catch_body.find("try")
-    exec_pos = catch_body.find("execCommand")
-    assert inner_try_pos != -1 and inner_try_pos < exec_pos, \
-        "document.execCommand must be inside a nested try block within the outer catch"
-    assert re.search(r'execCommand.+?\}\s*catch\s*\(', catch_body, re.DOTALL), \
-        "document.execCommand fallback must have its own catch block"
+    assert "try" not in catch_body, \
+        "catch body must not contain a nested try block (execCommand complexity removed per #42)"
 
 
 # ---------------------------------------------------------------------------
-# AC4: Both methods fail → user-visible error message shown
+# AC4: Copy failure → user-visible error message shown
 # ---------------------------------------------------------------------------
 
 def test_ac4_error_state_variable_declared():
@@ -102,20 +105,15 @@ def test_ac4_error_state_variable_declared():
     ), "copyError state must be declared with React.useState"
 
 
-def test_ac4_error_set_when_both_methods_fail():
-    """AC4: setCopyError is called inside the inner catch (both methods failed)."""
+def test_ac4_error_set_when_copy_fails():
+    """AC4 (updated by #42): setCopyError is called in the catch when writeText fails."""
     src = _src()
     block = _handleCopy_block(src)
-    # The inner catch must call setCopyError
-    inner_catch = re.search(
-        r'execCommand.*?\}\s*catch\s*\([^)]*\)\s*\{([^}]+)\}',
-        block,
-        re.DOTALL,
-    )
-    assert inner_catch, "Inner catch block (after execCommand) not found"
-    inner_catch_body = inner_catch.group(1)
-    assert "setCopyError" in inner_catch_body, \
-        "setCopyError must be called in the inner catch to surface the error to the user"
+    catch_match = re.search(r'\}\s*catch\s*\([^)]*\)\s*\{(.+)', block, re.DOTALL)
+    assert catch_match, "No catch block found in handleCopy"
+    catch_body = catch_match.group(1)
+    assert "setCopyError" in catch_body, \
+        "setCopyError must be called in the catch to surface the error to the user"
 
 
 def test_ac4_error_rendered_in_jsx():

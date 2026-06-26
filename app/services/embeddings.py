@@ -59,7 +59,11 @@ def get_embedding(text: str) -> list[float]:
     }
 
     try:
-        with httpx.Client(timeout=30.0) as client:
+        # Structured per-phase timeouts: connect 10s (fast-fail on routing failures),
+        # read 30s (room for a multi-token embedding response), write/pool 5s.
+        with httpx.Client(
+            timeout=httpx.Timeout(30.0, connect=10.0, read=30.0, write=5.0, pool=5.0)
+        ) as client:
             resp = client.post(_API_URL, json=payload, headers=headers)
         resp.raise_for_status()
     except httpx.HTTPStatusError as exc:

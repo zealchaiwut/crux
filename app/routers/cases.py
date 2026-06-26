@@ -627,12 +627,14 @@ def log_verdict(case_id: str, body: LogVerdictRequest, db: Session = Depends(get
     if probe is None:
         raise HTTPException(status_code=422, detail="Case has no probe; cannot log a verdict")
 
+    now = datetime.now(tz=timezone.utc)
     verdict = models.Verdict(
         id=str(_uuid_mod.uuid4()),
         probe_id=probe.id,
         outcome=body.outcome,
         notes=body.notes,
-        decided_at=datetime.now(tz=timezone.utc),
+        decided_at=now,
+        created_at=now,
     )
     db.add(verdict)
     probe.status = body.outcome
@@ -699,6 +701,11 @@ async def generate_probe_commander_spec(
         raise HTTPException(
             status_code=422,
             detail="At least one plan is required for spec generation.",
+        )
+    if not any(p.current_rank is not None for p in plans):
+        raise HTTPException(
+            status_code=422,
+            detail="At least one ranked plan is required for spec generation.",
         )
     plans_input = [
         {
