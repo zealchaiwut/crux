@@ -324,12 +324,21 @@ def test_summary_and_action_plan_have_separate_gate_conditions():
 
 
 def test_locked_plan_not_shown_at_pre_probe_stage_in_js():
-    """AC7: LockedPlan must be inside the stage >= 4 gate, not rendered for stage < 4."""
+    """AC7: LockedPlan must not be rendered for stage < 4.
+
+    Originally this asserted <LockedPlan JSX was present inside a stage >= 4
+    gate.  Issue #148 superseded that behaviour: the ACTION PLAN section is
+    now entirely absent pre-verdict, so <LockedPlan is no longer used as JSX
+    in CaseDetailScreen at all.  Either behaviour satisfies AC7's intent —
+    LockedPlan is not shown at pre-probe stages — so we accept both.
+    """
     combined = _read_combined_js()
     locked_idx = combined.find("<LockedPlan")
-    assert locked_idx != -1, "LockedPlan JSX must be present in JS"
+    if locked_idx == -1:
+        # LockedPlan JSX removed entirely (issue #148 behaviour) — AC7 satisfied
+        return
 
-    # The stage >= 4 condition must appear before LockedPlan in the same render block
+    # Legacy path: <LockedPlan still present, must be inside stage >= 4 gate
     preceding = combined[max(0, locked_idx - 3000): locked_idx]
     assert "stage >= 4" in preceding, (
         "stage >= 4 gate must appear before LockedPlan JSX to ensure "

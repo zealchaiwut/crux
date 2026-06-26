@@ -4213,123 +4213,119 @@ function CaseDetailScreen({
             />
           )}
 
-          {/* ACTION PLAN — only at probe stage; verdict_log further gates content vs LockedPlan */}
-          {stage >= 4 && (
+          {/* ACTION PLAN — only rendered once a verdict has been logged */}
+          {stage >= 4 && !!caseData.verdict_log && (
             <>
               <SectionLabel>ACTION PLAN</SectionLabel>
-              {!caseData.verdict_log ? (
-                <LockedPlan onLogVerdict={() => setShowLogVerdictModal(true)} />
-              ) : (
-                <div
-                  style={{
-                    background: "var(--surface)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "var(--radius)",
-                    padding: "var(--space-5)",
-                    marginBottom: "var(--space-6)",
-                  }}
-                >
-                  <div style={{ marginBottom: "var(--space-4)" }}>
-                    <div
-                      className="mono"
-                      style={{
-                        fontSize: "var(--text-2xs)",
-                        fontWeight: 700,
-                        color: "var(--text-sub)",
-                        marginBottom: "var(--space-2)",
-                      }}
-                    >
-                      VERDICT
-                    </div>
-                    <span
-                      className="mono"
-                      style={{
-                        fontSize: "var(--text-sm)",
-                        fontWeight: 700,
-                        letterSpacing: ".05em",
-                        color:
-                          caseData.verdict === "confirmed"
-                            ? "var(--green)"
-                            : caseData.verdict === "killed"
-                              ? "var(--red)"
-                              : "var(--amber)",
-                        background:
-                          caseData.verdict === "confirmed"
-                            ? "var(--green-bg)"
-                            : caseData.verdict === "killed"
-                              ? "var(--red-bg)"
-                              : "var(--amber-bg)",
-                        border: `1px solid ${caseData.verdict === "confirmed" ? "var(--green)" : caseData.verdict === "killed" ? "var(--red)" : "var(--amber)"}`,
-                        borderRadius: "var(--radius-pill)",
-                        padding: "3px 10px",
-                      }}
-                    >
-                      {caseData.verdict_log.outcome.charAt(0).toUpperCase() +
-                        caseData.verdict_log.outcome.slice(1)}
-                    </span>
-                    <p
-                      style={{
-                        fontSize: "var(--text-sm)",
-                        color: "var(--text-muted)",
-                        lineHeight: 1.55,
-                        marginTop: "var(--space-3)",
-                        marginBottom: 0,
-                      }}
-                    >
-                      {caseData.verdict_log.notes}
-                    </p>
+              <div
+                style={{
+                  background: "var(--surface)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--radius)",
+                  padding: "var(--space-5)",
+                  marginBottom: "var(--space-6)",
+                }}
+              >
+                <div style={{ marginBottom: "var(--space-4)" }}>
+                  <div
+                    className="mono"
+                    style={{
+                      fontSize: "var(--text-2xs)",
+                      fontWeight: 700,
+                      color: "var(--text-sub)",
+                      marginBottom: "var(--space-2)",
+                    }}
+                  >
+                    VERDICT
                   </div>
-                  {(() => {
-                    const plans = caseData.plans || [];
-                    const lead = plans.find((p) => p.current_rank === 1);
-                    if (!lead) return null;
-                    return (
-                      <div>
+                  <span
+                    className="mono"
+                    style={{
+                      fontSize: "var(--text-sm)",
+                      fontWeight: 700,
+                      letterSpacing: ".05em",
+                      color:
+                        caseData.verdict === "confirmed"
+                          ? "var(--green)"
+                          : caseData.verdict === "killed"
+                            ? "var(--red)"
+                            : "var(--amber)",
+                      background:
+                        caseData.verdict === "confirmed"
+                          ? "var(--green-bg)"
+                          : caseData.verdict === "killed"
+                            ? "var(--red-bg)"
+                            : "var(--amber-bg)",
+                      border: `1px solid ${caseData.verdict === "confirmed" ? "var(--green)" : caseData.verdict === "killed" ? "var(--red)" : "var(--amber)"}`,
+                      borderRadius: "var(--radius-pill)",
+                      padding: "3px 10px",
+                    }}
+                  >
+                    {caseData.verdict_log.outcome.charAt(0).toUpperCase() +
+                      caseData.verdict_log.outcome.slice(1)}
+                  </span>
+                  <p
+                    style={{
+                      fontSize: "var(--text-sm)",
+                      color: "var(--text-muted)",
+                      lineHeight: 1.55,
+                      marginTop: "var(--space-3)",
+                      marginBottom: 0,
+                    }}
+                  >
+                    {caseData.verdict_log.notes}
+                  </p>
+                </div>
+                {(() => {
+                  const plans = caseData.plans || [];
+                  const lead = plans.find((p) => p.current_rank === 1);
+                  if (!lead) return null;
+                  return (
+                    <div>
+                      <div
+                        className="mono"
+                        style={{
+                          fontSize: "var(--text-2xs)",
+                          fontWeight: 700,
+                          color: "var(--text-sub)",
+                          marginBottom: "var(--space-2)",
+                        }}
+                      >
+                        LEADING PLAN
+                      </div>
+                      <div
+                        style={{
+                          background: "var(--crux-tint)",
+                          border: "1px solid var(--crux)",
+                          borderRadius: "var(--radius)",
+                          padding: "var(--space-4)",
+                        }}
+                      >
                         <div
-                          className="mono"
                           style={{
-                            fontSize: "var(--text-2xs)",
-                            fontWeight: 700,
-                            color: "var(--text-sub)",
+                            fontSize: "var(--text-base)",
+                            fontWeight: 600,
+                            color: "var(--text)",
                             marginBottom: "var(--space-2)",
                           }}
                         >
-                          LEADING PLAN
+                          {lead.name}
                         </div>
-                        <div
+                        <p
                           style={{
-                            background: "var(--crux-tint)",
-                            border: "1px solid var(--crux)",
-                            borderRadius: "var(--radius)",
-                            padding: "var(--space-4)",
+                            fontSize: "var(--text-sm)",
+                            color: "var(--text-muted)",
+                            lineHeight: 1.5,
+                            margin: 0,
                           }}
                         >
-                          <div
-                            style={{
-                              fontSize: "var(--text-base)",
-                              fontWeight: 600,
-                              color: "var(--text)",
-                              marginBottom: "var(--space-2)",
-                            }}
-                          >
-                            {lead.name}
-                          </div>
-                          <p
-                            style={{
-                              fontSize: "var(--text-sm)",
-                              color: "var(--text-muted)",
-                              lineHeight: 1.5,
-                              margin: 0,
-                            }}
-                          >
-                            {lead.mechanism}
-                          </p>
-                        </div>
+                          {lead.mechanism}
+                        </p>
                       </div>
-                    );
-                  })()}
-                </div>
-              )}
+                    </div>
+                  );
+                })()}
+              </div>
             </>
           )}
 
