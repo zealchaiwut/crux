@@ -227,7 +227,6 @@ def test_summary_endpoint_caches_on_second_call(api_client, db_session):
 
 def test_summary_stored_in_db_after_first_call(api_client, db_session):
     """AC1: After first call, the summary is persisted to case.summary in the DB."""
-    from app import models
 
     c = _seed_case(db_session, stage="probe")
     assert c.summary is None, "Summary must start as None before generation (AC1 precondition)"
