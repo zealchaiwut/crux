@@ -73,6 +73,15 @@ def list_cases(
             ),
         )
 
+    if verdict is not None and verdict not in _VALID_VERDICT_PARAMS:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Invalid verdict value {verdict!r}. "
+                f"Valid values: {', '.join(sorted(_VALID_VERDICT_PARAMS))}"
+            ),
+        )
+
     query = db.query(models.Case).options(
         joinedload(models.Case.plans),
         joinedload(models.Case.probes).joinedload(models.Probe.verdicts),
