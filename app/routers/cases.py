@@ -96,20 +96,19 @@ def list_cases(
 
     if verdict is not None:
         if verdict == "open":
-            # No logged verdict: case has no probe or probe has no verdicts
-            cases_with_verdict = (
-                db.query(models.Verdict.probe_id)
-                .join(models.Probe, models.Probe.id == models.Verdict.probe_id)
-                .with_entities(models.Probe.case_id)
+            # NOT EXISTS (probe with any verdict) — avoids NOT IN subquery
+            query = query.filter(
+                ~models.Case.probes.any(
+                    models.Probe.verdicts.any()
+                )
             )
-            query = query.filter(models.Case.id.notin_(cases_with_verdict))
         elif verdict in {"confirmed", "killed", "inconclusive"}:
-            cases_with_outcome = (
-                db.query(models.Probe.case_id)
-                .join(models.Verdict, models.Verdict.probe_id == models.Probe.id)
-                .filter(models.Verdict.outcome == verdict)
+            # EXISTS (probe where verdict.outcome matches) — avoids IN subquery
+            query = query.filter(
+                models.Case.probes.any(
+                    models.Probe.verdicts.any(models.Verdict.outcome == verdict)
+                )
             )
-            query = query.filter(models.Case.id.in_(cases_with_outcome))
 
     cases = query.order_by(models.Case.created_at.desc()).all()
 
