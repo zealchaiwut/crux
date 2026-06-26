@@ -326,7 +326,7 @@ def test_get_case_api_stage_is_2_after_bakeoff(api_client, db_session):
 
     r = api_client.get(f"/api/cases/{c.id}")
     assert r.status_code == 200
-    assert r.json()["stage"] == 2, f"Expected stage=2 (gather), got {r.json()['stage']}"
+    assert r.json()["stage"] == "gather", f"Expected stage='gather', got {r.json()['stage']}"
 
 
 # ---------------------------------------------------------------------------

@@ -137,12 +137,12 @@ def test_summary_section_gated_at_probe_stage():
     )
 
 
-def test_api_case_at_probe_stage_returns_stage_4(api_client, db_session):
-    """AC1: GET /api/cases/{id} returns stage=4 for probe-stage case."""
+def test_api_case_at_probe_stage_returns_stage_string(api_client, db_session):
+    """AC1: GET /api/cases/{id} returns stage='probe' for probe-stage case."""
     c = _seed_case(db_session, stage="probe")
     r = api_client.get(f"/api/cases/{c.id}")
     assert r.status_code == 200
-    assert r.json()["stage"] == 4
+    assert r.json()["stage"] == "probe"
 
 
 # ---------------------------------------------------------------------------
@@ -244,22 +244,25 @@ def test_api_case_with_verdict_returns_both_verdict_log_and_summary_field(api_cl
     data = r.json()
     assert data.get("verdict_log") is not None, "verdict_log must be present (AC4)"
     assert "summary" in data, "summary field must be present (AC4)"
-    assert data["stage"] >= 4, "stage must be >= 4 for probe-stage case (AC4)"
+    assert data["stage"] in ("probe", "verdict"), "stage must be 'probe' or 'verdict' (AC4)"
 
 
 # ---------------------------------------------------------------------------
 # AC5: No probe designed → neither Summary nor ActionPlan
 # ---------------------------------------------------------------------------
 
-def test_api_pre_probe_case_returns_stage_below_4(api_client, db_session):
-    """AC5: Pre-probe stages return stage < 4 from the API."""
-    for stage_name, expected in [("sharpened", 0), ("bake_off", 1), ("gather", 2), ("weigh", 3)]:
+_PRE_PROBE_STAGE_NAMES = {"sharpened", "bake_off", "gather", "weigh"}
+
+
+def test_api_pre_probe_case_returns_pre_probe_stage(api_client, db_session):
+    """AC5: Pre-probe stages return a pre-probe stage string from the API."""
+    for stage_name in ["sharpened", "bake_off", "gather", "weigh"]:
         c = _seed_case(db_session, stage=stage_name)
         r = api_client.get(f"/api/cases/{c.id}")
         assert r.status_code == 200, f"Expected 200 for stage {stage_name}"
         data = r.json()
-        assert data["stage"] < 4, (
-            f"Stage '{stage_name}' must be < 4; got {data['stage']} (AC5)"
+        assert data["stage"] in _PRE_PROBE_STAGE_NAMES, (
+            f"Stage '{stage_name}' must be a pre-probe stage string; got {data['stage']!r} (AC5)"
         )
 
 
@@ -273,7 +276,7 @@ def test_regression_verdict_case_returns_all_required_fields(api_client, db_sess
     r = api_client.get(f"/api/cases/{c.id}")
     assert r.status_code == 200
     data = r.json()
-    assert data["stage"] >= 4, "stage must be >= 4 (AC6 regression)"
+    assert data["stage"] in ("probe", "verdict"), "stage must be 'probe' or 'verdict' (AC6 regression)"
     assert data.get("verdict_log") is not None, "verdict_log must be present (AC6 regression)"
     assert "summary" in data, "summary key must be present (AC6 regression)"
 

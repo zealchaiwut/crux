@@ -12,6 +12,10 @@ const STAGE_COLORS = [
   "var(--st-5)",
 ];
 
+// Map string stage enum values (returned by API) to their numeric index.
+const _STAGE_ORDER = { sharpened: 0, bake_off: 1, gather: 2, weigh: 3, probe: 4, verdict: 5 };
+function stageNum(s) { return typeof s === "number" ? s : (_STAGE_ORDER[s] ?? 0); }
+
 const STATES = {
   IDLE: "idle",
   COPIED: "copied",
@@ -164,7 +168,7 @@ function CaseCard({ id, title, stage, verdict, plans, onClick }) {
           ? "var(--amber-bg)"
           : "var(--surface-2)";
 
-  const safeStage = Math.max(0, Math.min(stage || 0, 4));
+  const safeStage = Math.max(0, Math.min(stageNum(stage), 4));
   const stagePips = STAGE_NAMES.map((_, i) => {
     const done = closed || i < safeStage;
     const now = !closed && i === safeStage;
@@ -3712,7 +3716,7 @@ function CaseDetailScreen({
   // AC1: Auto-trigger research loop for each Plan when Case enters Stage 2 (Gather)
   React.useEffect(() => {
     if (!caseData) return;
-    const stage = typeof caseData.stage === "number" ? caseData.stage : 0;
+    const stage = stageNum(caseData.stage);
     if (stage !== 2) return;
 
     const plans = caseData.plans || [];
@@ -3734,7 +3738,7 @@ function CaseDetailScreen({
   // Auto-trigger probe at stage >= 4
   React.useEffect(() => {
     if (!caseData) return;
-    const stage = typeof caseData.stage === "number" ? caseData.stage : 0;
+    const stage = stageNum(caseData.stage);
     if (stage >= 4 && !caseData.probe && probeState === "idle") {
       setProbeState("loading");
       setProbeError("");
@@ -4708,12 +4712,12 @@ function CasesScreen({ theme, onToggleTheme, onCaseCreated }) {
   // Stage and outcome chip definitions (kept inside the component so label strings
   // are part of the component's source for static inspection and future i18n)
   const STAGE_CHIP_DEFS = [
-    { label: "Sharpened", value: 0 },
-    { label: "Bake-off", value: 1 },
-    { label: "Gather", value: 2 },
-    { label: "Weigh", value: 3 },
-    { label: "Probe", value: 4 },
-    { label: "Verdict", value: 5 },
+    { label: "Sharpened", value: "sharpened" },
+    { label: "Bake-off", value: "bake_off" },
+    { label: "Gather", value: "gather" },
+    { label: "Weigh", value: "weigh" },
+    { label: "Probe", value: "probe" },
+    { label: "Verdict", value: "verdict" },
   ];
 
   const OUTCOME_CHIP_DEFS = [

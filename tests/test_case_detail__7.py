@@ -112,8 +112,8 @@ def test_case_detail_api_returns_stage_number(api_client, db_session):
     assert r.status_code == 200
     data = r.json()
     assert data["sharpened"] == "The actual sharpened problem"
-    assert isinstance(data["stage"], int)
-    assert data["stage"] == 2  # gather → 2
+    assert isinstance(data["stage"], str)
+    assert data["stage"] == "gather"
 
 
 def test_case_detail_api_not_found(api_client):
@@ -202,7 +202,7 @@ def test_api_stage_5_for_verdict(api_client, db_session):
     db_session.commit()
     r = api_client.get(f"/api/cases/{c.id}")
     assert r.status_code == 200
-    assert r.json()["stage"] == 5
+    assert r.json()["stage"] == "verdict"
 
 
 # ---------------------------------------------------------------------------
