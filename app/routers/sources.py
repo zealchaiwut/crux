@@ -10,6 +10,7 @@ POST /api/plans/{id}/run-verify-all     — trigger AI verification for every so
 PATCH /api/sources/{id}/status-override — manual accept/override of support_status.
 POST /api/sources/{id}/accept-status    — clear manual override flag (accept AI result).
 """
+import os
 import re
 import uuid as _uuid_mod
 from typing import Any, Dict, List, Literal
@@ -284,8 +285,6 @@ def _run_verifier(source: models.Source) -> tuple[str, str]:
     back to a deterministic stub that marks every source as 'neutral' with an
     explanatory rationale so the UI can be exercised end-to-end.
     """
-    import os
-
     engine = os.environ.get("VERIFIER_ENGINE", "stub")
     if engine == "ai":
         # Placeholder for future AI verifier integration (issue #98)
