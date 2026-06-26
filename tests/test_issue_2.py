@@ -12,7 +12,7 @@ HAS_DATABASE_URL = bool(os.environ.get("DATABASE_URL"))
 
 
 def _get_migration_files():
-    return [m for m in MIGRATION_DIR.glob("*.py") if m.name != "__init__.py"]
+    return sorted([m for m in MIGRATION_DIR.glob("*.py") if m.name != "__init__.py"])
 
 
 def _get_migration_content():

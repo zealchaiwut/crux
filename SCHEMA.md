@@ -41,6 +41,7 @@ Database: Neon Postgres. Migrations managed by Alembic (revision `n4o5p6q7r8s9`)
 | `prior` | text | |
 | `current_rank` | integer | |
 | `standing` | text | Qualitative re-rank status: `ruled-in`, `ruled-out`, or null (issue #10) |
+| `rationale` | text | nullable — 1–2 sentence LLM-generated explanation of why this plan holds its rank, citing a specific source or data point where relevant (issues #131, #132) |
 
 ### `source`
 

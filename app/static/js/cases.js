@@ -1800,6 +1800,7 @@ function PlanCard({
   name,
   mechanism,
   prior,
+  rationale: initialRationaleText,
   sources: initialSources,
   isLead,
   standing,
@@ -1809,6 +1810,7 @@ function PlanCard({
 }) {
   const priorNum = parseFloat(prior) || 0;
   const [sources, setSources] = React.useState(initialSources || []);
+  const [rationaleText, setRationaleText] = React.useState(initialRationaleText || "");
   const [gatherStatus, setGatherStatus] = React.useState(
     initialGatherStatus || STATES.IDLE,
   );
@@ -1822,9 +1824,10 @@ function PlanCard({
 
   React.useEffect(() => {
     setSources(initialSources || []);
+    setRationaleText(initialRationaleText || "");
     setGatherStatus(initialGatherStatus || STATES.IDLE);
     setGatherError(initialGatherError || "");
-  }, [initialSources, initialGatherStatus, initialGatherError]);
+  }, [initialSources, initialRationaleText, initialGatherStatus, initialGatherError]);
 
   function handleAdded(newSource) {
     setSources((prev) => [...prev, newSource]);
@@ -2139,6 +2142,41 @@ function PlanCard({
             </span>
           )}
       </div>
+
+      {/* Rationale — shown only when non-empty */}
+      {rationaleText && (
+        <div
+          data-testid="plan-rationale"
+          style={{
+            marginTop: "var(--space-3)",
+            borderTop: "1px solid var(--border)",
+            paddingTop: "var(--space-3)",
+          }}
+        >
+          <span
+            className="mono"
+            style={{
+              display: "block",
+              fontSize: "var(--text-2xs)",
+              fontWeight: 700,
+              color: "var(--text-sub)",
+              marginBottom: "var(--space-2)",
+            }}
+          >
+            RATIONALE
+          </span>
+          <p
+            style={{
+              fontSize: "var(--text-sm)",
+              color: "var(--text-muted)",
+              lineHeight: 1.5,
+              margin: 0,
+            }}
+          >
+            {rationaleText}
+          </p>
+        </div>
+      )}
 
       {showForm && (
         <SourceForm
@@ -2935,8 +2973,7 @@ function WeighPanel({ caseId, initialContext, onRerankDone }) {
   }
 
   function handleRerank() {
-    if (!context.trim()) return;
-    _postRerank({ context });
+    _postRerank({ context: context.trim() || null });
   }
 
   function handleSkip() {
@@ -2964,7 +3001,7 @@ function WeighPanel({ caseId, initialContext, onRerankDone }) {
           marginBottom: "var(--space-3)",
         }}
       >
-        YOUR CONTEXT
+        CONTEXT (OPTIONAL)
       </div>
       <textarea
         value={context}
@@ -2975,7 +3012,7 @@ function WeighPanel({ caseId, initialContext, onRerankDone }) {
         placeholder="Paste your numbers, constraints, or situation…"
         rows={4}
         disabled={isLoading}
-        aria-label="Your Context"
+        aria-label="Context (optional)"
         style={{
           width: "100%",
           resize: "vertical",
@@ -3028,7 +3065,7 @@ function WeighPanel({ caseId, initialContext, onRerankDone }) {
         <button
           className="btn btn-crux"
           onClick={handleRerank}
-          disabled={!context.trim() || isLoading}
+          disabled={isLoading}
           aria-busy={isLoading}
         >
           {isLoading ? (
@@ -3732,15 +3769,9 @@ function CaseDetailScreen({
   // Auto-trigger probe at stage >= 4
   React.useEffect(() => {
     if (!caseData) return;
-<<<<<<< HEAD
     const stage = stageNum(caseData.stage);
-    if (stage >= 4 && !caseData.probe && probeState === "idle") {
-      setProbeState("loading");
-=======
-    const stage = typeof caseData.stage === "number" ? caseData.stage : 0;
     if (stage >= 4 && !caseData.probe && probeState === STATES.IDLE) {
       setProbeState(STATES.LOADING);
->>>>>>> origin/develop
       setProbeError("");
       _postProbe(caseId)
         .then(() => {
@@ -3835,7 +3866,7 @@ function CaseDetailScreen({
   }
 
   const notInvestigating = caseData.not_investigating || [];
-  const stage = typeof caseData.stage === "number" ? caseData.stage : 0;
+  const stage = stageNum(caseData.stage);
 
   return (
     <>
@@ -4040,6 +4071,7 @@ function CaseDetailScreen({
                       name={p.name}
                       mechanism={p.mechanism}
                       prior={p.prior}
+                      rationale={p.rationale || ""}
                       sources={p.sources || []}
                       isLead={p.current_rank === 1}
                       standing={p.standing}
