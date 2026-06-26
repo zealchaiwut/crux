@@ -3,7 +3,15 @@
 Per-sprint changelog for crux. Entries are written by the documentor when a
 sprint finishes. Dated per-sprint files live under [docs/changelog/](docs/changelog/).
 
-<<<<<<< HEAD
+## Sprint 52 (2026-06-26)
+
+- #130: Fix WeighPanel not rendering in CaseDetailScreen
+- #131: Add rationale field to Weigh plan output
+- #132: Persist plan rationale from Weigh rerank response
+- #133: Render per-plan rationale text in PlanCard
+- #134: Make weigh context optional in WeighPanel UI
+- #135: Add tests for rerank rationale and WeighPanel regression
+
 ## Sprint 13 (2026-06-26)
 
 - #71: Wire _VALID_VERDICT_PARAMS into verdict query validation
@@ -19,7 +27,7 @@ sprint finishes. Dated per-sprint files live under [docs/changelog/](docs/change
 - #113: Extract inline font-size styles to .chip-expanded CSS class
 - #114: Move os import to module level in routers/sources.py
 - #115: Document VERIFIER_ENGINE env var and stub verifier in SCHEMA.md
-=======
+
 ## Sprint 12 (2026-06-25)
 
 - #36: [follow-up] Clarify httpx timeout semantics in commander spec generation
@@ -33,7 +41,6 @@ sprint finishes. Dated per-sprint files live under [docs/changelog/](docs/change
 - #54: [follow-up] GET /api/verdicts keyword search should filter at database layer
 - #55: [follow-up] GET /api/verdicts timestamp field null-handling
 - #56: [follow-up] GET /api/verdicts inconsistent empty-string vs None defaults
->>>>>>> origin/develop
 
 ## Sprint 11.1 (2026-06-24)
 

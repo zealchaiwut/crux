@@ -15,11 +15,7 @@ Companion to [commander](https://github.com/zealchaiwut/commander) (which builds
 
 ## Status
 
-<<<<<<< HEAD
-Thirteen sprints complete. All five pipeline stages are live:
-=======
-Twelve sprints complete. All five pipeline stages are live:
->>>>>>> origin/develop
+Fourteen sprints complete. All five pipeline stages are live:
 
 | Stage | Status |
 |---|---|
