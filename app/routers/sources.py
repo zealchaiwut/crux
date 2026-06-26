@@ -282,15 +282,22 @@ def _run_verifier(source: models.Source) -> tuple[str, str]:
     """Return (support_status, rationale) for a source.
 
     Uses the real verifier service when VERIFIER_ENGINE is set to 'ai'; falls
-    back to a deterministic stub that marks every source as 'neutral' with an
-    explanatory rationale so the UI can be exercised end-to-end.
+    back to a deterministic keyword-matching stub when VERIFIER_ENGINE is 'stub'
+    (the default) so the UI can be exercised end-to-end without a live AI service.
+
+    The stub is TEMPORARY and will be replaced by real AI verifier integration
+    tracked in issue #98.  Do not treat its output as production-quality analysis.
     """
     engine = os.environ.get("VERIFIER_ENGINE", "stub")
     if engine == "ai":
         # Placeholder for future AI verifier integration (issue #98)
         raise HTTPException(status_code=503, detail="AI verifier not configured")
 
-    # Stub: deterministic result based on claim text content (for test variety)
+    # TEMPORARY stub: hardcoded keywords ("not"/"contradict"/"false" → contradicts;
+    # "support"/"confirm"/"evidence" → supports) produce deterministic results for
+    # testing and UI development.  These keywords are intentional — they give
+    # reproducible variety across test fixtures without requiring a real AI call.
+    # Replace this entire block when wiring up the real verifier (issue #98).
     claim = (source.claim or "").strip().lower()
     if not claim:
         return ("unverified", "No claim text provided for verification.")
