@@ -1,13 +1,16 @@
-"""Tests for issue #145: Add app/summary.py: Claude-backed case conclusion synthesiser.
+"""Tests for issue #145: Add app/summary.py: Claude-backed case conclusion
+synthesiser.
 
 AC coverage:
   AC1 – app/summary.py exists and is importable without error
   AC2 – Module exposes a function matching the pipeline signature
   AC3 – Uses claude_cli.complete with model claude-haiku-4-5-20251001
-  AC4 – Prompt instructs markdown output; response is parsed/validated before return
+  AC4 – Prompt instructs markdown output; response is parsed/validated
+        before return
   AC5 – Raises SummaryError on API failure or unparseable response
   AC6 – Output markdown includes all four input sections
-  AC7 – Unit test mocks claude_cli.complete and asserts returned string is non-empty markdown
+  AC7 – Unit test mocks claude_cli.complete and asserts returned string
+        is non-empty markdown
   AC8 – Integration smoke test passes with realistic fixtures end-to-end
 """
 import json
@@ -29,11 +32,13 @@ class TestAC1_ModuleExists:
 
 
 class TestAC2_SignatureMatches:
-    """AC2: Module exposes a function matching the signature consumed by the pipeline orchestrator."""
+    """AC2: Module exposes a function matching the signature consumed by
+    the pipeline orchestrator."""
 
     @pytest.mark.asyncio
     async def test_generate_summary_signature(self):
-        """generate_summary should accept case_data dict and return a string."""
+        """generate_summary should accept case_data dict and return a string.
+        """
         # Test that the function exists and has the right signature
         import inspect
 
@@ -74,11 +79,13 @@ class TestAC3_ModelAndAPI:
 
 
 class TestAC4_MarkdownAndValidation:
-    """AC4: Prompt instructs markdown output; response is parsed/validated before return."""
+    """AC4: Prompt instructs markdown output; response is parsed/validated
+    before return."""
 
     @pytest.mark.asyncio
     async def test_returns_parsed_json_string(self):
-        """Response from complete() is parsed and validated, returned as JSON string."""
+        """Response from complete() is parsed and validated, returned as
+        JSON string."""
         case_data = {
             "sharpened": "Detect anomalies",
             "plans": [
@@ -96,7 +103,11 @@ class TestAC4_MarkdownAndValidation:
                     ],
                 }
             ],
-            "probe": {"type": "measurement", "target_metric": "Anomaly count", "note": ""},
+            "probe": {
+                "type": "measurement",
+                "target_metric": "Anomaly count",
+                "note": "",
+            },
         }
         # Mock response contains the required fields
         mock_response = json.dumps(
@@ -121,11 +132,13 @@ class TestAC4_MarkdownAndValidation:
 
 
 class TestAC5_ErrorHandling:
-    """AC5: Raises a module-specific error class on API failure or unparseable response."""
+    """AC5: Raises a module-specific error class on API failure or
+    unparseable response."""
 
     @pytest.mark.asyncio
     async def test_raises_summary_error_on_api_failure(self):
-        """On API error, should raise SummaryError with original exception as cause."""
+        """On API error, should raise SummaryError with original exception
+        as cause."""
         from app.claude_cli import ClaudeCLIError
 
         case_data = {
@@ -218,7 +231,9 @@ class TestAC6_AllSectionsIncluded:
         }
         mock_response = json.dumps(
             {
-                "problem_statement": "Detect anomalous patterns in user behavior",
+                "problem_statement": (
+                    "Detect anomalous patterns in user behavior"
+                ),
                 "option_ranking": "No options evaluated",
                 "recommended_plan": "Gather more data",
                 "probe_plan": "Set up monitoring",
@@ -231,7 +246,10 @@ class TestAC6_AllSectionsIncluded:
             result = await summary_module.generate_summary(case_data)
             parsed = json.loads(result)
             assert "problem_statement" in parsed
-            assert parsed["problem_statement"] == "Detect anomalous patterns in user behavior"
+            assert (
+                parsed["problem_statement"]
+                == "Detect anomalous patterns in user behavior"
+            )
 
     @pytest.mark.asyncio
     async def test_output_includes_ranking_section(self):
@@ -245,7 +263,11 @@ class TestAC6_AllSectionsIncluded:
                     "mechanism": "Fast but less accurate",
                     "current_rank": 1,
                     "sources": [
-                        {"id": "paper1", "title": "Benchmarks", "claim": "Fast execution"}
+                        {
+                            "id": "paper1",
+                            "title": "Benchmarks",
+                            "claim": "Fast execution",
+                        }
                     ],
                 },
                 {
@@ -267,7 +289,10 @@ class TestAC6_AllSectionsIncluded:
         mock_response = json.dumps(
             {
                 "problem_statement": "Choose approach",
-                "option_ranking": "Approach A (rank 1) is fast per Benchmarks. Approach B (rank 2) is accurate per Accuracy Study.",
+                "option_ranking": (
+                    "Approach A (rank 1) is fast per Benchmarks."
+                    " Approach B (rank 2) is accurate per Accuracy Study."
+                ),
                 "recommended_plan": "Use Approach A",
                 "probe_plan": "Monitor performance",
             }
@@ -294,7 +319,9 @@ class TestAC6_AllSectionsIncluded:
             {
                 "problem_statement": "Choose strategy",
                 "option_ranking": "No options",
-                "recommended_plan": "Implement hybrid approach combining both strategies",
+                "recommended_plan": (
+                    "Implement hybrid approach combining both strategies"
+                ),
                 "probe_plan": "Test hybrid approach",
             }
         )
@@ -313,14 +340,21 @@ class TestAC6_AllSectionsIncluded:
         case_data = {
             "sharpened": "Test hypothesis",
             "plans": [],
-            "probe": {"type": "A/B test", "target_metric": "Conversion rate", "note": ""},
+            "probe": {
+                "type": "A/B test",
+                "target_metric": "Conversion rate",
+                "note": "",
+            },
         }
         mock_response = json.dumps(
             {
                 "problem_statement": "Test hypothesis",
                 "option_ranking": "No options",
                 "recommended_plan": "Run experiment",
-                "probe_plan": "A/B test with 10000 users, measure conversion rate over 2 weeks",
+                "probe_plan": (
+                    "A/B test with 10000 users, measure conversion rate"
+                    " over 2 weeks"
+                ),
             }
         )
         with mock.patch(
@@ -334,11 +368,13 @@ class TestAC6_AllSectionsIncluded:
 
 
 class TestAC7_UnitTest:
-    """AC7: Unit test exists that mocks complete and asserts returned string is non-empty markdown."""
+    """AC7: Unit test exists that mocks complete and asserts returned string
+    is non-empty markdown."""
 
     @pytest.mark.asyncio
     async def test_mocked_complete_returns_valid_markdown(self):
-        """Unit test with mocked complete() returns valid JSON with all required fields."""
+        """Unit test with mocked complete() returns valid JSON with all
+        required fields."""
         case_data = {
             "sharpened": "Identify root cause",
             "plans": [
@@ -347,18 +383,33 @@ class TestAC7_UnitTest:
                     "name": "Root cause A",
                     "mechanism": "Check logs",
                     "current_rank": 1,
-                    "sources": [{"id": "log1", "title": "System Logs", "claim": "Errors found"}],
+                    "sources": [
+                        {
+                            "id": "log1",
+                            "title": "System Logs",
+                            "claim": "Errors found",
+                        }
+                    ],
                 }
             ],
-            "probe": {"type": "debugging", "target_metric": "Error rate", "note": "Critical"},
+            "probe": {
+                "type": "debugging",
+                "target_metric": "Error rate",
+                "note": "Critical",
+            },
         }
         with mock.patch(
             "app.summary.complete", new_callable=mock.AsyncMock
         ) as mock_complete:
             mock_complete.return_value = json.dumps(
                 {
-                    "problem_statement": "Identify root cause of system failures",
-                    "option_ranking": "Root cause A (rank 1) based on System Logs showing errors",
+                    "problem_statement": (
+                        "Identify root cause of system failures"
+                    ),
+                    "option_ranking": (
+                        "Root cause A (rank 1) based on System Logs"
+                        " showing errors"
+                    ),
                     "recommended_plan": "Investigate root cause A",
                     "probe_plan": "Debug with focus on error rate",
                 }
@@ -369,11 +420,20 @@ class TestAC7_UnitTest:
             assert result.strip()  # non-empty
             parsed = json.loads(result)
             # All fields present and non-empty
-            assert all(parsed.get(k) for k in ["problem_statement", "option_ranking", "recommended_plan", "probe_plan"])
+            assert all(
+                parsed.get(k)
+                for k in [
+                    "problem_statement",
+                    "option_ranking",
+                    "recommended_plan",
+                    "probe_plan",
+                ]
+            )
 
 
 class TestAC8_IntegrationSmoke:
-    """AC8: Integration smoke test passes with realistic fixture inputs end-to-end."""
+    """AC8: Integration smoke test passes with realistic fixture inputs
+    end-to-end."""
 
     @pytest.mark.asyncio
     async def test_integration_smoke_test_realistic_case(self):
@@ -385,7 +445,9 @@ class TestAC8_IntegrationSmoke:
                 {
                     "label": "A",
                     "name": "Rule-based detection",
-                    "mechanism": "Pattern matching against known fraud signatures",
+                    "mechanism": (
+                        "Pattern matching against known fraud signatures"
+                    ),
                     "current_rank": 1,
                     "sources": [
                         {
@@ -398,7 +460,9 @@ class TestAC8_IntegrationSmoke:
                 {
                     "label": "B",
                     "name": "ML-based detection",
-                    "mechanism": "Trained classifier on historical fraud data",
+                    "mechanism": (
+                        "Trained classifier on historical fraud data"
+                    ),
                     "current_rank": 2,
                     "sources": [
                         {
@@ -411,7 +475,9 @@ class TestAC8_IntegrationSmoke:
                 {
                     "label": "C",
                     "name": "Hybrid approach",
-                    "mechanism": "Combine rules and ML, escalate to manual review",
+                    "mechanism": (
+                        "Combine rules and ML, escalate to manual review"
+                    ),
                     "current_rank": 3,
                     "sources": [
                         {
@@ -425,7 +491,9 @@ class TestAC8_IntegrationSmoke:
             "probe": {
                 "type": "measurement",
                 "target_metric": "Detection rate, false positive rate",
-                "note": "Monitor performance over 2 weeks with 100k transactions",
+                "note": (
+                    "Monitor performance over 2 weeks with 100k transactions"
+                ),
             },
         }
 
@@ -435,10 +503,29 @@ class TestAC8_IntegrationSmoke:
             # Mock a realistic response from Claude
             mock_complete.return_value = json.dumps(
                 {
-                    "problem_statement": "Establish real-time fraud detection for transaction processing",
-                    "option_ranking": "Option A (rule-based) achieves 96% accuracy per Real-time Fraud Detection paper. Option B (ML-based) reaches 98% per Kaggle study but requires more infrastructure. Option C (hybrid) shows 99.2% accuracy with manageable false positives per Internal Pilot Results.",
-                    "recommended_plan": "Implement Option C (hybrid approach) to balance accuracy and operational overhead while maintaining low false positive rate",
-                    "probe_plan": "Run hybrid system in parallel with existing system for 2 weeks, measuring detection rate and false positive rate against 100k transactions",
+                    "problem_statement": (
+                        "Establish real-time fraud detection for"
+                        " transaction processing"
+                    ),
+                    "option_ranking": (
+                        "Option A (rule-based) achieves 96% accuracy per"
+                        " Real-time Fraud Detection paper."
+                        " Option B (ML-based) reaches 98% per Kaggle study"
+                        " but requires more infrastructure."
+                        " Option C (hybrid) shows 99.2% accuracy with"
+                        " manageable false positives per"
+                        " Internal Pilot Results."
+                    ),
+                    "recommended_plan": (
+                        "Implement Option C (hybrid approach) to balance"
+                        " accuracy and operational overhead while maintaining"
+                        " low false positive rate"
+                    ),
+                    "probe_plan": (
+                        "Run hybrid system in parallel with existing system"
+                        " for 2 weeks, measuring detection rate and false"
+                        " positive rate against 100k transactions"
+                    ),
                 }
             )
 
@@ -451,7 +538,13 @@ class TestAC8_IntegrationSmoke:
             parsed = json.loads(result)
             # All required sections present
             assert all(
-                parsed.get(k) for k in ["problem_statement", "option_ranking", "recommended_plan", "probe_plan"]
+                parsed.get(k)
+                for k in [
+                    "problem_statement",
+                    "option_ranking",
+                    "recommended_plan",
+                    "probe_plan",
+                ]
             )
             # Verify content quality
             assert "fraud" in parsed["problem_statement"].lower()
@@ -459,4 +552,7 @@ class TestAC8_IntegrationSmoke:
             assert "Option B" in parsed["option_ranking"]
             assert "Option C" in parsed["option_ranking"]
             assert "hybrid" in parsed["recommended_plan"].lower()
-            assert "probe" in parsed["probe_plan"].lower() or "parallel" in parsed["probe_plan"].lower()
+            assert (
+                "probe" in parsed["probe_plan"].lower()
+                or "parallel" in parsed["probe_plan"].lower()
+            )
