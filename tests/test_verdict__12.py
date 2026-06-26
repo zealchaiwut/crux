@@ -376,7 +376,7 @@ def test_case_detail_returns_stage_5_after_verdict(api_client, db_session):
     r = api_client.get(f"/api/cases/{c.id}")
     assert r.status_code == 200, r.text
     data = r.json()
-    assert data["stage"] == 5, f"Stage must be 5, got {data['stage']}"
+    assert data["stage"] == "verdict", f"Stage must be 'verdict', got {data['stage']}"
 
 
 # ---------------------------------------------------------------------------

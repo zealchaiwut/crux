@@ -491,8 +491,8 @@ def test_probe__no_verdict_shown_at_stage_4(api_client, db_session):
         # Get case detail
         case_detail = api_client.get(f"/api/cases/{case.id}").json()
 
-        # Verify case is now at stage 4 (probe)
-        assert case_detail["stage"] == 4
+        # Verify case is now at stage "probe"
+        assert case_detail["stage"] == "probe"
 
         # Verify verdict is not "confirmed", "killed", or "inconclusive"
         # At stage 4, verdict should be "awaiting" or "progress"

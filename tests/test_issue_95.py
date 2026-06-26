@@ -257,15 +257,18 @@ def test_get_case_summary_round_trips_correctly(api_client, db_session):
 # AC4: Section does not appear at stages prior to probe
 # ---------------------------------------------------------------------------
 
+_PRE_PROBE_STAGES = {"sharpened", "bake_off", "gather", "weigh"}
+
+
 def test_case_summary_absent_at_pre_probe_stages(api_client, db_session):
-    """AC4: GET /api/cases/{id} must return stage < 4 for pre-probe cases."""
-    for stage_name, expected_num in [("sharpened", 0), ("bake_off", 1), ("gather", 2), ("weigh", 3)]:
+    """AC4: GET /api/cases/{id} must return a pre-probe stage string for pre-probe cases."""
+    for stage_name in ["sharpened", "bake_off", "gather", "weigh"]:
         c = _seed_case(db_session, stage=stage_name, summary=None)
         r = api_client.get(f"/api/cases/{c.id}")
         assert r.status_code == 200
         data = r.json()
-        assert data["stage"] < 4, (
-            f"Stage '{stage_name}' must map to a number < 4; got {data['stage']}"
+        assert data["stage"] in _PRE_PROBE_STAGES, (
+            f"Stage '{stage_name}' must be in pre-probe stages; got {data['stage']}"
         )
 
 
@@ -348,12 +351,12 @@ def test_close_case_affordance_in_summary_section():
 
 
 def test_summary_section_verdict_button_not_blocked_by_probe(api_client, db_session):
-    """AC7: A probe-stage case with no probe run must still return stage=4 (verdict gate open)."""
+    """AC7: A probe-stage case with no probe run must still return stage='probe'."""
     c = _seed_case(db_session, stage="probe", summary=_MOCK_SUMMARY)
     r = api_client.get(f"/api/cases/{c.id}")
     assert r.status_code == 200
     data = r.json()
-    assert data["stage"] == 4, f"Expected stage 4 for probe-stage case; got {data['stage']}"
+    assert data["stage"] == "probe", f"Expected stage 'probe' for probe-stage case; got {data['stage']}"
     # The case has no verdict_log and no probe — the close-case affordance must still
     # be renderable (not gated behind probe execution)
     assert data.get("verdict_log") is None, "No verdict should exist yet for this fixture"
