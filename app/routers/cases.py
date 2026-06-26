@@ -73,6 +73,15 @@ def list_cases(
             ),
         )
 
+    if verdict is not None and verdict not in _VALID_VERDICT_PARAMS:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Invalid verdict value {verdict!r}. "
+                f"Valid values: {', '.join(sorted(_VALID_VERDICT_PARAMS))}"
+            ),
+        )
+
     query = db.query(models.Case).options(
         joinedload(models.Case.plans),
         joinedload(models.Case.probes).joinedload(models.Probe.verdicts),
@@ -146,7 +155,7 @@ def list_cases(
         result.append({
             "id": case.id,
             "title": case.sharpened or case.raw_problem,
-            "stage": _STAGE_ORDER.get(case.stage, 0),
+            "stage": case.stage,
             "verdict": verdict,
             "verdict_log": verdict_log,
             "plans": plans_out,
@@ -249,7 +258,7 @@ def get_case(case_id: str, db: Session = Depends(get_db)):
         "raw_problem": case.raw_problem,
         "sharpened": case.sharpened or "",
         "not_investigating": not_investigating,
-        "stage": _STAGE_ORDER.get(case.stage, 0),
+        "stage": case.stage,
         "verdict": (verdict_obj.outcome if verdict_obj else
                     ("progress" if probe and probe.status == "running" else "awaiting")),
         "verdict_log": verdict_log,
@@ -308,7 +317,7 @@ def patch_case(case_id: str, body: PatchCaseRequest, db: Session = Depends(get_d
         "id": case.id,
         "sharpened": case.sharpened or "",
         "not_investigating": not_investigating_out,
-        "stage": _STAGE_ORDER.get(case.stage, 0),
+        "stage": case.stage,
     }
 
 

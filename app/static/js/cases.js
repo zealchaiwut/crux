@@ -12,6 +12,10 @@ const STAGE_COLORS = [
   "var(--st-5)",
 ];
 
+// Map string stage enum values (returned by API) to their numeric index.
+const _STAGE_ORDER = { sharpened: 0, bake_off: 1, gather: 2, weigh: 3, probe: 4, verdict: 5 };
+function stageNum(s) { return typeof s === "number" ? s : (_STAGE_ORDER[s] ?? 0); }
+
 const STATES = {
   IDLE: "idle",
   COPIED: "copied",
@@ -164,7 +168,7 @@ function CaseCard({ id, title, stage, verdict, plans, onClick }) {
           ? "var(--amber-bg)"
           : "var(--surface-2)";
 
-  const safeStage = Math.max(0, Math.min(stage || 0, 4));
+  const safeStage = Math.max(0, Math.min(stageNum(stage), 4));
   const stagePips = STAGE_NAMES.map((_, i) => {
     const done = closed || i < safeStage;
     const now = !closed && i === safeStage;
@@ -649,6 +653,15 @@ function SourceChip({
   onUpdate,
 }) {
   const [expanded, setExpanded] = React.useState(false);
+  // currentStatus, currentRationale, and currentOverridden are intentional local state.
+  // Persistence scope: these survive re-renders of the SourceChip itself (same component
+  // instance), but RESET whenever the parent PlanCard unmounts and remounts.
+  // What triggers a reset: parent unmount — for example, a case-detail refetch that
+  // replaces the component tree, or navigating away and back to the case page.
+  // User-facing consequence: an in-session UI override appears to clear on remount, but
+  // because overrides are persisted to the DB via PATCH /api/sources/{id}/status-override,
+  // the useEffect below re-syncs state from the fresh DB-sourced props after the next
+  // refetch, automatically restoring the correct override without user intervention.
   const [currentStatus, setCurrentStatus] = React.useState(initialStatus || null);
   const [currentRationale, setCurrentRationale] = React.useState(initialRationale || "");
   const [currentOverridden, setCurrentOverridden] = React.useState(!!initialOverridden);
@@ -701,7 +714,7 @@ function SourceChip({
       const data = await resp.json().catch(() => ({}));
       if (!resp.ok) return;
       _applyUpdate(data);
-    } catch (_) {}
+    } catch (e) { console.warn("Source override failed:", e); }
   }
 
   async function handleAccept() {
@@ -711,7 +724,7 @@ function SourceChip({
       const data = await resp.json().catch(() => ({}));
       if (!resp.ok) return;
       _applyUpdate(data);
-    } catch (_) {}
+    } catch (e) { console.warn("Accept status failed:", e); }
   }
 
   // Collapsed chip — button so it is keyboard-focusable by default
@@ -793,9 +806,8 @@ function SourceChip({
         </button>
 
         <span
-          className="mono"
+          className="mono chip-expanded"
           style={{
-            fontSize: "var(--text-2xs)",
             color: colors.text,
             fontWeight: 700,
           }}
@@ -805,9 +817,8 @@ function SourceChip({
 
         {currentOverridden && (
           <span
-            className="mono"
+            className="mono chip-expanded"
             style={{
-              fontSize: "var(--text-2xs)",
               color: colors.text,
               display: "inline-flex",
               alignItems: "center",
@@ -826,9 +837,9 @@ function SourceChip({
             target="_blank"
             rel="noopener noreferrer"
             aria-label={`Open source: ${title}`}
+            className="chip-expanded"
             style={{
               marginLeft: "auto",
-              fontSize: "var(--text-2xs)",
               color: "var(--text-muted)",
             }}
           >
@@ -898,11 +909,11 @@ function SourceChip({
         </button>
 
         <label
+          className="chip-expanded"
           style={{
             display: "inline-flex",
             alignItems: "center",
             gap: 4,
-            fontSize: "var(--text-2xs)",
             color: "var(--text-muted)",
           }}
         >
@@ -3699,7 +3710,7 @@ function CaseDetailScreen({
   // AC1: Auto-trigger research loop for each Plan when Case enters Stage 2 (Gather)
   React.useEffect(() => {
     if (!caseData) return;
-    const stage = typeof caseData.stage === "number" ? caseData.stage : 0;
+    const stage = stageNum(caseData.stage);
     if (stage !== 2) return;
 
     const plans = caseData.plans || [];
@@ -3721,9 +3732,15 @@ function CaseDetailScreen({
   // Auto-trigger probe at stage >= 4
   React.useEffect(() => {
     if (!caseData) return;
+<<<<<<< HEAD
+    const stage = stageNum(caseData.stage);
+    if (stage >= 4 && !caseData.probe && probeState === "idle") {
+      setProbeState("loading");
+=======
     const stage = typeof caseData.stage === "number" ? caseData.stage : 0;
     if (stage >= 4 && !caseData.probe && probeState === STATES.IDLE) {
       setProbeState(STATES.LOADING);
+>>>>>>> origin/develop
       setProbeError("");
       _postProbe(caseId)
         .then(() => {
@@ -4479,13 +4496,13 @@ function EditCaseModal({
       });
       if (!resp.ok) {
         const data = await resp.json().catch(() => ({}));
-        throw new Error(data.detail || `Error ${resp.status}`);
+        throw new Error(data.detail || "An unexpected error occurred.");
       }
       const data = await resp.json();
       onSaved(data);
       onClose();
     } catch (err) {
-      setError(err.message || "Save failed. Please try again.");
+      setError(err.message || "An unexpected error occurred.");
     } finally {
       setSaving(false);
     }
@@ -4695,12 +4712,12 @@ function CasesScreen({ theme, onToggleTheme, onCaseCreated }) {
   // Stage and outcome chip definitions (kept inside the component so label strings
   // are part of the component's source for static inspection and future i18n)
   const STAGE_CHIP_DEFS = [
-    { label: "Sharpened", value: 0 },
-    { label: "Bake-off", value: 1 },
-    { label: "Gather", value: 2 },
-    { label: "Weigh", value: 3 },
-    { label: "Probe", value: 4 },
-    { label: "Verdict", value: 5 },
+    { label: "Sharpened", value: "sharpened" },
+    { label: "Bake-off", value: "bake_off" },
+    { label: "Gather", value: "gather" },
+    { label: "Weigh", value: "weigh" },
+    { label: "Probe", value: "probe" },
+    { label: "Verdict", value: "verdict" },
   ];
 
   const OUTCOME_CHIP_DEFS = [

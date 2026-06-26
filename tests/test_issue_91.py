@@ -132,14 +132,14 @@ def test_weighpanel_gating_includes_gather_stage_2():
     )
 
 
-def test_api_gather_stage_returns_int_2(api_client, db_session):
-    """AC2: GET /api/cases/{id} returns stage=2 for a case in 'gather' stage."""
+def test_api_gather_stage_returns_string(api_client, db_session):
+    """AC2: GET /api/cases/{id} returns stage='gather' for a case in 'gather' stage."""
     c = _seed_case(db_session, stage="gather")
     r = api_client.get(f"/api/cases/{c.id}")
     assert r.status_code == 200
     data = r.json()
-    assert data["stage"] == 2, (
-        f"gather stage must map to integer 2, got {data['stage']}"
+    assert data["stage"] == "gather", (
+        f"gather stage must be the string 'gather', got {data['stage']}"
     )
 
 
@@ -164,14 +164,14 @@ def test_weighpanel_gating_includes_weigh_stage_3():
     )
 
 
-def test_api_weigh_stage_returns_int_3(api_client, db_session):
-    """AC3: GET /api/cases/{id} returns stage=3 for a case in 'weigh' stage."""
+def test_api_weigh_stage_returns_string(api_client, db_session):
+    """AC3: GET /api/cases/{id} returns stage='weigh' for a case in 'weigh' stage."""
     c = _seed_case(db_session, stage="weigh")
     r = api_client.get(f"/api/cases/{c.id}")
     assert r.status_code == 200
     data = r.json()
-    assert data["stage"] == 3, (
-        f"weigh stage must map to integer 3, got {data['stage']}"
+    assert data["stage"] == "weigh", (
+        f"weigh stage must be the string 'weigh', got {data['stage']}"
     )
 
 
@@ -202,14 +202,14 @@ def test_weighpanel_gating_excludes_stages_above_weigh():
     )
 
 
-def test_api_verdict_stage_returns_int_5(api_client, db_session):
-    """AC4: GET /api/cases/{id} returns stage=5 for a case in 'verdict' (closed) stage."""
+def test_api_verdict_stage_returns_string(api_client, db_session):
+    """AC4: GET /api/cases/{id} returns stage='verdict' for a case in 'verdict' (closed) stage."""
     c = _seed_case(db_session, stage="verdict")
     r = api_client.get(f"/api/cases/{c.id}")
     assert r.status_code == 200
     data = r.json()
-    assert data["stage"] == 5, (
-        f"verdict/closed stage must map to integer 5, got {data['stage']}"
+    assert data["stage"] == "verdict", (
+        f"verdict/closed stage must be the string 'verdict', got {data['stage']}"
     )
 
 

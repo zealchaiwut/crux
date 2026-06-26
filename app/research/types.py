@@ -67,6 +67,10 @@ class FetchBlockedError(Exception):
     pass
 
 
+class FetchRateLimitError(Exception):
+    pass
+
+
 class FetchEmptyContentError(Exception):
     pass
 

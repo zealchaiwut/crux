@@ -34,3 +34,5 @@
 .src.book i    { color:var(--amber); }
 .src.article i { color:var(--blue); }
 .src.youtube i { color:var(--red); }
+
+.chip-expanded { font-size:var(--text-2xs); }

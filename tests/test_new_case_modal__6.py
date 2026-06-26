@@ -223,8 +223,8 @@ def test_get_case_detail_404_for_unknown_id(api_client):
     assert r.status_code == 404
 
 
-def test_get_case_detail_includes_stage_number(api_client, db_session):
-    """AC9: Case detail includes stage number (0 for sharpened)."""
+def test_get_case_detail_includes_stage_string(api_client, db_session):
+    """AC9: Case detail includes stage as the enum string ('sharpened' for a new case)."""
     payload = {
         "raw_problem": "A problem",
         "sharpened": "A sharpened statement",
@@ -236,7 +236,7 @@ def test_get_case_detail_includes_stage_number(api_client, db_session):
     r = api_client.get(f"/api/cases/{case_id}")
     data = r.json()
     assert "stage" in data
-    assert data["stage"] == 0, f"Newly created case must be at stage 0, got {data['stage']}"
+    assert data["stage"] == "sharpened", f"Newly created case must be at stage 'sharpened', got {data['stage']}"
 
 
 # ---------------------------------------------------------------------------

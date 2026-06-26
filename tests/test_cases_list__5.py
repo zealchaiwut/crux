@@ -417,9 +417,9 @@ def test_cases_screen_empty_state_in_js():
         "CasesScreen must have Closed section handling"
 
 
-def test_stage_number_in_api_response(api_client, db_session):
-    """Stage is returned as integer 0-5 in API response."""
+def test_stage_string_in_api_response(api_client, db_session):
+    """Stage is returned as the string enum value in API response."""
     _seed_open_case(db_session, stage="gather")
     cases = api_client.get("/api/cases").json()["cases"]
-    assert isinstance(cases[0]["stage"], int)
-    assert cases[0]["stage"] == 2  # gather → 2
+    assert isinstance(cases[0]["stage"], str)
+    assert cases[0]["stage"] == "gather"
