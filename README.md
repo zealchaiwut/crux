@@ -15,7 +15,7 @@ Companion to [commander](https://github.com/zealchaiwut/commander) (which builds
 
 ## Status
 
-Fourteen sprints complete. All five pipeline stages are live:
+Fifteen sprints complete. All five pipeline stages are live:
 
 | Stage | Status |
 |---|---|

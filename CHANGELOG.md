@@ -3,6 +3,16 @@
 Per-sprint changelog for crux. Entries are written by the documentor when a
 sprint finishes. Dated per-sprint files live under [docs/changelog/](docs/changelog/).
 
+## Sprint 53 (2026-06-27)
+
+- #144: Add summary column to Case model with migration
+- #145: Add app/summary.py: Claude-backed case conclusion synthesiser
+- #146: Add POST /api/cases/{id}/summary endpoint with caching
+- #147: Show Case Summary section at probe stage
+- #148: Split case summary from locked action plan gate
+- #149: Display steps, duration, and decision_rule in ProbeCard
+- #150: Add tests for summary endpoint and gate logic
+
 ## Sprint 52 (2026-06-26)
 
 - #130: Fix WeighPanel not rendering in CaseDetailScreen
