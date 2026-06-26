@@ -806,9 +806,8 @@ function SourceChip({
         </button>
 
         <span
-          className="mono"
+          className="mono chip-expanded"
           style={{
-            fontSize: "var(--text-2xs)",
             color: colors.text,
             fontWeight: 700,
           }}
@@ -818,9 +817,8 @@ function SourceChip({
 
         {currentOverridden && (
           <span
-            className="mono"
+            className="mono chip-expanded"
             style={{
-              fontSize: "var(--text-2xs)",
               color: colors.text,
               display: "inline-flex",
               alignItems: "center",
@@ -839,9 +837,9 @@ function SourceChip({
             target="_blank"
             rel="noopener noreferrer"
             aria-label={`Open source: ${title}`}
+            className="chip-expanded"
             style={{
               marginLeft: "auto",
-              fontSize: "var(--text-2xs)",
               color: "var(--text-muted)",
             }}
           >
@@ -911,11 +909,11 @@ function SourceChip({
         </button>
 
         <label
+          className="chip-expanded"
           style={{
             display: "inline-flex",
             alignItems: "center",
             gap: 4,
-            fontSize: "var(--text-2xs)",
             color: "var(--text-muted)",
           }}
         >
