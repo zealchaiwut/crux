@@ -3,6 +3,22 @@
 Per-sprint changelog for crux. Entries are written by the documentor when a
 sprint finishes. Dated per-sprint files live under [docs/changelog/](docs/changelog/).
 
+## Sprint 13 (2026-06-26)
+
+- #71: Wire _VALID_VERDICT_PARAMS into verdict query validation
+- #72: Verify OUTCOME_CHIP_DEFS verdict values match API response
+- #73: Verify open/closed CasesScreen vars are active, not orphaned
+- #74: Add API error fallback message in edit modal handleSave
+- #75: Return stage as string enum in all case API responses
+- #86: Replace bare except in research_orchestrator with specific fetch exceptions
+- #87: Distribute relevance_score evenly by actual candidate count in suggest
+- #88: Tighten sources type hint to List[Dict[str, Any]] in batch endpoint
+- #111: Add error logging to silent catch blocks in cases.js
+- #112: Document SourceChip override state persistence behavior
+- #113: Extract inline font-size styles to .chip-expanded CSS class
+- #114: Move os import to module level in routers/sources.py
+- #115: Document VERIFIER_ENGINE env var and stub verifier in SCHEMA.md
+
 ## Sprint 11.1 (2026-06-24)
 
 - #98: Add source-verifier service for claim support detection

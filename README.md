@@ -15,7 +15,7 @@ Companion to [commander](https://github.com/zealchaiwut/commander) (which builds
 
 ## Status
 
-Eleven sprints complete. All five pipeline stages are live:
+Thirteen sprints complete. All five pipeline stages are live:
 
 | Stage | Status |
 |---|---|
@@ -71,6 +71,7 @@ DATABASE_URL=<Neon Postgres connection string>
 # Optional
 ANTHROPIC_API_KEY=<Claude API key>          # needed for related-case embeddings, and for the optional "Anthropic API" provider
 EMBEDDING_MODEL=claude-haiku-4-5-20251001   # model used for related-case embeddings (issue #68)
+VERIFIER_ENGINE=stub                        # verification backend: stub (default, dev/testing only) or ai (issue #115)
 ```
 
 After migrating an existing database, backfill embeddings for pre-existing cases:
