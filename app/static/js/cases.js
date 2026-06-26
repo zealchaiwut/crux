@@ -2973,8 +2973,7 @@ function WeighPanel({ caseId, initialContext, onRerankDone }) {
   }
 
   function handleRerank() {
-    if (!context.trim()) return;
-    _postRerank({ context });
+    _postRerank({ context: context.trim() || null });
   }
 
   function handleSkip() {
@@ -3002,7 +3001,7 @@ function WeighPanel({ caseId, initialContext, onRerankDone }) {
           marginBottom: "var(--space-3)",
         }}
       >
-        YOUR CONTEXT
+        CONTEXT (OPTIONAL)
       </div>
       <textarea
         value={context}
@@ -3013,7 +3012,7 @@ function WeighPanel({ caseId, initialContext, onRerankDone }) {
         placeholder="Paste your numbers, constraints, or situation…"
         rows={4}
         disabled={isLoading}
-        aria-label="Your Context"
+        aria-label="Context (optional)"
         style={{
           width: "100%",
           resize: "vertical",
@@ -3066,7 +3065,7 @@ function WeighPanel({ caseId, initialContext, onRerankDone }) {
         <button
           className="btn btn-crux"
           onClick={handleRerank}
-          disabled={!context.trim() || isLoading}
+          disabled={isLoading}
           aria-busy={isLoading}
         >
           {isLoading ? (
