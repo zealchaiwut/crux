@@ -312,17 +312,15 @@ def test_valid_verdict_inconclusive_query_parameter(api_client, db_session):
     assert cases[0]["id"] == case_inconclusive.id
 
 
-def test_invalid_verdict_query_parameter_ignored(api_client, db_session):
-    """AC4: GET /api/cases?verdict=invalid is silently ignored (no validation error)."""
+def test_invalid_verdict_query_parameter_rejected(api_client, db_session):
+    """AC1/AC4: GET /api/cases?verdict=invalid returns 400 — _VALID_VERDICT_PARAMS now guards validation."""
     _seed_case_with_probe(db_session)
 
-    # Invalid verdict values should be silently ignored
-    # (the code doesn't validate query parameters, just filters on known ones)
+    # Invalid verdict values are now rejected with a 400 error
+    # because _VALID_VERDICT_PARAMS is referenced in the validation check
     r = api_client.get("/api/cases?verdict=invalid")
-    assert r.status_code == 200, f"Expected 200, got {r.status_code}: {r.text}"
-    # Should return all cases (filter not applied)
-    cases = r.json()["cases"]
-    assert len(cases) >= 1
+    assert r.status_code == 400, f"Expected 400 for invalid verdict, got {r.status_code}: {r.text}"
+    assert "Invalid verdict" in r.text
 
 
 def test_verdict_filtering_no_other_logic_changes(api_client, db_session):
