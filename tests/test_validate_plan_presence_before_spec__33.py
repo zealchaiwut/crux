@@ -312,8 +312,11 @@ def test_ac5_happy_path_unchanged(api_client, db_session):
     assert data["commander_spec"] == _MOCK_SPEC
 
 
-def test_ac5_plans_with_null_ranks_still_proceed(api_client, db_session):
-    """AC5: Plans with current_rank=None are present → proceed, ranks sorted as 99."""
+def test_ac5_plans_with_null_ranks_blocked(api_client, db_session):
+    """AC5 (updated by #37): Plans with all current_rank=None → HTTP 422.
+
+    Issue #37 tightened the gate: ≥1 ranked plan is now required.
+    """
     case = _seed_case_with_probe_null_ranks(db_session)
 
     with patch(
@@ -323,7 +326,7 @@ def test_ac5_plans_with_null_ranks_still_proceed(api_client, db_session):
     ) as mock_gen:
         resp = api_client.post(f"/api/cases/{case.id}/probe/commander-spec")
 
-    assert resp.status_code == 200, (
-        f"Expected 200 when plans have null ranks; got {resp.status_code}: {resp.text}"
+    assert resp.status_code == 422, (
+        f"Expected 422 when all plans have null ranks (issue #37); got {resp.status_code}: {resp.text}"
     )
-    mock_gen.assert_called_once()
+    mock_gen.assert_not_called()

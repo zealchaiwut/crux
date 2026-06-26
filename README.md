@@ -15,7 +15,11 @@ Companion to [commander](https://github.com/zealchaiwut/commander) (which builds
 
 ## Status
 
+<<<<<<< HEAD
 Thirteen sprints complete. All five pipeline stages are live:
+=======
+Twelve sprints complete. All five pipeline stages are live:
+>>>>>>> origin/develop
 
 | Stage | Status |
 |---|---|
@@ -120,7 +124,7 @@ POST /api/cases/{case_id}/probe/commander-spec  # generate/cache commander spec;
 
 PATCH /api/probes/{probe_id}/status        # update probe status; only designed→running is supported
 
-GET  /api/verdicts                         # list all verdicts; ?outcome=confirmed|killed|inconclusive  ?q=keyword
+GET  /api/verdicts                         # list all verdicts; ?outcome=confirmed|killed|inconclusive  ?q=keyword  ?keyword=keyword
 ```
 
 ## Running tests

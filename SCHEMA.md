@@ -1,6 +1,6 @@
 # Schema
 
-Database: Neon Postgres. Migrations managed by Alembic (revision `l2m3n4o5p6q7`).
+Database: Neon Postgres. Migrations managed by Alembic (revision `n4o5p6q7r8s9`).
 
 ## Enum types
 
@@ -97,6 +97,7 @@ Added in sprint 11 (issue #99). Stores raw pipeline results from the fetch→Cla
 | `outcome` | verdict_outcome_enum | NOT NULL |
 | `notes` | text | |
 | `decided_at` | timestamptz | NOT NULL, default `now()` |
+| `created_at` | timestamptz | Set at verdict creation time; used as `created_at` fallback when `decided_at` is null (issue #55) |
 
 ## Environment variables
 
