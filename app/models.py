@@ -71,6 +71,7 @@ class Plan(Base):
     prior = Column(Text)
     current_rank = Column(Integer)
     standing = Column(Text)
+    rationale = Column(Text, nullable=True)
 
     case = relationship("Case", back_populates="plans")
     sources = relationship(

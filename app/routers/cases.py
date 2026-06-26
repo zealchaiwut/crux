@@ -202,6 +202,7 @@ def get_case(case_id: str, db: Session = Depends(get_db)):
             "prior": plan.prior or "0",
             "bar_weight": _STANDING_BY_RANK.get(rank, 0.15),
             "standing": plan.standing,
+            "rationale": plan.rationale,
             "current_rank": plan.current_rank,
             "state": _plan_state(plan, probe, verdict_obj),
             "gather_status": status_data["status"],
@@ -487,6 +488,7 @@ async def rerank_case(case_id: str, body: RerankRequest, db: Session = Depends(g
         if item:
             plan.current_rank = item["rank"]
             plan.standing = item["standing"]
+            plan.rationale = item.get("rationale") or None
 
     case.weigh_context = body.context
     case.stage = "weigh"
