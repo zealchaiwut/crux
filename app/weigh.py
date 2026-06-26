@@ -18,12 +18,15 @@ _SYSTEM = (
     "Output ONLY a JSON array with one object per Plan. Each object must have these fields:\n"
     '  "label": the plan label ("A", "B", or "C")\n'
     '  "rank": integer 1–3 (1 = best fit for this user)\n'
-    '  "standing": one of "ruled-in", "ruled-out", or null (null = neutral/uncertain)\n\n'
+    '  "standing": one of "ruled-in", "ruled-out", or null (null = neutral/uncertain)\n'
+    '  "rationale": 1–2 sentences explaining why this plan holds its rank position, '
+    "explicitly citing a specific source, document, URL, or data point gathered during research where relevant\n\n"
     "Rules:\n"
     "- Every plan must appear exactly once.\n"
     "- Ranks must be unique integers from 1 to the number of plans.\n"
     "- Use 'ruled-in' only when the evidence strongly supports this plan as the cause.\n"
     "- Use 'ruled-out' only when the evidence clearly contradicts this plan.\n"
+    "- The 'rationale' field is required on every plan object and must not be empty.\n"
     "- Return only the JSON array — no markdown fences, no commentary."
 )
 
@@ -66,7 +69,7 @@ async def rerank_plans(sharpened: str, plans: list[dict], context: str | None) -
         valid_labels = {p["label"] for p in plans}
         valid_standings = {"ruled-in", "ruled-out", None}
         for item in result:
-            if not all(k in item for k in ("label", "rank", "standing")):
+            if not all(k in item for k in ("label", "rank", "standing", "rationale")):
                 raise ValueError(f"item missing required fields: {item}")
             if item["label"] not in valid_labels:
                 raise ValueError(f"unexpected label: {item['label']}")
@@ -74,6 +77,8 @@ async def rerank_plans(sharpened: str, plans: list[dict], context: str | None) -
                 raise ValueError(f"invalid rank: {item['rank']}")
             if item["standing"] not in valid_standings:
                 raise ValueError(f"invalid standing: {item['standing']}")
+            if not isinstance(item["rationale"], str) or not item["rationale"].strip():
+                raise ValueError(f"rationale must be a non-empty string: {item}")
         return result
     except (KeyError, IndexError, ValueError, json.JSONDecodeError) as exc:
         raise WeighError(f"Failed to parse Claude response: {exc}") from exc
