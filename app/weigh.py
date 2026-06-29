@@ -31,8 +31,60 @@ _SYSTEM = (
 )
 
 
+CONTRADICTED_MULTIPLIER = 0.5
+"""Score multiplier applied per 'contradicts' source when applying verification penalties."""
+
+
 class WeighError(Exception):
     """Raised when the Claude call fails or returns unparseable output."""
+
+
+def apply_source_penalties(
+    ranked: list[dict],
+    plans_with_sources: list[dict],
+) -> list[dict]:
+    """Re-rank plans by applying a penalty for each 'contradicts' source.
+
+    Args:
+        ranked: Output from rerank_plans — list of {label, rank, standing, rationale}.
+        plans_with_sources: Plans with source lists — [{label, sources: [{support_status, ...}]}].
+
+    Returns:
+        Re-sorted list with additional per-item fields:
+          raw_score          — score derived from the original Claude rank (higher = better)
+          adjusted_score     — score after applying CONTRADICTED_MULTIPLIER per contradicted source
+          contradicted_sources — list of titles/ids of sources with support_status='contradicts'
+    """
+    n = len(ranked)
+    sources_by_label: dict[str, list[dict]] = {
+        p["label"]: p.get("sources") or [] for p in plans_with_sources
+    }
+
+    enriched = []
+    for item in ranked:
+        label = item["label"]
+        raw_score = float(n - item["rank"] + 1)
+        sources = sources_by_label.get(label, [])
+        contradicted = [s for s in sources if s.get("support_status") == "contradicts"]
+        multiplier = CONTRADICTED_MULTIPLIER ** len(contradicted)
+        adjusted_score = raw_score * multiplier
+        enriched.append({
+            **item,
+            "raw_score": raw_score,
+            "adjusted_score": adjusted_score,
+            "contradicted_sources": [
+                s.get("title") or s.get("id") or "untitled" for s in contradicted
+            ],
+        })
+
+    # Sort by adjusted_score descending; break ties by original rank (ascending)
+    enriched.sort(key=lambda x: (-x["adjusted_score"], x["rank"]))
+
+    # Reassign ranks based on new order
+    for new_rank, item in enumerate(enriched, start=1):
+        item["rank"] = new_rank
+
+    return enriched
 
 
 async def rerank_plans(sharpened: str, plans: list[dict], context: str | None) -> list[dict]:
