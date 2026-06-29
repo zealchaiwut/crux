@@ -628,17 +628,16 @@ function NewCaseModal({ onClose, onCaseCreated }) {
 
 const _CHIP_COLORS = {
   supports:    { border: "var(--green)",  bg: "var(--green-bg)",  text: "var(--green)" },
+  partial:     { border: "var(--amber)",  bg: "var(--amber-bg)",  text: "var(--amber)" },
   contradicts: { border: "var(--red)",    bg: "var(--red-bg)",    text: "var(--red)" },
-  neutral:     { border: "var(--amber)",  bg: "var(--amber-bg)",  text: "var(--amber)" },
-  inconclusive:{ border: "var(--amber)",  bg: "var(--amber-bg)",  text: "var(--amber)" },
 };
 const _CHIP_UNVERIFIED = { border: "var(--border)", bg: "var(--surface-2)", text: "var(--text-muted)" };
 
 const _STATUS_LABEL = {
   supports:    "Supports",
+  partial:     "Partial",
   contradicts: "Contradicts",
-  neutral:     "Partial",
-  inconclusive:"Partial",
+  unverified:  "Unverified",
 };
 
 function SourceChip({
@@ -665,6 +664,7 @@ function SourceChip({
   const [currentStatus, setCurrentStatus] = React.useState(initialStatus || null);
   const [currentRationale, setCurrentRationale] = React.useState(initialRationale || "");
   const [currentOverridden, setCurrentOverridden] = React.useState(!!initialOverridden);
+  const [accepted, setAccepted] = React.useState(false);
   const [verifying, setVerifying] = React.useState(false);
   const [verifyError, setVerifyError] = React.useState("");
 
@@ -672,6 +672,7 @@ function SourceChip({
     setCurrentStatus(initialStatus || null);
     setCurrentRationale(initialRationale || "");
     setCurrentOverridden(!!initialOverridden);
+    setAccepted(false);
   }, [initialStatus, initialRationale, initialOverridden]);
 
   const iconMap = { book: "ti-book", article: "ti-article", youtube: "ti-brand-youtube" };
@@ -718,6 +719,7 @@ function SourceChip({
   }
 
   async function handleAccept() {
+    setAccepted(true);
     if (!id) return;
     try {
       const resp = await fetch(`/api/sources/${id}/accept-status`, { method: "POST" });
@@ -908,6 +910,27 @@ function SourceChip({
           )}
         </button>
 
+        {currentStatus && currentStatus !== "unverified" && !currentOverridden && !accepted && (
+          <button
+            className="btn btn-sm"
+            onClick={handleAccept}
+            aria-label="Accept auto-assigned verdict"
+            style={{ fontSize: "var(--text-2xs)", padding: "3px 9px" }}
+          >
+            <i className="ti ti-check" aria-hidden="true"></i> Accept
+          </button>
+        )}
+
+        {accepted && !currentOverridden && (
+          <span
+            className="mono chip-expanded"
+            style={{ color: "var(--green)", display: "inline-flex", alignItems: "center", gap: 3 }}
+            aria-label="Verdict accepted"
+          >
+            <i className="ti ti-check" aria-hidden="true"></i> Accepted
+          </span>
+        )}
+
         <label
           className="chip-expanded"
           style={{
@@ -917,11 +940,11 @@ function SourceChip({
             color: "var(--text-muted)",
           }}
         >
-          <span className="mono">Status:</span>
+          <span className="mono">Override:</span>
           <select
             value={currentStatus || ""}
-            onChange={(e) => handleOverride(e.target.value)}
-            aria-label="Override support status"
+            onChange={(e) => { setAccepted(false); handleOverride(e.target.value); }}
+            aria-label="Dismiss or override support status"
             style={{
               fontSize: "var(--text-2xs)",
               padding: "2px 4px",
@@ -932,24 +955,12 @@ function SourceChip({
               cursor: "pointer",
             }}
           >
-            <option value="">Unverified</option>
+            <option value="unverified">Unverified</option>
             <option value="supports">Supports</option>
-            <option value="neutral">Partial</option>
+            <option value="partial">Partial</option>
             <option value="contradicts">Contradicts</option>
-            <option value="inconclusive">Inconclusive</option>
           </select>
         </label>
-
-        {currentOverridden && (
-          <button
-            className="btn btn-sm"
-            onClick={handleAccept}
-            aria-label="Accept AI-assigned status and clear override"
-            style={{ fontSize: "var(--text-2xs)", padding: "3px 9px" }}
-          >
-            <i className="ti ti-check" aria-hidden="true"></i> Accept
-          </button>
-        )}
       </div>
     </div>
   );
