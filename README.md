@@ -102,8 +102,8 @@ POST /api/cases/{case_id}/verdict      # log a verdict for the active probe
 GET  /api/sources?plan_id={id}         # list sources for a plan
 POST /api/sources                      # manually add a source
 POST /api/sources/batch                # add multiple sources in one transaction
-POST /api/sources/{id}/verify          # set support_status + rationale manually (issue #99)
-POST /api/plans/{plan_id}/verify-sources  # batch-set support_status for all sources in a plan (issue #99)
+POST /api/sources/{id}/verify          # set support_status + support_rationale (optional) manually (issues #99, #155)
+POST /api/plans/{plan_id}/verify-sources  # return full source objects for all sources in a plan (issues #99, #155)
 POST /api/sources/{id}/run-verify      # run fetch→Claude pipeline on one source; stores result in source_verification (issue #100)
 POST /api/plans/{plan_id}/run-verify-all  # run pipeline on all sources in a plan (issue #100)
 PATCH /api/sources/{id}/status-override   # override support_status, sets manually_overridden=true (issue #100)

@@ -9,7 +9,7 @@ Database: Neon Postgres. Migrations managed by Alembic (revision `n4o5p6q7r8s9`)
 | `stage_enum` | `sharpened`, `bake_off`, `gather`, `weigh`, `probe`, `verdict` |
 | `plan_label_enum` | `A`, `B`, `C` |
 | `source_kind_enum` | `book`, `article`, `youtube` |
-| `support_status_enum` | `supports`, `contradicts`, `neutral`, `inconclusive` |
+| `support_status_enum` | `supports`, `partial`, `contradicts`, `unverified` |
 | `probe_type_enum` | `measurement`, `lab-test`, `behaviour-experiment`, `prototype` |
 | `probe_status_enum` | `designed`, `running`, `confirmed`, `killed`, `inconclusive` |
 | `verdict_outcome_enum` | `confirmed`, `killed`, `inconclusive` |
@@ -54,8 +54,8 @@ Database: Neon Postgres. Migrations managed by Alembic (revision `n4o5p6q7r8s9`)
 | `url` | text | |
 | `claim` | text | |
 | `citation` | text | |
-| `support_status` | support_status_enum | nullable — set via POST /api/sources/{id}/verify (issue #99) |
-| `rationale` | text | nullable — free-text explanation of verification result (issue #99) |
+| `support_status` | support_status_enum | NOT NULL, default `unverified` — updated enum values in sprint 54 (issue #153) |
+| `support_rationale` | text | nullable — free-text explanation of verification result; replaces `rationale` column (issues #99, #155) |
 | `manually_overridden` | boolean | NOT NULL, default false — true when support_status was set by user override (issue #100) |
 
 ### `source_verification`
