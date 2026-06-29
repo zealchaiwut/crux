@@ -74,8 +74,60 @@ def _build_ranking_text(ranking: dict) -> str:
         for src in sources:
             title = src.get("title") or src.get("id") or "untitled"
             src_id = src.get("id") or ""
-            line += f" [Source: {title}" + (f" ({src_id})" if src_id else "") + "]"
+            status = src.get("support_status", "unverified")
+            if status == "contradicts":
+                prefix = "⚠ Contradicted source"
+            else:
+                prefix = "Source"
+            line += f" [{prefix}: {title}" + (f" ({src_id})" if src_id else "") + "]"
         lines.append(line)
+    return "\n".join(lines)
+
+
+def build_contradiction_section(ranked_plans: list[dict]) -> str:
+    """Build a '⚠ Contradicted Evidence' section from ranked plans.
+
+    Args:
+        ranked_plans: list of {label, rank, sources: [{support_status, title, ...}]}
+
+    Returns:
+        A formatted string section, or empty string when no contradicted sources exist.
+    """
+    top_plan = None
+    all_contradicted: list[dict] = []
+
+    for plan in ranked_plans:
+        if plan.get("rank") == 1:
+            top_plan = plan
+        for src in plan.get("sources") or []:
+            if src.get("support_status") == "contradicts":
+                all_contradicted.append({
+                    "plan_label": plan.get("label", "?"),
+                    "title": src.get("title") or src.get("id") or "untitled",
+                })
+
+    if not all_contradicted:
+        return ""
+
+    lines = ["## ⚠ Contradicted Evidence\n"]
+    for item in all_contradicted:
+        lines.append(
+            f"- **{item['title']}** (Plan {item['plan_label']}) "
+            "— this source is contradicted by the verification step."
+        )
+
+    if top_plan:
+        top_sources = top_plan.get("sources") or []
+        if top_sources and all(
+            s.get("support_status") == "contradicts" for s in top_sources
+        ):
+            label = top_plan.get("label", "?")
+            lines.append(
+                f"\n**Warning:** All supporting evidence for the top-ranked plan "
+                f"(Plan {label}) is contradicted. "
+                "This plan is not well-supported and should not be treated as the leading explanation."
+            )
+
     return "\n".join(lines)
 
 
@@ -126,6 +178,13 @@ async def run(
             "Claude returned a blank response; cannot produce a valid markdown summary."
         )
 
+    ranked_plans = [
+        {"label": label, "rank": opt.get("rank", 99), "sources": opt.get("sources") or []}
+        for label, opt in ranking.items()
+    ]
+    contradiction_section = build_contradiction_section(ranked_plans)
+    if contradiction_section:
+        return f"{stripped}\n\n{contradiction_section}"
     return stripped
 
 
@@ -164,7 +223,23 @@ async def generate_summary(case_data: dict) -> str:
     except ClaudeCLIError as exc:
         raise SummaryError(f"Claude call failed: {exc}") from exc
 
-    return _parse_and_validate(raw)
+    validated_json = _parse_and_validate(raw)
+
+    ranked_plans = [
+        {
+            "label": p.get("label", "?"),
+            "rank": p.get("current_rank") or 99,
+            "sources": p.get("sources") or [],
+        }
+        for p in plans
+    ]
+    contradiction_section = build_contradiction_section(ranked_plans)
+    if contradiction_section:
+        data = json.loads(validated_json)
+        data["contradicted_evidence"] = contradiction_section
+        return json.dumps({k: data[k] for k in list(data)})
+
+    return validated_json
 
 
 def _format_plans(plans: list) -> str:
@@ -181,7 +256,9 @@ def _format_plans(plans: list) -> str:
             title = src.get("title") or src.get("id") or "untitled"
             claim = src.get("claim") or ""
             src_id = src.get("id") or ""
-            lines.append(f"    Source: {title} (id: {src_id}) — {claim}")
+            status = src.get("support_status", "unverified")
+            status_note = " [⚠ CONTRADICTED]" if status == "contradicts" else ""
+            lines.append(f"    Source: {title} (id: {src_id}) — {claim}{status_note}")
     return "\n".join(lines)
 
 
