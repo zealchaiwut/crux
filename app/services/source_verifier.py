@@ -61,6 +61,9 @@ def _default_classify(content: str, claim: str) -> dict[str, str]:
         }
 
 
+_SUPPORTED_KINDS = frozenset({"article", "youtube"})
+
+
 def _get_url(source: Any) -> str:
     if isinstance(source, dict):
         return source["url"]
@@ -71,6 +74,12 @@ def _get_claim(source: Any) -> str:
     if isinstance(source, dict):
         return source["claim"]
     return source.claim
+
+
+def _get_kind(source: Any) -> str | None:
+    if isinstance(source, dict):
+        return source.get("kind")
+    return getattr(source, "kind", None)
 
 
 def verify_source(
@@ -98,6 +107,16 @@ def verify_source(
 
     url = _get_url(source)
     claim = _get_claim(source)
+    kind = _get_kind(source)
+
+    if kind is not None and kind not in _SUPPORTED_KINDS:
+        return {
+            "support_status": "unverified",
+            "support_rationale": (
+                f"Unsupported source type: {kind!r}. "
+                "Only 'article' and 'youtube' sources can be automatically verified."
+            ),
+        }
 
     if _YT_PATTERN.search(url):
         fetcher = yt_fetcher or YouTubeTranscriptFetcher(budget=1)
