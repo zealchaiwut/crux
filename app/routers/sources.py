@@ -157,6 +157,7 @@ def _source_to_dict(source: models.Source) -> dict:
         "citation": source.citation,
         "support_status": source.support_status,
         "rationale": source.rationale,
+        "support_rationale": source.support_rationale,
         "manually_overridden": bool(source.manually_overridden),
     }
 
@@ -170,7 +171,7 @@ _SUPPORT_STATUS_VALUES = ("supports", "partial", "contradicts", "unverified")
 
 class VerifySourceRequest(BaseModel):
     support_status: Literal["supports", "partial", "contradicts", "unverified"]
-    rationale: str = Field(..., min_length=1, max_length=2000)
+    support_rationale: str | None = Field(None, max_length=4000)
 
 
 # ---------------------------------------------------------------------------
@@ -188,7 +189,7 @@ def verify_source(
         raise HTTPException(status_code=404, detail="Source not found")
 
     source.support_status = body.support_status
-    source.rationale = body.rationale
+    source.support_rationale = body.support_rationale
     db.commit()
     db.refresh(source)
     return _source_to_dict(source)
@@ -205,17 +206,7 @@ def batch_verify_sources(plan_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Plan not found")
 
     sources = db.query(models.Source).filter(models.Source.plan_id == plan_id).all()
-    total = len(sources)
-    verified = sum(1 for s in sources if s.rationale is not None)
-    results = [
-        {
-            "source_id": s.id,
-            "support_status": s.support_status,
-            "rationale": s.rationale,
-        }
-        for s in sources
-    ]
-    return {"total": total, "verified": verified, "failed": 0, "results": results}
+    return [_source_to_dict(s) for s in sources]
 
 
 @router.post("/sources/batch", status_code=201)
