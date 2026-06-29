@@ -3,6 +3,15 @@
 Per-sprint changelog for crux. Entries are written by the documentor when a
 sprint finishes. Dated per-sprint files live under [docs/changelog/](docs/changelog/).
 
+## Sprint 54 (2026-06-29)
+
+- #153: Add source-verification fields to Source model
+- #154: Add source verifier service to validate claims against fetched content
+- #155: Add source verification endpoints to sources router
+- #156: Colour SourceChip by support_status with verify actions
+- #157: Factor source verification status into ranking and summary
+- #158: Add unit tests for source verification and plan re-ranking
+
 ## Sprint 53 (2026-06-27)
 
 - #144: Add summary column to Case model with migration

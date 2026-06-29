@@ -15,7 +15,7 @@ from app.db import get_db
 from app.probe import ProbeError, design_probe
 from app.sharpen import SharpenError, sharpen_problem
 from app.summary import SummaryError, generate_summary
-from app.weigh import WeighError, rerank_plans
+from app.weigh import WeighError, apply_source_penalties, rerank_plans
 from app.services.embeddings import upsert_embedding, EmbeddingError
 
 
@@ -457,7 +457,7 @@ class RerankRequest(BaseModel):
 async def rerank_case(case_id: str, body: RerankRequest, db: Session = Depends(get_db)):
     case = (
         db.query(models.Case)
-        .options(joinedload(models.Case.plans))
+        .options(joinedload(models.Case.plans).joinedload(models.Plan.sources))
         .filter(models.Case.id == case_id)
         .first()
     )
@@ -481,6 +481,18 @@ async def rerank_case(case_id: str, body: RerankRequest, db: Session = Depends(g
         )
     except WeighError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
+
+    plans_with_sources = [
+        {
+            "label": p.label,
+            "sources": [
+                {"support_status": s.support_status, "title": s.title, "id": s.id}
+                for s in (p.sources or [])
+            ],
+        }
+        for p in plans
+    ]
+    result = apply_source_penalties(result, plans_with_sources)
 
     rank_map = {item["label"]: item for item in result}
     for plan in plans:
@@ -813,6 +825,7 @@ async def generate_case_summary(
                     "title": s.title or "",
                     "claim": s.claim or "",
                     "citation": s.citation or "",
+                    "support_status": s.support_status,
                 }
                 for s in (p.sources or [])
             ],
