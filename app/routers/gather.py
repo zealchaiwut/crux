@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session, joinedload
 from app import models
 from app.config import RESEARCH_ENGINE
 from app.db import get_db
+from app.research.llm_suggest import suggest_sources
 from app.services.research_orchestrator import (
     OrchestratorError,
     gather_status_store,
@@ -119,8 +120,13 @@ def _build_suggest_candidate(source, score: float) -> dict | None:
 # ---------------------------------------------------------------------------
 
 @router.post("/plans/{plan_id}/gather/suggest")
-def suggest_plan_sources(plan_id: str, db: Session = Depends(get_db)):
-    """Run the research loop and return up to 5 ranked candidates without persisting them."""
+async def suggest_plan_sources(plan_id: str, db: Session = Depends(get_db)):
+    """Return up to 5 candidate sources (book/article/youtube) without persisting.
+
+    Uses an LLM to propose real, verifiable sources spanning the three kinds.
+    The web-search research pipeline is bypassed here because its DuckDuckGo
+    backend is currently 403-blocked; the LLM path degrades to [] on failure.
+    """
     plan = (
         db.query(models.Plan)
         .filter(models.Plan.id == plan_id)
@@ -129,16 +135,11 @@ def suggest_plan_sources(plan_id: str, db: Session = Depends(get_db)):
     if plan is None:
         raise HTTPException(status_code=404, detail="Plan not found")
 
-    engine = make_engine(RESEARCH_ENGINE)
-    try:
-        result_sources = run_research_for_plan(
-            plan_mechanism=plan.mechanism or "",
-            plan_prior=plan.prior or "",
-            engine=engine,
-        )
-    except OrchestratorError as exc:
-        logger.warning("suggest: research pipeline failed for plan %s: %s", plan_id, exc)
-        return {"candidates": []}
+    result_sources = await suggest_sources(
+        mechanism=plan.mechanism or "",
+        prior=plan.prior or "",
+        name=plan.name or "",
+    )
 
     top_sources = result_sources[:_MAX_SUGGEST_CANDIDATES]
 
