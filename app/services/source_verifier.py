@@ -66,6 +66,15 @@ def _default_classify(content: str, claim: str) -> dict[str, str]:
 _SUPPORTED_KINDS = frozenset({"article", "youtube", "podcast"})
 
 
+def _tavily_fallback(url: str) -> str:
+    """Best-effort page text via Tavily extract; "" when unavailable/failed."""
+    from app.research import tavily_search
+
+    if not tavily_search.available():
+        return ""
+    return tavily_search.extract_sync(url)
+
+
 def _get_url(source: Any) -> str:
     if isinstance(source, dict):
         return source["url"]
@@ -143,17 +152,20 @@ def verify_source(
         fetcher = article_fetcher or ArticleReaderFetcher(budget=1)
         try:
             doc = fetcher.fetch(url)
+            content = doc.text
         except (FetchBlockedError, FetchTimeoutError, FetchEmptyContentError) as exc:
-            return {
-                "support_status": "unverified",
-                "support_rationale": str(exc),
-            }
+            # Direct fetch blocked/failed — retry via Tavily extract if configured,
+            # which reads many bot-blocked pages the direct fetcher cannot.
+            content = _tavily_fallback(url)
+            if not content:
+                return {"support_status": "unverified", "support_rationale": str(exc)}
         except Exception as exc:
-            return {
-                "support_status": "unverified",
-                "support_rationale": f"Fetch failed: {exc}",
-            }
-        content = doc.text
+            content = _tavily_fallback(url)
+            if not content:
+                return {
+                    "support_status": "unverified",
+                    "support_rationale": f"Fetch failed: {exc}",
+                }
 
     if not content or len(content.strip()) < 10:
         return {

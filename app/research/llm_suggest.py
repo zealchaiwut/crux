@@ -25,7 +25,7 @@ _VALID_KINDS = frozenset({"book", "article", "youtube", "podcast"})
 _SYSTEM = (
     "You are a research librarian. Given a hypothesis (a plan being investigated), "
     "propose real, well-known evidence sources that bear on it.\n"
-    "Output ONLY a JSON array of 5 objects. Each object has exactly these fields:\n"
+    "Output ONLY a JSON array of {count} objects. Each object has exactly these fields:\n"
     '  "kind": one of "book", "article", "youtube", or "podcast".\n'
     '  "title": the real title of the book, article, video, or podcast episode.\n'
     '  "url": a plausible direct URL. Never invent fake domains.\n'
@@ -53,11 +53,15 @@ _SYSTEM = (
 )
 
 
-async def suggest_sources(mechanism: str, prior: str, name: str = "") -> list[Source]:
-    """Ask Claude to propose up to 5 candidate sources across the 3 kinds.
+async def suggest_sources(
+    mechanism: str, prior: str, name: str = "", count: int = 5
+) -> list[Source]:
+    """Ask Claude to propose ``count`` candidate sources across the kinds.
 
-    Returns validated Source objects (invalid rows dropped). Raises nothing on
-    an empty/garbled model reply — returns [] so the caller degrades gracefully.
+    Callers that verify-and-filter afterward should over-generate (e.g. count=10)
+    so enough survive the fetch/verify pass. Returns validated Source objects
+    (invalid rows dropped). Raises nothing on an empty/garbled model reply —
+    returns [] so the caller degrades gracefully.
     """
     hypothesis = "\n".join(
         p for p in [
@@ -67,8 +71,9 @@ async def suggest_sources(mechanism: str, prior: str, name: str = "") -> list[So
         ] if p
     ) or "(no hypothesis details provided)"
 
+    system = _SYSTEM.format(count=count)
     try:
-        text = await complete(_SYSTEM, hypothesis, _MODEL)
+        text = await complete(system, hypothesis, _MODEL)
     except ClaudeCLIError as exc:
         logger.warning("llm_suggest: Claude call failed: %s", exc)
         return []
