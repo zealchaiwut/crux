@@ -81,12 +81,25 @@ class SourceItem(BaseModel):
     url: str | None = None
     claim: str
     citation: str
+    # Optional pre-computed verification (e.g. from Tavily-backed suggest) so the
+    # attached source keeps its status/rationale instead of starting unverified.
+    support_status: str | None = None
+    support_rationale: str | None = None
 
     @field_validator("kind")
     @classmethod
     def valid_kind(cls, v: str) -> str:
         if v not in ("book", "article", "youtube", "podcast"):
             raise ValueError("kind must be one of: book, article, youtube, podcast")
+        return v
+
+    @field_validator("support_status")
+    @classmethod
+    def valid_support_status(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        if v not in ("supports", "partial", "contradicts", "unverified"):
+            raise ValueError("support_status must be one of: supports, partial, contradicts, unverified")
         return v
 
     @field_validator("title")
@@ -244,6 +257,8 @@ def batch_create_sources(body: BatchCreateSourceRequest, db: Session = Depends(g
             url=item.url,
             claim=item.claim,
             citation=item.citation,
+            support_status=item.support_status or "unverified",
+            rationale=item.support_rationale or None,
         )
         db.add(source)
         created.append(source)

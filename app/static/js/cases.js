@@ -1466,6 +1466,8 @@ function SuggestPanel({ planId, onAttached }) {
             url: c.url,
             claim: c.claim,
             citation: c.citation,
+            support_status: c.support_status || null,
+            support_rationale: c.support_rationale || null,
           })),
         }),
       });
@@ -1742,6 +1744,29 @@ function SuggestPanel({ planId, onAttached }) {
                     <i className={`ti ${icon}`} aria-hidden="true"></i>
                     {c.kind}
                   </span>
+                  {c.support_status && c.support_status !== "unverified" && (
+                    (() => {
+                      const sc = _CHIP_COLORS[c.support_status] || _CHIP_UNVERIFIED;
+                      return (
+                        <span
+                          className="mono"
+                          title={c.support_rationale || ""}
+                          style={{
+                            flex: "none",
+                            fontSize: "var(--text-2xs)",
+                            fontWeight: 700,
+                            padding: "2px 8px",
+                            borderRadius: 999,
+                            border: `1px solid ${sc.border}`,
+                            background: sc.bg,
+                            color: sc.text,
+                          }}
+                        >
+                          {(_STATUS_LABEL[c.support_status] || "").toUpperCase()}
+                        </span>
+                      );
+                    })()
+                  )}
                   {c.url ? (
                     <a
                       href={c.url}
