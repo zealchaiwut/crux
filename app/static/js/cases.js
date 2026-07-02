@@ -1804,6 +1804,214 @@ function SuggestPanel({ planId, onAttached }) {
 }
 
 // ---------------------------------------------------------------------------
+// VerifyAllModal — steps through each source, showing live verification result
+// ---------------------------------------------------------------------------
+
+function VerifyAllModal({ planId, sources, onClose, onResult }) {
+  const _iconMap = { book: "ti-book", article: "ti-article", youtube: "ti-brand-youtube", podcast: "ti-microphone" };
+  const [rows, setRows] = React.useState(() =>
+    sources.map((s) => ({
+      id: s.id,
+      kind: s.kind,
+      title: s.title,
+      url: s.url,
+      support_status: s.support_status || null,
+      rationale: s.rationale || "",
+      vstate: "pending", // pending | running | done | error
+    }))
+  );
+  const [running, setRunning] = React.useState(true);
+  const cancelled = React.useRef(false);
+
+  React.useEffect(() => {
+    function onKey(e) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  React.useEffect(() => {
+    cancelled.current = false;
+    (async () => {
+      for (let i = 0; i < sources.length; i++) {
+        if (cancelled.current) return;
+        setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, vstate: "running" } : r)));
+        try {
+          const resp = await fetch(`/api/sources/${sources[i].id}/run-verify`, { method: "POST" });
+          const data = await resp.json().catch(() => ({}));
+          if (!resp.ok) throw new Error(data.detail || `HTTP ${resp.status}`);
+          if (cancelled.current) return;
+          setRows((prev) =>
+            prev.map((r, idx) =>
+              idx === i
+                ? { ...r, vstate: "done", support_status: data.support_status, rationale: data.rationale || "" }
+                : r
+            )
+          );
+          if (onResult) onResult(data);
+        } catch (err) {
+          if (cancelled.current) return;
+          setRows((prev) =>
+            prev.map((r, idx) =>
+              idx === i ? { ...r, vstate: "error", rationale: err.message || "Verification failed." } : r
+            )
+          );
+        }
+      }
+      if (!cancelled.current) setRunning(false);
+    })();
+    return () => {
+      cancelled.current = true;
+    };
+  }, []);
+
+  const doneCount = rows.filter((r) => r.vstate === "done" || r.vstate === "error").length;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Verify all sources"
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,.45)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "var(--space-5)",
+        zIndex: 60,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: 640,
+          maxWidth: "100%",
+          maxHeight: "85vh",
+          display: "flex",
+          flexDirection: "column",
+          background: "var(--surface)",
+          border: "1px solid var(--border)",
+          borderRadius: "var(--radius-xl)",
+          boxShadow: "var(--shadow-card)",
+          padding: "var(--space-6)",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: "var(--space-4)",
+          }}
+        >
+          <h2 style={{ fontSize: "var(--text-xl)", fontWeight: 800, color: "var(--text)" }}>
+            {running ? (
+              <>
+                <i className="ti ti-loader-2 crux-spin" aria-hidden="true"></i> Verifying sources…
+              </>
+            ) : (
+              <>Verification complete</>
+            )}
+          </h2>
+          <button className="btn btn-sm" onClick={onClose} aria-label="Close" style={{ padding: "6px 8px" }}>
+            <i className="ti ti-x" aria-hidden="true"></i>
+          </button>
+        </div>
+
+        <div
+          className="mono"
+          style={{
+            fontSize: "var(--text-2xs)",
+            fontWeight: 700,
+            color: "var(--text-sub)",
+            marginBottom: "var(--space-3)",
+          }}
+        >
+          {doneCount} / {rows.length} CHECKED
+        </div>
+
+        <div style={{ overflowY: "auto", display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+          {rows.map((r) => {
+            const colors =
+              r.support_status && _CHIP_COLORS[r.support_status]
+                ? _CHIP_COLORS[r.support_status]
+                : _CHIP_UNVERIFIED;
+            return (
+              <div
+                key={r.id}
+                style={{
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--radius)",
+                  padding: "var(--space-3)",
+                  background: "var(--surface-2)",
+                  opacity: r.vstate === "pending" ? 0.5 : 1,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginBottom: 4 }}>
+                  <i className={`ti ${_iconMap[r.kind] || "ti-file"}`} aria-hidden="true"></i>
+                  <span
+                    style={{
+                      flex: 1,
+                      fontSize: "var(--text-sm)",
+                      fontWeight: 600,
+                      color: "var(--text)",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                    title={r.title}
+                  >
+                    {r.title}
+                  </span>
+                  {r.vstate === "running" && (
+                    <i className="ti ti-loader-2 crux-spin" aria-hidden="true" style={{ color: "var(--crux)" }}></i>
+                  )}
+                  {r.vstate === "pending" && (
+                    <span className="mono" style={{ fontSize: "var(--text-2xs)", color: "var(--text-muted)" }}>
+                      queued
+                    </span>
+                  )}
+                  {(r.vstate === "done" || r.vstate === "error") && (
+                    <span
+                      className="mono"
+                      style={{
+                        fontSize: "var(--text-2xs)",
+                        fontWeight: 700,
+                        padding: "2px 8px",
+                        borderRadius: 999,
+                        border: `1px solid ${colors.border}`,
+                        background: colors.bg,
+                        color: colors.text,
+                      }}
+                    >
+                      {(_STATUS_LABEL[r.support_status] || "Unverified").toUpperCase()}
+                    </span>
+                  )}
+                </div>
+                {(r.vstate === "done" || r.vstate === "error") && r.rationale && (
+                  <p style={{ margin: "4px 0 0", fontSize: "var(--text-sm)", color: "var(--text-muted)", lineHeight: 1.5 }}>
+                    {r.rationale}
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "var(--space-5)" }}>
+          <button className="btn btn-crux" onClick={onClose}>
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // PlanCard — Stage 2 gather states: idle | running | done | empty | error (AC5-AC8)
 // ---------------------------------------------------------------------------
 
@@ -1832,6 +2040,7 @@ function PlanCard({
   );
   const [showForm, setShowForm] = React.useState(false);
   const [verifyingAll, setVerifyingAll] = React.useState(false);
+  const [showVerifyModal, setShowVerifyModal] = React.useState(false);
   const [sourcesCollapsed, setSourcesCollapsed] = React.useState(true);
   const ruledOut = standing === "ruled-out";
   const ruledIn = standing === "ruled-in";
@@ -1857,27 +2066,10 @@ function PlanCard({
     if (onGatherDone) onGatherDone();
   }
 
-  async function triggerVerifyAll() {
-    setVerifyingAll(true);
-    try {
-      const resp = await fetch(`/api/plans/${planId}/run-verify-all`, { method: "POST" });
-      const data = await resp.json().catch(() => ({}));
-      if (!resp.ok) return;
-      if (data.results) {
-        setSources((prev) =>
-          prev.map((s) => {
-            const updated = data.results.find((r) => r.id === s.id);
-            return updated ? { ...s, ...updated } : s;
-          })
-        );
-        // Reveal the freshly-verified chips — they start collapsed, so leaving
-        // them hidden makes verify-all look like it did nothing.
-        setSourcesCollapsed(false);
-      }
-    } catch (_) {
-    } finally {
-      setVerifyingAll(false);
-    }
+  function triggerVerifyAll() {
+    // Open the live modal, which steps through each source one at a time.
+    setSourcesCollapsed(false);
+    setShowVerifyModal(true);
   }
 
   async function triggerGather() {
@@ -2222,6 +2414,14 @@ function PlanCard({
           planId={planId}
           onClose={() => setShowForm(false)}
           onAdded={handleAdded}
+        />
+      )}
+      {showVerifyModal && (
+        <VerifyAllModal
+          planId={planId}
+          sources={sources}
+          onResult={handleSourceUpdate}
+          onClose={() => setShowVerifyModal(false)}
         />
       )}
     </div>
