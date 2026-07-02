@@ -31,12 +31,19 @@ def available() -> bool:
     return bool(api_key())
 
 
-async def search(query: str, *, max_results: int = 10, include_raw: bool = True) -> list[dict]:
+async def search(
+    query: str,
+    *,
+    max_results: int = 10,
+    include_raw: bool = True,
+    include_domains: list[str] | None = None,
+) -> list[dict]:
     """Search Tavily and return result dicts.
 
     Each result has: ``title``, ``url``, ``content`` (relevant snippet), and
     ``raw_content`` (full extracted page text, when include_raw and available),
-    plus a relevance ``score``. Returns [] on any API failure.
+    plus a relevance ``score``. ``include_domains`` restricts results to those
+    hosts (e.g. ["youtube.com"]). Returns [] on any API failure.
     """
     payload = {
         "api_key": api_key(),
@@ -45,6 +52,8 @@ async def search(query: str, *, max_results: int = 10, include_raw: bool = True)
         "include_raw_content": include_raw,
         "search_depth": "advanced",
     }
+    if include_domains:
+        payload["include_domains"] = include_domains
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             resp = await client.post(_SEARCH_URL, json=payload)

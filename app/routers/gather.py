@@ -32,6 +32,8 @@ logger = logging.getLogger(__name__)
 
 _VALID_KINDS = frozenset({"book", "article", "youtube", "podcast"})
 _MAX_SUGGEST_CANDIDATES = 5
+# Tavily path returns a wider set for hand-picking in the UI.
+_SUGGEST_RETURN_MAX = 15
 # Over-generate proposals so enough survive the verify-and-filter pass.
 _SUGGEST_OVERGENERATE = 10
 # Verifier statuses that count as "we could actually verify this source".
@@ -159,8 +161,9 @@ async def suggest_plan_sources(plan_id: str, db: Session = Depends(get_db)):
     if tavily_search.available():
         # Preferred path: Tavily returns real URLs + page content, and each is
         # assessed against the hypothesis — so results are already verified.
+        # Return a larger set (up to 15) so the user can hand-pick.
         kept = await tavily_suggest_sources(mechanism=mechanism, prior=prior, name=name)
-        considered = len(kept)  # only survivors are returned by the Tavily path
+        return_max = _SUGGEST_RETURN_MAX
     else:
         # Fallback (no Tavily key): LLM proposes URLs, we fetch + verify each and
         # drop anything unfetchable/unrelated.
@@ -179,15 +182,15 @@ async def suggest_plan_sources(plan_id: str, db: Session = Depends(get_db)):
             (src, res) for src, res in verified
             if res.get("support_status") in _VERIFIED_STATUSES
         ]
-        considered = len(proposed)
-        dropped = considered - len(kept)
+        return_max = _MAX_SUGGEST_CANDIDATES
+        dropped = len(proposed) - len(kept)
         if dropped:
             logger.info(
                 "suggest: dropped %d/%d unverifiable candidates for plan %s",
-                dropped, considered, plan_id,
+                dropped, len(proposed), plan_id,
             )
 
-    top = kept[:_MAX_SUGGEST_CANDIDATES]
+    top = kept[:return_max]
     n = len(top)
     candidates = []
     for i, (src, res) in enumerate(top):

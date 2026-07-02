@@ -280,6 +280,17 @@ def list_sources(plan_id: str = Query(...), db: Session = Depends(get_db)):
     return {"sources": [_source_to_dict(s) for s in sources]}
 
 
+@router.delete("/sources/{source_id}", status_code=204)
+def delete_source(source_id: str, db: Session = Depends(get_db)):
+    """Delete a single source (and its verification rows, via cascade)."""
+    source = db.query(models.Source).filter(models.Source.id == source_id).first()
+    if source is None:
+        raise HTTPException(status_code=404, detail="Source not found")
+    db.delete(source)
+    db.commit()
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Source verifier stub — replaced by real AI service when available (issue #98)
 # ---------------------------------------------------------------------------

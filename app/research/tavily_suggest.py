@@ -23,9 +23,29 @@ logger = logging.getLogger(__name__)
 
 _MODEL = "claude-haiku-4-5-20251001"
 _YT_RE = re.compile(r"(youtube\.com|youtu\.be)", re.IGNORECASE)
+_PODCAST_RE = re.compile(
+    r"(open\.spotify\.com/episode|podcasts\.apple\.com|podbean\.com|spreaker\.com|"
+    r"buzzsprout\.com|soundcloud\.com|/podcast|/episode)",
+    re.IGNORECASE,
+)
 _VERIFIED = frozenset({"supports", "partially_supports", "contradicts"})
 # Cap the page text handed to the model so one huge page can't blow the prompt.
 _MAX_CONTENT_CHARS = 6000
+# How many candidates to return for hand-picking, and the kind minimums we aim
+# to include among them (best-effort — only if enough verify).
+_RETURN_MAX = 15
+_MIN_PODCAST = 1
+_MIN_YOUTUBE = 3
+# Cap how many raw results we assess (each is one Claude call) to bound latency.
+_ASSESS_CAP = 20
+
+
+def _kind_for(url: str) -> str:
+    if _YT_RE.search(url):
+        return "youtube"
+    if _PODCAST_RE.search(url):
+        return "podcast"
+    return "article"
 
 _ASSESS_SYSTEM = (
     "You are a fact-checking research assistant. You are given a research "
@@ -50,6 +70,21 @@ def _query(mechanism: str, prior: str, name: str) -> str:
     return " ".join(parts) if parts else "research evidence"
 
 
+async def _thai_query(en_query: str) -> str:
+    """Translate the search query to Thai for Thai-language results; "" on failure."""
+    try:
+        raw = await complete(
+            "Translate the given search query into natural Thai. "
+            "Output ONLY the Thai query text — no quotes, no explanation.",
+            en_query,
+            _MODEL,
+        )
+    except ClaudeCLIError as exc:
+        logger.warning("tavily_suggest: Thai translation failed: %s", exc)
+        return ""
+    return (raw or "").strip()
+
+
 async def _assess(hypothesis: str, title: str, url: str, content: str) -> dict | None:
     user = (
         f"Hypothesis:\n{hypothesis}\n\n"
@@ -69,11 +104,16 @@ async def _assess(hypothesis: str, title: str, url: str, content: str) -> dict |
 
 
 async def suggest_sources(mechanism: str, prior: str, name: str = "") -> list[tuple[Source, dict]]:
-    """Return (Source, {support_status, support_rationale}) pairs, verified only.
+    """Return up to 15 (Source, {support_status, support_rationale}) pairs.
 
-    The returned support_status uses the verifier vocabulary
-    ("supports"/"partially_supports"/"contradicts"); the caller maps it to the
-    DB enum. Returns [] when Tavily is unavailable or nothing verifies.
+    Runs several targeted Tavily searches — English + Thai, plus YouTube- and
+    podcast-focused queries — so results span kinds and languages. Every result
+    is assessed against the hypothesis; only genuinely-verified sources
+    (supports/partial/contradicts) are kept, and the returned set aims to
+    include at least 1 podcast and 3 YouTube sources when enough verify.
+
+    The returned support_status uses the verifier vocabulary; the caller maps it
+    to the DB enum. Returns [] when Tavily is unavailable or nothing verifies.
     """
     hypothesis = "\n".join(
         p for p in [
@@ -83,9 +123,31 @@ async def suggest_sources(mechanism: str, prior: str, name: str = "") -> list[tu
         ] if p
     ) or "(no hypothesis details provided)"
 
-    results = await tavily_search.search(_query(mechanism, prior, name), max_results=10)
-    if not results:
-        return []
+    en = _query(mechanism, prior, name)
+    th = await _thai_query(en)
+
+    # Fan out targeted searches: general (EN/TH), YouTube-only (EN/TH), podcast.
+    searches = [
+        tavily_search.search(en, max_results=6),
+        tavily_search.search(en, max_results=5, include_domains=["youtube.com"]),
+        tavily_search.search(f"{en} podcast episode", max_results=4),
+    ]
+    if th:
+        searches.append(tavily_search.search(th, max_results=5))
+        searches.append(tavily_search.search(th, max_results=4, include_domains=["youtube.com"]))
+
+    result_lists = await asyncio.gather(*searches)
+
+    # Merge + dedupe by URL, preserving first-seen order.
+    seen: set[str] = set()
+    merged: list[dict] = []
+    for results in result_lists:
+        for r in results or []:
+            url = (r.get("url") or "").strip()
+            if url and url not in seen:
+                seen.add(url)
+                merged.append(r)
+    merged = merged[:_ASSESS_CAP]
 
     async def _one(result: dict) -> tuple[Source, dict] | None:
         url = (result.get("url") or "").strip()
@@ -103,12 +165,25 @@ async def suggest_sources(mechanism: str, prior: str, name: str = "") -> list[tu
         citation = (assessment.get("citation") or "").strip()
         if not (title and claim and citation):
             return None
-        kind = "youtube" if _YT_RE.search(url) else "article"
-        source = Source(kind=kind, title=title, url=url, claim=claim, citation=citation)
+        source = Source(
+            kind=_kind_for(url), title=title, url=url, claim=claim, citation=citation
+        )
         return source, {
             "support_status": status,
             "support_rationale": assessment.get("support_rationale") or "",
         }
 
-    assessed = await asyncio.gather(*[_one(r) for r in results])
-    return [pair for pair in assessed if pair is not None]
+    assessed = [p for p in await asyncio.gather(*[_one(r) for r in merged]) if p is not None]
+
+    # Order so the kind minimums land inside the returned window, then fill with
+    # the rest. Best-effort: if too few of a kind verified, we return what exists.
+    pods = [p for p in assessed if p[0].kind == "podcast"]
+    yts = [p for p in assessed if p[0].kind == "youtube"]
+    arts = [p for p in assessed if p[0].kind == "article"]
+
+    ordered: list[tuple[Source, dict]] = []
+    ordered += pods[:_MIN_PODCAST]
+    ordered += yts[:_MIN_YOUTUBE]
+    rest = pods[_MIN_PODCAST:] + yts[_MIN_YOUTUBE:] + arts
+    ordered += rest
+    return ordered[:_RETURN_MAX]

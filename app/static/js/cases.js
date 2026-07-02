@@ -626,6 +626,9 @@ function NewCaseModal({ onClose, onCaseCreated }) {
 // SourceChip — colour-coded by support_status; expandable with Verify actions
 // ---------------------------------------------------------------------------
 
+// Max sources a user can hand-pick to attach from one Suggest batch.
+const _PICK_LIMIT = 5;
+
 const _CHIP_COLORS = {
   supports:    { border: "var(--green)",  bg: "var(--green-bg)",  text: "var(--green)" },
   partial:     { border: "var(--amber)",  bg: "var(--amber-bg)",  text: "var(--amber)" },
@@ -650,7 +653,9 @@ function SourceChip({
   rationale: initialRationale,
   manually_overridden: initialOverridden,
   onUpdate,
+  onDelete,
 }) {
+  const [deleting, setDeleting] = React.useState(false);
   const [expanded, setExpanded] = React.useState(false);
   // currentStatus, currentRationale, and currentOverridden are intentional local state.
   // Persistence scope: these survive re-renders of the SourceChip itself (same component
@@ -727,6 +732,19 @@ function SourceChip({
       if (!resp.ok) return;
       _applyUpdate(data);
     } catch (e) { console.warn("Accept status failed:", e); }
+  }
+
+  async function handleDelete() {
+    if (!id) return;
+    setDeleting(true);
+    try {
+      const resp = await fetch(`/api/sources/${id}`, { method: "DELETE" });
+      if (!resp.ok && resp.status !== 204) throw new Error(`Error ${resp.status}`);
+      if (onDelete) onDelete(id);
+    } catch (e) {
+      console.warn("Delete source failed:", e);
+      setDeleting(false);
+    }
   }
 
   // Collapsed chip — button so it is keyboard-focusable by default
@@ -961,6 +979,26 @@ function SourceChip({
             <option value="contradicts">Contradicts</option>
           </select>
         </label>
+
+        <button
+          className="btn btn-sm"
+          onClick={handleDelete}
+          disabled={deleting}
+          aria-label={`Delete source: ${title}`}
+          title="Delete this source"
+          style={{
+            marginLeft: "auto",
+            fontSize: "var(--text-2xs)",
+            padding: "3px 9px",
+            color: "var(--red)",
+          }}
+        >
+          {deleting ? (
+            <><i className="ti ti-loader-2 crux-spin" aria-hidden="true"></i> Deleting…</>
+          ) : (
+            <><i className="ti ti-trash" aria-hidden="true"></i> Delete</>
+          )}
+        </button>
       </div>
     </div>
   );
@@ -1435,17 +1473,23 @@ function SuggestPanel({ planId, onAttached }) {
   function toggleOne(id) {
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(id)) {
+        next.delete(id);
+      } else if (next.size < _PICK_LIMIT) {
+        next.add(id);
+      }
+      // At the cap, ignore new selections — user must deselect first.
       return next;
     });
   }
 
   function toggleAll() {
-    if (selected.size === candidates.length) {
+    // "Select all" picks the top _PICK_LIMIT candidates (can't attach more).
+    const capped = Math.min(candidates.length, _PICK_LIMIT);
+    if (selected.size >= capped) {
       setSelected(new Set());
     } else {
-      setSelected(new Set(candidates.map((c) => c.candidate_id)));
+      setSelected(new Set(candidates.slice(0, _PICK_LIMIT).map((c) => c.candidate_id)));
     }
   }
 
@@ -1641,7 +1685,7 @@ function SuggestPanel({ planId, onAttached }) {
             flex: 1,
           }}
         >
-          {selected.size} of {candidates.length} selected
+          {selected.size} of {candidates.length} selected · pick up to {_PICK_LIMIT}
         </span>
         <button
           className="btn btn-sm btn-crux"
@@ -2087,6 +2131,10 @@ function PlanCard({
     );
   }
 
+  function handleSourceDelete(deletedId) {
+    setSources((prev) => prev.filter((s) => s.id !== deletedId));
+  }
+
   function handleSuggestAttached() {
     if (onGatherDone) onGatherDone();
   }
@@ -2373,6 +2421,7 @@ function PlanCard({
                 rationale={s.rationale || ""}
                 manually_overridden={!!s.manually_overridden}
                 onUpdate={handleSourceUpdate}
+                onDelete={handleSourceDelete}
               />
             ))}
           </div>
