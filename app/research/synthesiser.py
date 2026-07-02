@@ -10,7 +10,7 @@ from .types import Plan, Source
 
 logger = logging.getLogger(__name__)
 
-_VALID_KINDS = frozenset({"book", "article", "youtube"})
+_VALID_KINDS = frozenset({"book", "article", "youtube", "podcast"})
 
 # ---------------------------------------------------------------------------
 # Claude API prompt (committed alongside the implementation per AC8)
@@ -35,7 +35,7 @@ provided source text.
 
 Return a JSON array (no markdown fences, raw JSON only) where every element has exactly \
 these fields:
-  kind    — one of: book | article | youtube
+  kind    — one of: book | article | youtube | podcast
   title   — the source title (non-empty)
   url     — the source URL (non-empty, valid URL)
   claim   — a concise factual claim statement (non-empty)

@@ -26,7 +26,7 @@ from app.services.research_orchestrator import (
 
 logger = logging.getLogger(__name__)
 
-_VALID_KINDS = frozenset({"book", "article", "youtube"})
+_VALID_KINDS = frozenset({"book", "article", "youtube", "podcast"})
 _MAX_SUGGEST_CANDIDATES = 5
 
 router = APIRouter(prefix="/api")

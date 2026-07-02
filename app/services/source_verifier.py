@@ -61,7 +61,9 @@ def _default_classify(content: str, claim: str) -> dict[str, str]:
         }
 
 
-_SUPPORTED_KINDS = frozenset({"article", "youtube"})
+# Podcasts are verified by reading their episode/show-notes page (article path);
+# audio itself is not transcribed here.
+_SUPPORTED_KINDS = frozenset({"article", "youtube", "podcast"})
 
 
 def _get_url(source: Any) -> str:
@@ -114,7 +116,8 @@ def verify_source(
             "support_status": "unverified",
             "support_rationale": (
                 f"Unsupported source type: {kind!r}. "
-                "Only 'article' and 'youtube' sources can be automatically verified."
+                "Only 'article', 'youtube', and 'podcast' sources can be "
+                "automatically verified."
             ),
         }
 

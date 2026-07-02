@@ -21,7 +21,7 @@ Base = declarative_base()
 
 _STAGE = ("sharpened", "bake_off", "gather", "weigh", "probe", "verdict")
 _PLAN_LABEL = ("A", "B", "C")
-_SOURCE_KIND = ("book", "article", "youtube")
+_SOURCE_KIND = ("book", "article", "youtube", "podcast")
 _SUPPORT_STATUS = ("supports", "partial", "contradicts", "unverified")
 _PROBE_TYPE = ("measurement", "lab-test", "behaviour-experiment", "prototype")
 _PROBE_STATUS = ("designed", "running", "confirmed", "killed", "inconclusive")

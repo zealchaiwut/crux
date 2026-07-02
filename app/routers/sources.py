@@ -38,8 +38,8 @@ class CreateSourceRequest(BaseModel):
     @field_validator("kind")
     @classmethod
     def valid_kind(cls, v: str) -> str:
-        if v not in ("book", "article", "youtube"):
-            raise ValueError("kind must be one of: book, article, youtube")
+        if v not in ("book", "article", "youtube", "podcast"):
+            raise ValueError("kind must be one of: book, article, youtube, podcast")
         return v
 
     @field_validator("title")
@@ -85,8 +85,8 @@ class SourceItem(BaseModel):
     @field_validator("kind")
     @classmethod
     def valid_kind(cls, v: str) -> str:
-        if v not in ("book", "article", "youtube"):
-            raise ValueError("kind must be one of: book, article, youtube")
+        if v not in ("book", "article", "youtube", "podcast"):
+            raise ValueError("kind must be one of: book, article, youtube, podcast")
         return v
 
     @field_validator("title")

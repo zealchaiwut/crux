@@ -675,7 +675,7 @@ function SourceChip({
     setAccepted(false);
   }, [initialStatus, initialRationale, initialOverridden]);
 
-  const iconMap = { book: "ti-book", article: "ti-article", youtube: "ti-brand-youtube" };
+  const iconMap = { book: "ti-book", article: "ti-article", youtube: "ti-brand-youtube", podcast: "ti-microphone" };
   const icon = iconMap[kind] || "ti-file";
   const colors = _CHIP_COLORS[currentStatus] || _CHIP_UNVERIFIED;
   const statusLabel = _STATUS_LABEL[currentStatus] || "Unverified";
@@ -1126,6 +1126,7 @@ function SourceForm({ planId, onClose, onAdded }) {
               <option value="article">Article</option>
               <option value="book">Book</option>
               <option value="youtube">YouTube</option>
+              <option value="podcast">Podcast</option>
             </select>
           </div>
           <div style={{ marginBottom: "var(--space-3)" }}>
@@ -1407,6 +1408,7 @@ function SuggestPanel({ planId, onAttached }) {
     book: "ti-book",
     article: "ti-article",
     youtube: "ti-brand-youtube",
+    podcast: "ti-microphone",
   };
 
   async function handleSuggest() {
