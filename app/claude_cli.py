@@ -127,6 +127,50 @@ def _strip_fences(text: str) -> str:
     return text
 
 
+def extract_json(text: str) -> str:
+    """Return the first balanced JSON object/array found in ``text``.
+
+    ``claude -p`` runs as the full agent and, on vague input, sometimes replies
+    with prose or clarifying questions instead of the requested JSON — or wraps
+    the JSON in a sentence. Fenced blocks are handled by ``_strip_fences``; this
+    additionally digs a bare ``{...}`` / ``[...]`` object out of surrounding
+    prose so callers don't choke on a leading char-0 parse error.
+
+    Raises ``ValueError`` when no balanced JSON structure is present.
+    """
+    text = _strip_fences(text)
+    start = min(
+        (i for i in (text.find("{"), text.find("[")) if i != -1),
+        default=-1,
+    )
+    if start == -1:
+        raise ValueError("no JSON object found in response")
+    open_ch = text[start]
+    close_ch = "}" if open_ch == "{" else "]"
+    depth = 0
+    in_str = False
+    escaped = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if in_str:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == open_ch:
+            depth += 1
+        elif ch == close_ch:
+            depth -= 1
+            if depth == 0:
+                return text[start : i + 1]
+    raise ValueError("unterminated JSON object in response")
+
+
 def _build_args(system: str, model: str | None) -> list[str]:
     # --system-prompt REPLACES Claude Code's default agent prompt. We need that:
     # appending leaves the conversational coding-agent prompt in control, which

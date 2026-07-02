@@ -60,7 +60,7 @@ function Sidebar({ route, setRoute, counts, theme, onToggleTheme, onOpenSettings
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <NavItem icon="folder" label="Cases" count={counts.cases}
-          active={route === 'cases' || route === 'case'} onClick={() => setRoute('cases')} />
+          active={route === 'cases' || route.startsWith('case')} onClick={() => setRoute('cases')} />
         <NavItem icon="flask" label="Probes" count={counts.probes}
           active={route === 'probes'} onClick={() => setRoute('probes')} />
         <NavItem icon="gavel" label="Verdicts" count={counts.verdicts}
@@ -322,11 +322,20 @@ function SettingsModal({ onClose }) {
   );
 }
 
+// Parse the URL hash into a route string ('cases' | 'probes' | 'verdicts' |
+// 'case/<id>'). Enables deep-linking / refresh-in-place.
+function _routeFromHash() {
+  const raw = (window.location.hash || '').replace(/^#\/?/, '').trim();
+  if (raw.startsWith('case/') && raw.slice(5)) return raw;
+  if (raw === 'probes' || raw === 'verdicts') return raw;
+  return 'cases';
+}
+
 function App() {
   const [theme, setTheme] = React.useState('light');
   const [showSettings, setShowSettings] = React.useState(false);
   // route is either 'cases' | 'probes' | 'verdicts' | 'case/<id>'
-  const [route, setRoute] = React.useState('cases');
+  const [route, setRoute] = React.useState(_routeFromHash);
   const [activeCaseId, setActiveCaseId] = React.useState(null);
 
   React.useEffect(() => {
@@ -337,11 +346,26 @@ function App() {
     }
   }, [theme]);
 
+  // Keep the URL hash in sync with the route so refresh/deep-link works.
+  React.useEffect(() => {
+    const target = '#/' + route;
+    if (window.location.hash !== target) window.location.hash = target;
+  }, [route]);
+
+  // React to browser back/forward and manual hash edits.
+  React.useEffect(() => {
+    function onHashChange() {
+      setRoute(_routeFromHash());
+    }
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
+
   const toggleTheme = () => setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
 
   function openCase(id) {
     setActiveCaseId(id);
-    setRoute('case');
+    setRoute(`case/${id}`);
   }
   function goToCases() {
     setActiveCaseId(null);

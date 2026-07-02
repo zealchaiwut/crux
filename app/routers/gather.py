@@ -7,6 +7,7 @@ GET  /api/plans/{plan_id}/gather-status   — current gather status for a plan
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid as _uuid_mod
 
@@ -16,17 +17,34 @@ from sqlalchemy.orm import Session, joinedload
 from app import models
 from app.config import RESEARCH_ENGINE
 from app.db import get_db
+from app.research import tavily_search
+from app.research.llm_suggest import suggest_sources
+from app.research.tavily_suggest import suggest_sources as tavily_suggest_sources
 from app.services.research_orchestrator import (
     OrchestratorError,
     gather_status_store,
     make_engine,
     run_research_for_plan,
 )
+from app.services.source_verifier import verify_source
 
 logger = logging.getLogger(__name__)
 
-_VALID_KINDS = frozenset({"book", "article", "youtube"})
+_VALID_KINDS = frozenset({"book", "article", "youtube", "podcast"})
 _MAX_SUGGEST_CANDIDATES = 5
+# Tavily path returns a wider set for hand-picking in the UI.
+_SUGGEST_RETURN_MAX = 15
+# Over-generate proposals so enough survive the verify-and-filter pass.
+_SUGGEST_OVERGENERATE = 10
+# Verifier statuses that count as "we could actually verify this source".
+_VERIFIED_STATUSES = frozenset({"supports", "partially_supports", "contradicts"})
+# Verifier reports "partially_supports"; the DB/UI use "partial".
+_SUPPORT_STATUS_MAP = {
+    "supports": "supports",
+    "partially_supports": "partial",
+    "contradicts": "contradicts",
+    "unverified": "unverified",
+}
 
 router = APIRouter(prefix="/api")
 
@@ -119,8 +137,15 @@ def _build_suggest_candidate(source, score: float) -> dict | None:
 # ---------------------------------------------------------------------------
 
 @router.post("/plans/{plan_id}/gather/suggest")
-def suggest_plan_sources(plan_id: str, db: Session = Depends(get_db)):
-    """Run the research loop and return up to 5 ranked candidates without persisting them."""
+async def suggest_plan_sources(plan_id: str, db: Session = Depends(get_db)):
+    """Return up to 5 candidate sources that were fetched and verified.
+
+    Over-generates LLM proposals, verifies each against its stated claim, and
+    returns only sources that actually verified (supports/partial/contradicts) —
+    unfetchable or unrelated URLs (support_status "unverified") are dropped so
+    the user only sees sources the app can stand behind. The pre-computed
+    verification is included so it need not be re-run on attach.
+    """
     plan = (
         db.query(models.Plan)
         .filter(models.Plan.id == plan_id)
@@ -129,25 +154,53 @@ def suggest_plan_sources(plan_id: str, db: Session = Depends(get_db)):
     if plan is None:
         raise HTTPException(status_code=404, detail="Plan not found")
 
-    engine = make_engine(RESEARCH_ENGINE)
-    try:
-        result_sources = run_research_for_plan(
-            plan_mechanism=plan.mechanism or "",
-            plan_prior=plan.prior or "",
-            engine=engine,
+    mechanism = plan.mechanism or ""
+    prior = plan.prior or ""
+    name = plan.name or ""
+
+    if tavily_search.available():
+        # Preferred path: Tavily returns real URLs + page content, and each is
+        # assessed against the hypothesis — so results are already verified.
+        # Return a larger set (up to 15) so the user can hand-pick.
+        kept = await tavily_suggest_sources(mechanism=mechanism, prior=prior, name=name)
+        return_max = _SUGGEST_RETURN_MAX
+    else:
+        # Fallback (no Tavily key): LLM proposes URLs, we fetch + verify each and
+        # drop anything unfetchable/unrelated.
+        proposed = await suggest_sources(
+            mechanism=mechanism, prior=prior, name=name, count=_SUGGEST_OVERGENERATE
         )
-    except OrchestratorError as exc:
-        logger.warning("suggest: research pipeline failed for plan %s: %s", plan_id, exc)
-        return {"candidates": []}
 
-    top_sources = result_sources[:_MAX_SUGGEST_CANDIDATES]
+        async def _verify(src):
+            result = await asyncio.to_thread(
+                verify_source, {"kind": src.kind, "url": src.url, "claim": src.claim}
+            )
+            return src, result
 
-    n = len(top_sources)
+        verified = await asyncio.gather(*[_verify(s) for s in proposed])
+        kept = [
+            (src, res) for src, res in verified
+            if res.get("support_status") in _VERIFIED_STATUSES
+        ]
+        return_max = _MAX_SUGGEST_CANDIDATES
+        dropped = len(proposed) - len(kept)
+        if dropped:
+            logger.info(
+                "suggest: dropped %d/%d unverifiable candidates for plan %s",
+                dropped, len(proposed), plan_id,
+            )
+
+    top = kept[:return_max]
+    n = len(top)
     candidates = []
-    for i, src in enumerate(top_sources):
-        score = round((n - i) / n, 2)
+    for i, (src, res) in enumerate(top):
+        score = round((n - i) / n, 2) if n else 0.0
         candidate = _build_suggest_candidate(src, score)
         if candidate is not None:
+            candidate["support_status"] = _SUPPORT_STATUS_MAP.get(
+                res.get("support_status"), "unverified"
+            )
+            candidate["support_rationale"] = res.get("support_rationale") or ""
             candidates.append(candidate)
 
     candidates.sort(key=lambda c: c["relevance_score"], reverse=True)

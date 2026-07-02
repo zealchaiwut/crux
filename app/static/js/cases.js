@@ -626,6 +626,9 @@ function NewCaseModal({ onClose, onCaseCreated }) {
 // SourceChip — colour-coded by support_status; expandable with Verify actions
 // ---------------------------------------------------------------------------
 
+// Max sources a user can hand-pick to attach from one Suggest batch.
+const _PICK_LIMIT = 5;
+
 const _CHIP_COLORS = {
   supports:    { border: "var(--green)",  bg: "var(--green-bg)",  text: "var(--green)" },
   partial:     { border: "var(--amber)",  bg: "var(--amber-bg)",  text: "var(--amber)" },
@@ -650,7 +653,9 @@ function SourceChip({
   rationale: initialRationale,
   manually_overridden: initialOverridden,
   onUpdate,
+  onDelete,
 }) {
+  const [deleting, setDeleting] = React.useState(false);
   const [expanded, setExpanded] = React.useState(false);
   // currentStatus, currentRationale, and currentOverridden are intentional local state.
   // Persistence scope: these survive re-renders of the SourceChip itself (same component
@@ -675,7 +680,7 @@ function SourceChip({
     setAccepted(false);
   }, [initialStatus, initialRationale, initialOverridden]);
 
-  const iconMap = { book: "ti-book", article: "ti-article", youtube: "ti-brand-youtube" };
+  const iconMap = { book: "ti-book", article: "ti-article", youtube: "ti-brand-youtube", podcast: "ti-microphone" };
   const icon = iconMap[kind] || "ti-file";
   const colors = _CHIP_COLORS[currentStatus] || _CHIP_UNVERIFIED;
   const statusLabel = _STATUS_LABEL[currentStatus] || "Unverified";
@@ -727,6 +732,19 @@ function SourceChip({
       if (!resp.ok) return;
       _applyUpdate(data);
     } catch (e) { console.warn("Accept status failed:", e); }
+  }
+
+  async function handleDelete() {
+    if (!id) return;
+    setDeleting(true);
+    try {
+      const resp = await fetch(`/api/sources/${id}`, { method: "DELETE" });
+      if (!resp.ok && resp.status !== 204) throw new Error(`Error ${resp.status}`);
+      if (onDelete) onDelete(id);
+    } catch (e) {
+      console.warn("Delete source failed:", e);
+      setDeleting(false);
+    }
   }
 
   // Collapsed chip — button so it is keyboard-focusable by default
@@ -961,6 +979,26 @@ function SourceChip({
             <option value="contradicts">Contradicts</option>
           </select>
         </label>
+
+        <button
+          className="btn btn-sm"
+          onClick={handleDelete}
+          disabled={deleting}
+          aria-label={`Delete source: ${title}`}
+          title="Delete this source"
+          style={{
+            marginLeft: "auto",
+            fontSize: "var(--text-2xs)",
+            padding: "3px 9px",
+            color: "var(--red)",
+          }}
+        >
+          {deleting ? (
+            <><i className="ti ti-loader-2 crux-spin" aria-hidden="true"></i> Deleting…</>
+          ) : (
+            <><i className="ti ti-trash" aria-hidden="true"></i> Delete</>
+          )}
+        </button>
       </div>
     </div>
   );
@@ -1126,6 +1164,7 @@ function SourceForm({ planId, onClose, onAdded }) {
               <option value="article">Article</option>
               <option value="book">Book</option>
               <option value="youtube">YouTube</option>
+              <option value="podcast">Podcast</option>
             </select>
           </div>
           <div style={{ marginBottom: "var(--space-3)" }}>
@@ -1407,6 +1446,7 @@ function SuggestPanel({ planId, onAttached }) {
     book: "ti-book",
     article: "ti-article",
     youtube: "ti-brand-youtube",
+    podcast: "ti-microphone",
   };
 
   async function handleSuggest() {
@@ -1433,17 +1473,23 @@ function SuggestPanel({ planId, onAttached }) {
   function toggleOne(id) {
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(id)) {
+        next.delete(id);
+      } else if (next.size < _PICK_LIMIT) {
+        next.add(id);
+      }
+      // At the cap, ignore new selections — user must deselect first.
       return next;
     });
   }
 
   function toggleAll() {
-    if (selected.size === candidates.length) {
+    // "Select all" picks the top _PICK_LIMIT candidates (can't attach more).
+    const capped = Math.min(candidates.length, _PICK_LIMIT);
+    if (selected.size >= capped) {
       setSelected(new Set());
     } else {
-      setSelected(new Set(candidates.map((c) => c.candidate_id)));
+      setSelected(new Set(candidates.slice(0, _PICK_LIMIT).map((c) => c.candidate_id)));
     }
   }
 
@@ -1464,6 +1510,8 @@ function SuggestPanel({ planId, onAttached }) {
             url: c.url,
             claim: c.claim,
             citation: c.citation,
+            support_status: c.support_status || null,
+            support_rationale: c.support_rationale || null,
           })),
         }),
       });
@@ -1637,7 +1685,7 @@ function SuggestPanel({ planId, onAttached }) {
             flex: 1,
           }}
         >
-          {selected.size} of {candidates.length} selected
+          {selected.size} of {candidates.length} selected · pick up to {_PICK_LIMIT}
         </span>
         <button
           className="btn btn-sm btn-crux"
@@ -1740,6 +1788,29 @@ function SuggestPanel({ planId, onAttached }) {
                     <i className={`ti ${icon}`} aria-hidden="true"></i>
                     {c.kind}
                   </span>
+                  {c.support_status && c.support_status !== "unverified" && (
+                    (() => {
+                      const sc = _CHIP_COLORS[c.support_status] || _CHIP_UNVERIFIED;
+                      return (
+                        <span
+                          className="mono"
+                          title={c.support_rationale || ""}
+                          style={{
+                            flex: "none",
+                            fontSize: "var(--text-2xs)",
+                            fontWeight: 700,
+                            padding: "2px 8px",
+                            borderRadius: 999,
+                            border: `1px solid ${sc.border}`,
+                            background: sc.bg,
+                            color: sc.text,
+                          }}
+                        >
+                          {(_STATUS_LABEL[c.support_status] || "").toUpperCase()}
+                        </span>
+                      );
+                    })()
+                  )}
                   {c.url ? (
                     <a
                       href={c.url}
@@ -1802,6 +1873,214 @@ function SuggestPanel({ planId, onAttached }) {
 }
 
 // ---------------------------------------------------------------------------
+// VerifyAllModal — steps through each source, showing live verification result
+// ---------------------------------------------------------------------------
+
+function VerifyAllModal({ planId, sources, onClose, onResult }) {
+  const _iconMap = { book: "ti-book", article: "ti-article", youtube: "ti-brand-youtube", podcast: "ti-microphone" };
+  const [rows, setRows] = React.useState(() =>
+    sources.map((s) => ({
+      id: s.id,
+      kind: s.kind,
+      title: s.title,
+      url: s.url,
+      support_status: s.support_status || null,
+      rationale: s.rationale || "",
+      vstate: "pending", // pending | running | done | error
+    }))
+  );
+  const [running, setRunning] = React.useState(true);
+  const cancelled = React.useRef(false);
+
+  React.useEffect(() => {
+    function onKey(e) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  React.useEffect(() => {
+    cancelled.current = false;
+    (async () => {
+      for (let i = 0; i < sources.length; i++) {
+        if (cancelled.current) return;
+        setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, vstate: "running" } : r)));
+        try {
+          const resp = await fetch(`/api/sources/${sources[i].id}/run-verify`, { method: "POST" });
+          const data = await resp.json().catch(() => ({}));
+          if (!resp.ok) throw new Error(data.detail || `HTTP ${resp.status}`);
+          if (cancelled.current) return;
+          setRows((prev) =>
+            prev.map((r, idx) =>
+              idx === i
+                ? { ...r, vstate: "done", support_status: data.support_status, rationale: data.rationale || "" }
+                : r
+            )
+          );
+          if (onResult) onResult(data);
+        } catch (err) {
+          if (cancelled.current) return;
+          setRows((prev) =>
+            prev.map((r, idx) =>
+              idx === i ? { ...r, vstate: "error", rationale: err.message || "Verification failed." } : r
+            )
+          );
+        }
+      }
+      if (!cancelled.current) setRunning(false);
+    })();
+    return () => {
+      cancelled.current = true;
+    };
+  }, []);
+
+  const doneCount = rows.filter((r) => r.vstate === "done" || r.vstate === "error").length;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Verify all sources"
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,.45)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "var(--space-5)",
+        zIndex: 60,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: 640,
+          maxWidth: "100%",
+          maxHeight: "85vh",
+          display: "flex",
+          flexDirection: "column",
+          background: "var(--surface)",
+          border: "1px solid var(--border)",
+          borderRadius: "var(--radius-xl)",
+          boxShadow: "var(--shadow-card)",
+          padding: "var(--space-6)",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: "var(--space-4)",
+          }}
+        >
+          <h2 style={{ fontSize: "var(--text-xl)", fontWeight: 800, color: "var(--text)" }}>
+            {running ? (
+              <>
+                <i className="ti ti-loader-2 crux-spin" aria-hidden="true"></i> Verifying sources…
+              </>
+            ) : (
+              <>Verification complete</>
+            )}
+          </h2>
+          <button className="btn btn-sm" onClick={onClose} aria-label="Close" style={{ padding: "6px 8px" }}>
+            <i className="ti ti-x" aria-hidden="true"></i>
+          </button>
+        </div>
+
+        <div
+          className="mono"
+          style={{
+            fontSize: "var(--text-2xs)",
+            fontWeight: 700,
+            color: "var(--text-sub)",
+            marginBottom: "var(--space-3)",
+          }}
+        >
+          {doneCount} / {rows.length} CHECKED
+        </div>
+
+        <div style={{ overflowY: "auto", display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+          {rows.map((r) => {
+            const colors =
+              r.support_status && _CHIP_COLORS[r.support_status]
+                ? _CHIP_COLORS[r.support_status]
+                : _CHIP_UNVERIFIED;
+            return (
+              <div
+                key={r.id}
+                style={{
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--radius)",
+                  padding: "var(--space-3)",
+                  background: "var(--surface-2)",
+                  opacity: r.vstate === "pending" ? 0.5 : 1,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginBottom: 4 }}>
+                  <i className={`ti ${_iconMap[r.kind] || "ti-file"}`} aria-hidden="true"></i>
+                  <span
+                    style={{
+                      flex: 1,
+                      fontSize: "var(--text-sm)",
+                      fontWeight: 600,
+                      color: "var(--text)",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                    title={r.title}
+                  >
+                    {r.title}
+                  </span>
+                  {r.vstate === "running" && (
+                    <i className="ti ti-loader-2 crux-spin" aria-hidden="true" style={{ color: "var(--crux)" }}></i>
+                  )}
+                  {r.vstate === "pending" && (
+                    <span className="mono" style={{ fontSize: "var(--text-2xs)", color: "var(--text-muted)" }}>
+                      queued
+                    </span>
+                  )}
+                  {(r.vstate === "done" || r.vstate === "error") && (
+                    <span
+                      className="mono"
+                      style={{
+                        fontSize: "var(--text-2xs)",
+                        fontWeight: 700,
+                        padding: "2px 8px",
+                        borderRadius: 999,
+                        border: `1px solid ${colors.border}`,
+                        background: colors.bg,
+                        color: colors.text,
+                      }}
+                    >
+                      {(_STATUS_LABEL[r.support_status] || "Unverified").toUpperCase()}
+                    </span>
+                  )}
+                </div>
+                {(r.vstate === "done" || r.vstate === "error") && r.rationale && (
+                  <p style={{ margin: "4px 0 0", fontSize: "var(--text-sm)", color: "var(--text-muted)", lineHeight: 1.5 }}>
+                    {r.rationale}
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "var(--space-5)" }}>
+          <button className="btn btn-crux" onClick={onClose}>
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // PlanCard — Stage 2 gather states: idle | running | done | empty | error (AC5-AC8)
 // ---------------------------------------------------------------------------
 
@@ -1830,6 +2109,8 @@ function PlanCard({
   );
   const [showForm, setShowForm] = React.useState(false);
   const [verifyingAll, setVerifyingAll] = React.useState(false);
+  const [showVerifyModal, setShowVerifyModal] = React.useState(false);
+  const [sourcesCollapsed, setSourcesCollapsed] = React.useState(true);
   const ruledOut = standing === "ruled-out";
   const ruledIn = standing === "ruled-in";
 
@@ -1850,28 +2131,18 @@ function PlanCard({
     );
   }
 
+  function handleSourceDelete(deletedId) {
+    setSources((prev) => prev.filter((s) => s.id !== deletedId));
+  }
+
   function handleSuggestAttached() {
     if (onGatherDone) onGatherDone();
   }
 
-  async function triggerVerifyAll() {
-    setVerifyingAll(true);
-    try {
-      const resp = await fetch(`/api/plans/${planId}/run-verify-all`, { method: "POST" });
-      const data = await resp.json().catch(() => ({}));
-      if (!resp.ok) return;
-      if (data.results) {
-        setSources((prev) =>
-          prev.map((s) => {
-            const updated = data.results.find((r) => r.id === s.id);
-            return updated ? { ...s, ...updated } : s;
-          })
-        );
-      }
-    } catch (_) {
-    } finally {
-      setVerifyingAll(false);
-    }
+  function triggerVerifyAll() {
+    // Open the live modal, which steps through each source one at a time.
+    setSourcesCollapsed(false);
+    setShowVerifyModal(true);
   }
 
   async function triggerGather() {
@@ -2005,16 +2276,38 @@ function PlanCard({
             gap: "var(--space-2)",
           }}
         >
-          <span
+          <button
+            type="button"
             className="mono"
+            onClick={() => setSourcesCollapsed((c) => !c)}
+            disabled={sources.length === 0}
+            aria-expanded={!sourcesCollapsed}
+            aria-label={sourcesCollapsed ? "Expand sources" : "Collapse sources"}
             style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "var(--space-1)",
+              background: "none",
+              border: "none",
+              padding: 0,
+              cursor: sources.length === 0 ? "default" : "pointer",
               fontSize: "var(--text-2xs)",
               fontWeight: 700,
               color: "var(--text-sub)",
             }}
           >
+            {sources.length > 0 && (
+              <i
+                className={
+                  sourcesCollapsed
+                    ? "ti ti-chevron-right"
+                    : "ti ti-chevron-down"
+                }
+                aria-hidden="true"
+              ></i>
+            )}
             SOURCES {sources.length > 0 && `· ${sources.length}`}
-          </span>
+          </button>
           {/* Add source + Suggest sources + Verify all */}
           <div
             style={{
@@ -2112,7 +2405,7 @@ function PlanCard({
         )}
 
         {/* Sources list (done state) — SourceChips coloured by support_status */}
-        {gatherStatus !== "running" && sources.length > 0 && (
+        {gatherStatus !== "running" && sources.length > 0 && !sourcesCollapsed && (
           <div
             style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap" }}
           >
@@ -2128,6 +2421,7 @@ function PlanCard({
                 rationale={s.rationale || ""}
                 manually_overridden={!!s.manually_overridden}
                 onUpdate={handleSourceUpdate}
+                onDelete={handleSourceDelete}
               />
             ))}
           </div>
@@ -2194,6 +2488,14 @@ function PlanCard({
           planId={planId}
           onClose={() => setShowForm(false)}
           onAdded={handleAdded}
+        />
+      )}
+      {showVerifyModal && (
+        <VerifyAllModal
+          planId={planId}
+          sources={sources}
+          onResult={handleSourceUpdate}
+          onClose={() => setShowVerifyModal(false)}
         />
       )}
     </div>
@@ -2952,6 +3254,163 @@ function ProbeCard({
 // ---------------------------------------------------------------------------
 // WeighPanel
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// NotebookLMPanel — optional: generate a DEBATE-format podcast from the case's
+// sources via NotebookLM, then download the mp3 / open the notebook to chat.
+// ---------------------------------------------------------------------------
+
+function NotebookLMPanel({ caseId }) {
+  const [status, setStatus] = React.useState(null); // {status, notebook_url, audio, error}
+  const [busy, setBusy] = React.useState(false);
+  const [unconfigured, setUnconfigured] = React.useState(false);
+  const pollRef = React.useRef(null);
+
+  function stopPoll() {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }
+
+  async function fetchStatus() {
+    try {
+      const r = await fetch(`/api/cases/${caseId}/notebooklm/status`);
+      if (!r.ok) return;
+      const d = await r.json();
+      setStatus(d);
+      if (d.status !== "running") stopPoll();
+    } catch (_) {}
+  }
+
+  React.useEffect(() => {
+    fetchStatus();
+    return stopPoll;
+  }, [caseId]);
+
+  function startPoll() {
+    if (!pollRef.current) pollRef.current = setInterval(fetchStatus, 10000);
+  }
+
+  async function handleGenerate() {
+    setBusy(true);
+    setUnconfigured(false);
+    try {
+      const r = await fetch(`/api/cases/${caseId}/notebooklm`, { method: "POST" });
+      const d = await r.json().catch(() => ({}));
+      if (r.status === 503) {
+        setUnconfigured(true);
+        return;
+      }
+      if (!r.ok) {
+        setStatus({ status: "error", error: d.detail || `Error ${r.status}` });
+        return;
+      }
+      setStatus(d);
+      startPoll();
+    } catch (e) {
+      setStatus({ status: "error", error: e.message || "Failed to start." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const st = status?.status || "idle";
+  const running = st === "running";
+
+  return (
+    <div
+      style={{
+        background: "var(--surface)",
+        border: "1px solid var(--border)",
+        borderRadius: "var(--radius)",
+        padding: "var(--space-5)",
+        marginBottom: "var(--space-6)",
+      }}
+    >
+      <p
+        style={{
+          color: "var(--text-sub)",
+          fontSize: "var(--text-sm)",
+          marginTop: 0,
+          marginBottom: "var(--space-3)",
+          lineHeight: 1.5,
+        }}
+      >
+        Send this case's sources to NotebookLM and generate a debate-style audio
+        overview. Generation can take several minutes.
+      </p>
+
+      {unconfigured && (
+        <p
+          role="alert"
+          style={{ color: "var(--amber)", fontSize: "var(--text-sm)", marginBottom: "var(--space-3)" }}
+        >
+          <i className="ti ti-alert-triangle" aria-hidden="true"></i> NotebookLM
+          isn't configured on the server yet. Bootstrap it with{" "}
+          <code>notebooklm login --master-token</code>.
+        </p>
+      )}
+
+      {st === "error" && status?.error && (
+        <p
+          role="alert"
+          style={{ color: "var(--red)", fontSize: "var(--text-sm)", marginBottom: "var(--space-3)" }}
+        >
+          <i className="ti ti-alert-circle" aria-hidden="true"></i> {status.error}
+        </p>
+      )}
+
+      {running && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "var(--space-2)",
+            color: "var(--text-muted)",
+            fontSize: "var(--text-sm)",
+            marginBottom: "var(--space-3)",
+          }}
+        >
+          <i className="ti ti-loader-2 crux-spin" aria-hidden="true" style={{ color: "var(--crux)" }}></i>
+          Generating debate podcast… you can leave this page; it keeps running.
+        </div>
+      )}
+
+      {st === "done" && (
+        <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap", marginBottom: "var(--space-3)" }}>
+          {status?.audio && (
+            <a className="btn btn-sm btn-crux" href={`/api/cases/${caseId}/notebooklm/audio`}>
+              <i className="ti ti-download" aria-hidden="true"></i> Download mp3
+            </a>
+          )}
+          {status?.notebook_url && (
+            <a className="btn btn-sm" href={status.notebook_url} target="_blank" rel="noopener noreferrer">
+              <i className="ti ti-external-link" aria-hidden="true"></i> Open in NotebookLM
+            </a>
+          )}
+        </div>
+      )}
+
+      {!running && (
+        <button
+          className="btn btn-sm"
+          onClick={handleGenerate}
+          disabled={busy}
+          aria-busy={busy}
+        >
+          {busy ? (
+            <><i className="ti ti-loader-2 crux-spin" aria-hidden="true"></i> Starting…</>
+          ) : st === "done" ? (
+            <><i className="ti ti-refresh" aria-hidden="true"></i> Regenerate</>
+          ) : (
+            <><i className="ti ti-microphone" aria-hidden="true"></i> Generate debate podcast</>
+          )}
+        </button>
+      )}
+    </div>
+  );
+}
 
 function WeighPanel({ caseId, initialContext, onRerankDone }) {
   const [context, setContext] = React.useState(initialContext || "");
@@ -3826,6 +4285,22 @@ function CaseDetailScreen({
     }
   }
 
+  // Manual advance from Weigh (3) to Probe (4): designs the probe and moves
+  // the case to the probe stage. The auto-trigger effect only fires once
+  // stage >= 4, so weigh has no path forward without this control.
+  async function handleDesignProbe() {
+    setProbeState(STATES.LOADING);
+    setProbeError("");
+    try {
+      await _postProbe(caseId);
+      loadCase();
+      setProbeState(STATES.IDLE);
+    } catch (err) {
+      setProbeError(err.message || "Probe design failed. Please try again.");
+      setProbeState(STATES.ERROR);
+    }
+  }
+
   if (notFound) {
     return (
       <div
@@ -4189,6 +4664,8 @@ function CaseDetailScreen({
                 initialContext={caseData.weigh_context || ""}
                 onRerankDone={loadCase}
               />
+              <SectionLabel>DEBATE PODCAST · NOTEBOOKLM (OPTIONAL)</SectionLabel>
+              <NotebookLMPanel caseId={caseId} />
             </>
           )}
 
@@ -4208,6 +4685,61 @@ function CaseDetailScreen({
               reProbeState={reProbeState}
               reProbeError={reProbeError}
             />
+          ) : stage === 3 ? (
+            <div
+              style={{
+                background: "var(--surface)",
+                border: "1px solid var(--border)",
+                borderRadius: "var(--radius)",
+                padding: "var(--space-5)",
+                marginBottom: "var(--space-6)",
+              }}
+            >
+              <p
+                style={{
+                  color: "var(--text-sub)",
+                  fontSize: "var(--text-sm)",
+                  marginTop: 0,
+                  marginBottom: "var(--space-3)",
+                }}
+              >
+                Plans are weighed. Design the cheapest decisive test for the
+                top-ranked plan.
+              </p>
+              {probeError && (
+                <p
+                  role="alert"
+                  style={{
+                    color: "var(--red)",
+                    fontSize: "var(--text-sm)",
+                    marginBottom: "var(--space-3)",
+                  }}
+                >
+                  {probeError}
+                </p>
+              )}
+              <button
+                className="btn btn-crux"
+                onClick={handleDesignProbe}
+                disabled={probeState === STATES.LOADING}
+                aria-busy={probeState === STATES.LOADING}
+              >
+                {probeState === STATES.LOADING ? (
+                  <>
+                    <i
+                      className="ti ti-loader-2 crux-spin"
+                      aria-hidden="true"
+                    ></i>{" "}
+                    Designing probe…
+                  </>
+                ) : (
+                  <>
+                    <i className="ti ti-target" aria-hidden="true"></i> Design
+                    probe
+                  </>
+                )}
+              </button>
+            </div>
           ) : (
             <EmptySection
               label="STAGE 4 — PROBE"

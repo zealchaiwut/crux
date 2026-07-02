@@ -43,25 +43,36 @@ _SYSTEM_PROMPT = (
 
 
 def _default_classify(content: str, claim: str) -> dict[str, str]:
-    from app.claude_cli import complete_sync
+    from app.claude_cli import complete_sync, extract_json
 
     user_prompt = f"Claim: {claim}\n\nSource content:\n{content}"
     raw = complete_sync(_SYSTEM_PROMPT, user_prompt)
     try:
-        result = json.loads(raw)
+        result = json.loads(extract_json(raw))
         status = result.get("support_status", "unverified")
         if status not in SUPPORT_STATUSES:
             status = "unverified"
         rationale = str(result.get("support_rationale") or "No rationale provided.")
         return {"support_status": status, "support_rationale": rationale}
-    except (json.JSONDecodeError, AttributeError):
+    except (json.JSONDecodeError, ValueError, AttributeError):
         return {
             "support_status": "unverified",
             "support_rationale": raw or "Claude classification returned no output.",
         }
 
 
-_SUPPORTED_KINDS = frozenset({"article", "youtube"})
+# Podcasts are verified by reading their episode/show-notes page (article path);
+# audio itself is not transcribed here.
+_SUPPORTED_KINDS = frozenset({"article", "youtube", "podcast"})
+
+
+def _tavily_fallback(url: str) -> str:
+    """Best-effort page text via Tavily extract; "" when unavailable/failed."""
+    from app.research import tavily_search
+
+    if not tavily_search.available():
+        return ""
+    return tavily_search.extract_sync(url)
 
 
 def _get_url(source: Any) -> str:
@@ -114,7 +125,8 @@ def verify_source(
             "support_status": "unverified",
             "support_rationale": (
                 f"Unsupported source type: {kind!r}. "
-                "Only 'article' and 'youtube' sources can be automatically verified."
+                "Only 'article', 'youtube', and 'podcast' sources can be "
+                "automatically verified."
             ),
         }
 
@@ -140,17 +152,20 @@ def verify_source(
         fetcher = article_fetcher or ArticleReaderFetcher(budget=1)
         try:
             doc = fetcher.fetch(url)
+            content = doc.text
         except (FetchBlockedError, FetchTimeoutError, FetchEmptyContentError) as exc:
-            return {
-                "support_status": "unverified",
-                "support_rationale": str(exc),
-            }
+            # Direct fetch blocked/failed — retry via Tavily extract if configured,
+            # which reads many bot-blocked pages the direct fetcher cannot.
+            content = _tavily_fallback(url)
+            if not content:
+                return {"support_status": "unverified", "support_rationale": str(exc)}
         except Exception as exc:
-            return {
-                "support_status": "unverified",
-                "support_rationale": f"Fetch failed: {exc}",
-            }
-        content = doc.text
+            content = _tavily_fallback(url)
+            if not content:
+                return {
+                    "support_status": "unverified",
+                    "support_rationale": f"Fetch failed: {exc}",
+                }
 
     if not content or len(content.strip()) < 10:
         return {

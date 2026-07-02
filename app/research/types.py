@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, Protocol, runtime_checkable
 
-SourceKind = Literal["book", "article", "youtube"]
+SourceKind = Literal["book", "article", "youtube", "podcast"]
 
 EMPTY_CONTENT_THRESHOLD = 100
 

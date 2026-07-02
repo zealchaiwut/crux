@@ -132,6 +132,20 @@ class WebSearchFetcher(ResearchFetcherBase):
 class ArticleReaderFetcher(ResearchFetcherBase):
     """Fetcher that retrieves a URL and extracts its readable main text and title."""
 
+    # A descriptive, policy-compliant User-Agent. httpx's default
+    # ("python-httpx/x.y") is 403-blocked by many sites (e.g. Wikimedia's robot
+    # policy); identifying the bot with a contact/URL unblocks compliant hosts.
+    # Aggressive anti-bot hosts (some publishers, PubMed) still block datacenter
+    # IPs regardless — those degrade to an honest "unverified".
+    _HEADERS = {
+        "User-Agent": (
+            "crux-research/1.0 (+https://github.com/zealchaiwut/crux; "
+            "source-verification bot) httpx"
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+
     def __init__(
         self,
         budget: int,
@@ -145,7 +159,12 @@ class ArticleReaderFetcher(ResearchFetcherBase):
         self._consume_budget()
         client = self._http or httpx.Client()
         try:
-            response = client.get(url, timeout=self.timeout, follow_redirects=True)
+            response = client.get(
+                url,
+                timeout=self.timeout,
+                follow_redirects=True,
+                headers=self._HEADERS,
+            )
         except httpx.TimeoutException as exc:
             raise FetchTimeoutError(f"Timeout fetching {url}: {exc}") from exc
 
