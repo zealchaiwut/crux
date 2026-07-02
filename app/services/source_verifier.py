@@ -43,18 +43,18 @@ _SYSTEM_PROMPT = (
 
 
 def _default_classify(content: str, claim: str) -> dict[str, str]:
-    from app.claude_cli import complete_sync
+    from app.claude_cli import complete_sync, extract_json
 
     user_prompt = f"Claim: {claim}\n\nSource content:\n{content}"
     raw = complete_sync(_SYSTEM_PROMPT, user_prompt)
     try:
-        result = json.loads(raw)
+        result = json.loads(extract_json(raw))
         status = result.get("support_status", "unverified")
         if status not in SUPPORT_STATUSES:
             status = "unverified"
         rationale = str(result.get("support_rationale") or "No rationale provided.")
         return {"support_status": status, "support_rationale": rationale}
-    except (json.JSONDecodeError, AttributeError):
+    except (json.JSONDecodeError, ValueError, AttributeError):
         return {
             "support_status": "unverified",
             "support_rationale": raw or "Claude classification returned no output.",
