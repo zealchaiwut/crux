@@ -1870,6 +1870,9 @@ function PlanCard({
             return updated ? { ...s, ...updated } : s;
           })
         );
+        // Reveal the freshly-verified chips — they start collapsed, so leaving
+        // them hidden makes verify-all look like it did nothing.
+        setSourcesCollapsed(false);
       }
     } catch (_) {
     } finally {
