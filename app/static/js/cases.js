@@ -1830,6 +1830,7 @@ function PlanCard({
   );
   const [showForm, setShowForm] = React.useState(false);
   const [verifyingAll, setVerifyingAll] = React.useState(false);
+  const [sourcesCollapsed, setSourcesCollapsed] = React.useState(true);
   const ruledOut = standing === "ruled-out";
   const ruledIn = standing === "ruled-in";
 
@@ -2005,16 +2006,38 @@ function PlanCard({
             gap: "var(--space-2)",
           }}
         >
-          <span
+          <button
+            type="button"
             className="mono"
+            onClick={() => setSourcesCollapsed((c) => !c)}
+            disabled={sources.length === 0}
+            aria-expanded={!sourcesCollapsed}
+            aria-label={sourcesCollapsed ? "Expand sources" : "Collapse sources"}
             style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "var(--space-1)",
+              background: "none",
+              border: "none",
+              padding: 0,
+              cursor: sources.length === 0 ? "default" : "pointer",
               fontSize: "var(--text-2xs)",
               fontWeight: 700,
               color: "var(--text-sub)",
             }}
           >
+            {sources.length > 0 && (
+              <i
+                className={
+                  sourcesCollapsed
+                    ? "ti ti-chevron-right"
+                    : "ti ti-chevron-down"
+                }
+                aria-hidden="true"
+              ></i>
+            )}
             SOURCES {sources.length > 0 && `· ${sources.length}`}
-          </span>
+          </button>
           {/* Add source + Suggest sources + Verify all */}
           <div
             style={{
@@ -2112,7 +2135,7 @@ function PlanCard({
         )}
 
         {/* Sources list (done state) — SourceChips coloured by support_status */}
-        {gatherStatus !== "running" && sources.length > 0 && (
+        {gatherStatus !== "running" && sources.length > 0 && !sourcesCollapsed && (
           <div
             style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap" }}
           >
@@ -3826,6 +3849,22 @@ function CaseDetailScreen({
     }
   }
 
+  // Manual advance from Weigh (3) to Probe (4): designs the probe and moves
+  // the case to the probe stage. The auto-trigger effect only fires once
+  // stage >= 4, so weigh has no path forward without this control.
+  async function handleDesignProbe() {
+    setProbeState(STATES.LOADING);
+    setProbeError("");
+    try {
+      await _postProbe(caseId);
+      loadCase();
+      setProbeState(STATES.IDLE);
+    } catch (err) {
+      setProbeError(err.message || "Probe design failed. Please try again.");
+      setProbeState(STATES.ERROR);
+    }
+  }
+
   if (notFound) {
     return (
       <div
@@ -4208,6 +4247,61 @@ function CaseDetailScreen({
               reProbeState={reProbeState}
               reProbeError={reProbeError}
             />
+          ) : stage === 3 ? (
+            <div
+              style={{
+                background: "var(--surface)",
+                border: "1px solid var(--border)",
+                borderRadius: "var(--radius)",
+                padding: "var(--space-5)",
+                marginBottom: "var(--space-6)",
+              }}
+            >
+              <p
+                style={{
+                  color: "var(--text-sub)",
+                  fontSize: "var(--text-sm)",
+                  marginTop: 0,
+                  marginBottom: "var(--space-3)",
+                }}
+              >
+                Plans are weighed. Design the cheapest decisive test for the
+                top-ranked plan.
+              </p>
+              {probeError && (
+                <p
+                  role="alert"
+                  style={{
+                    color: "var(--red)",
+                    fontSize: "var(--text-sm)",
+                    marginBottom: "var(--space-3)",
+                  }}
+                >
+                  {probeError}
+                </p>
+              )}
+              <button
+                className="btn btn-crux"
+                onClick={handleDesignProbe}
+                disabled={probeState === STATES.LOADING}
+                aria-busy={probeState === STATES.LOADING}
+              >
+                {probeState === STATES.LOADING ? (
+                  <>
+                    <i
+                      className="ti ti-loader-2 crux-spin"
+                      aria-hidden="true"
+                    ></i>{" "}
+                    Designing probe…
+                  </>
+                ) : (
+                  <>
+                    <i className="ti ti-target" aria-hidden="true"></i> Design
+                    probe
+                  </>
+                )}
+              </button>
+            </div>
           ) : (
             <EmptySection
               label="STAGE 4 — PROBE"
