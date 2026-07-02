@@ -45,6 +45,10 @@ class Case(Base):
 
     summary = Column(Text)
 
+    # NotebookLM debate-podcast artifacts (optional; set once generated).
+    notebooklm_url = Column(Text)
+    notebooklm_audio = Column(Text)
+
     plans = relationship(
         "Plan",
         back_populates="case",

@@ -3255,6 +3255,163 @@ function ProbeCard({
 // WeighPanel
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// NotebookLMPanel — optional: generate a DEBATE-format podcast from the case's
+// sources via NotebookLM, then download the mp3 / open the notebook to chat.
+// ---------------------------------------------------------------------------
+
+function NotebookLMPanel({ caseId }) {
+  const [status, setStatus] = React.useState(null); // {status, notebook_url, audio, error}
+  const [busy, setBusy] = React.useState(false);
+  const [unconfigured, setUnconfigured] = React.useState(false);
+  const pollRef = React.useRef(null);
+
+  function stopPoll() {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }
+
+  async function fetchStatus() {
+    try {
+      const r = await fetch(`/api/cases/${caseId}/notebooklm/status`);
+      if (!r.ok) return;
+      const d = await r.json();
+      setStatus(d);
+      if (d.status !== "running") stopPoll();
+    } catch (_) {}
+  }
+
+  React.useEffect(() => {
+    fetchStatus();
+    return stopPoll;
+  }, [caseId]);
+
+  function startPoll() {
+    if (!pollRef.current) pollRef.current = setInterval(fetchStatus, 10000);
+  }
+
+  async function handleGenerate() {
+    setBusy(true);
+    setUnconfigured(false);
+    try {
+      const r = await fetch(`/api/cases/${caseId}/notebooklm`, { method: "POST" });
+      const d = await r.json().catch(() => ({}));
+      if (r.status === 503) {
+        setUnconfigured(true);
+        return;
+      }
+      if (!r.ok) {
+        setStatus({ status: "error", error: d.detail || `Error ${r.status}` });
+        return;
+      }
+      setStatus(d);
+      startPoll();
+    } catch (e) {
+      setStatus({ status: "error", error: e.message || "Failed to start." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const st = status?.status || "idle";
+  const running = st === "running";
+
+  return (
+    <div
+      style={{
+        background: "var(--surface)",
+        border: "1px solid var(--border)",
+        borderRadius: "var(--radius)",
+        padding: "var(--space-5)",
+        marginBottom: "var(--space-6)",
+      }}
+    >
+      <p
+        style={{
+          color: "var(--text-sub)",
+          fontSize: "var(--text-sm)",
+          marginTop: 0,
+          marginBottom: "var(--space-3)",
+          lineHeight: 1.5,
+        }}
+      >
+        Send this case's sources to NotebookLM and generate a debate-style audio
+        overview. Generation can take several minutes.
+      </p>
+
+      {unconfigured && (
+        <p
+          role="alert"
+          style={{ color: "var(--amber)", fontSize: "var(--text-sm)", marginBottom: "var(--space-3)" }}
+        >
+          <i className="ti ti-alert-triangle" aria-hidden="true"></i> NotebookLM
+          isn't configured on the server yet. Bootstrap it with{" "}
+          <code>notebooklm login --master-token</code>.
+        </p>
+      )}
+
+      {st === "error" && status?.error && (
+        <p
+          role="alert"
+          style={{ color: "var(--red)", fontSize: "var(--text-sm)", marginBottom: "var(--space-3)" }}
+        >
+          <i className="ti ti-alert-circle" aria-hidden="true"></i> {status.error}
+        </p>
+      )}
+
+      {running && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "var(--space-2)",
+            color: "var(--text-muted)",
+            fontSize: "var(--text-sm)",
+            marginBottom: "var(--space-3)",
+          }}
+        >
+          <i className="ti ti-loader-2 crux-spin" aria-hidden="true" style={{ color: "var(--crux)" }}></i>
+          Generating debate podcast… you can leave this page; it keeps running.
+        </div>
+      )}
+
+      {st === "done" && (
+        <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap", marginBottom: "var(--space-3)" }}>
+          {status?.audio && (
+            <a className="btn btn-sm btn-crux" href={`/api/cases/${caseId}/notebooklm/audio`}>
+              <i className="ti ti-download" aria-hidden="true"></i> Download mp3
+            </a>
+          )}
+          {status?.notebook_url && (
+            <a className="btn btn-sm" href={status.notebook_url} target="_blank" rel="noopener noreferrer">
+              <i className="ti ti-external-link" aria-hidden="true"></i> Open in NotebookLM
+            </a>
+          )}
+        </div>
+      )}
+
+      {!running && (
+        <button
+          className="btn btn-sm"
+          onClick={handleGenerate}
+          disabled={busy}
+          aria-busy={busy}
+        >
+          {busy ? (
+            <><i className="ti ti-loader-2 crux-spin" aria-hidden="true"></i> Starting…</>
+          ) : st === "done" ? (
+            <><i className="ti ti-refresh" aria-hidden="true"></i> Regenerate</>
+          ) : (
+            <><i className="ti ti-microphone" aria-hidden="true"></i> Generate debate podcast</>
+          )}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function WeighPanel({ caseId, initialContext, onRerankDone }) {
   const [context, setContext] = React.useState(initialContext || "");
   const [state, setState] = React.useState(STATES.IDLE);
@@ -4507,6 +4664,8 @@ function CaseDetailScreen({
                 initialContext={caseData.weigh_context || ""}
                 onRerankDone={loadCase}
               />
+              <SectionLabel>DEBATE PODCAST · NOTEBOOKLM (OPTIONAL)</SectionLabel>
+              <NotebookLMPanel caseId={caseId} />
             </>
           )}
 
