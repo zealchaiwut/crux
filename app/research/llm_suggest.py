@@ -28,13 +28,25 @@ _SYSTEM = (
     "Output ONLY a JSON array of 5 objects. Each object has exactly these fields:\n"
     '  "kind": one of "book", "article", "youtube", or "podcast".\n'
     '  "title": the real title of the book, article, video, or podcast episode.\n'
-    '  "url": a plausible direct URL (publisher page, DOI, article link, '
-    "youtube watch URL, or podcast episode/show page). Never invent fake domains.\n"
+    '  "url": a plausible direct URL. Never invent fake domains.\n'
     '  "claim": one sentence — what this source concretely says about the hypothesis.\n'
     '  "citation": author(s) or host/show + year (+ publication/channel).\n'
     "Rules:\n"
     "- Include a MIX of kinds: at least one book, one article, one youtube, and "
     "one podcast.\n"
+    "- STRONGLY PREFER these proven bot-fetchable hosts (their full text is "
+    "reliably readable without a paywall, login, or Cloudflare block):\n"
+    "    * en.wikipedia.org articles\n"
+    "    * PubMed Central FULL-TEXT pages: ncbi.nlm.nih.gov/pmc/articles/PMC<id>/ "
+    "(NOT bare pubmed.ncbi.nlm.nih.gov/<id> abstract pages)\n"
+    "    * arxiv.org/abs/<id>\n"
+    "    * .gov / .edu / who.int pages (nih.gov, cdc.gov, etc.)\n"
+    "    * official youtube.com/watch?v=<id> URLs\n"
+    "- AVOID paywalled or bot-blocked hosts: closed publishers (Elsevier/"
+    "ScienceDirect, Springer, Wiley, NEJM, paywalled Nature), and Cloudflare-"
+    "gated journal sites (mdpi.com, many journals.*.org). When a study exists on "
+    "PubMed Central, link its PMC full-text URL rather than the publisher or "
+    "abstract page.\n"
     "- Prefer widely-cited, verifiable sources over obscure ones.\n"
     "- Do NOT ask clarifying questions. Do NOT add prose or markdown fences. "
     "Your entire response must be the JSON array and nothing else."
