@@ -2,7 +2,6 @@
 import os
 import sys
 import re
-import json
 import pytest
 import httpx
 
@@ -18,8 +17,8 @@ if not BASE_URL.startswith("http"):
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO_ROOT)
 
-from app.services.source_verifier import SUPPORT_STATUSES, _SYSTEM_PROMPT
-from app.models import _SUPPORT_STATUS
+from app.services.source_verifier import SUPPORT_STATUSES, _SYSTEM_PROMPT  # noqa: E402
+from app.models import _SUPPORT_STATUS  # noqa: E402
 
 
 @pytest.fixture
@@ -132,7 +131,6 @@ def test_verify_source_partial_direct_persistence(client):
     }
 
     # Mock fetcher to return content
-    from app.research.fetchers import ArticleReaderFetcher
     from app.research.types import Document
 
     class MockFetcher:
