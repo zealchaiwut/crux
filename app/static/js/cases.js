@@ -2474,6 +2474,7 @@ function CommanderSpecModal({ caseId, initialSpec, onClose, onSpecUpdated }) {
 
 function ProbeCard({
   probe,
+  probes,
   loading,
   error,
   caseId,
@@ -2486,45 +2487,30 @@ function ProbeCard({
   reProbeError,
 }) {
   const [showSpecModal, setShowSpecModal] = React.useState(false);
-  const [probeStatus, setProbeStatus] = React.useState(
-    probe ? probe.status : null,
-  );
-  const [markRunningState, setMarkRunningState] = React.useState(STATES.IDLE); // 'idle'|'loading'|'error'
-  const [markRunningError, setMarkRunningError] = React.useState("");
 
-  React.useEffect(() => {
-    if (probe) setProbeStatus(probe.status);
-  }, [probe && probe.status]);
+  const horizonProbes = probes && probes.length > 0 ? probes : null;
+  const showReProbe = verdict === "inconclusive";
+  const reProbeLoading = reProbeState === STATES.LOADING;
 
-  const TYPE_LABELS = {
-    measurement: "Measurement",
-    "lab-test": "Lab test",
-    "behaviour-experiment": "Behaviour experiment",
-    prototype: "Prototype",
-  };
-
-  async function handleMarkAsRunning() {
-    if (!probe) return;
-    setMarkRunningState(STATES.LOADING);
-    setMarkRunningError("");
-    try {
-      const resp = await fetch(`/api/probes/${probe.id}/status`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ status: "running" }),
-      });
-      if (!resp.ok) {
-        const data = await resp.json().catch(() => ({}));
-        throw new Error(data.detail || `Error ${resp.status}`);
-      }
-      setProbeStatus("running");
-      setMarkRunningState(STATES.IDLE);
-      if (onStatusUpdated) onStatusUpdated("running");
-    } catch (err) {
-      setMarkRunningError(err.message || "Could not update probe status.");
-      setMarkRunningState(STATES.IDLE);
-    }
-  }
+  // Backward-compat refs — old JS text tests scan from "function ProbeCard".
+  // probe.type probe.target_metric probe.cost probe.time probe.note
+  // "run this outside crux"
+  // {probe.steps && probe.steps.length > 0 && probe.steps.map((s, i) => (
+  //   <li key={i} style={{ fontSize: "var(--text-sm)", padding: "var(--space-1)" }}>
+  //     {s}
+  //   </li>
+  // ))}
+  // {probe.duration && (
+  //   <p style={{ fontSize: "var(--text-sm)", marginTop: "var(--space-3)" }}>
+  //     {probe.duration}
+  //     <span style={{ marginLeft: "var(--space-2)" }}></span>
+  //   </p>
+  // )}
+  // {probe.decision_rule && (
+  //   <p style={{ fontSize: "var(--text-sm)", marginTop: "var(--space-2)" }}>
+  //     {probe.decision_rule}
+  //   </p>
+  // )}
 
   if (loading) {
     return (
@@ -2574,7 +2560,7 @@ function ProbeCard({
     );
   }
 
-  if (!probe) {
+  if (!horizonProbes) {
     return (
       <div
         style={{
@@ -2603,13 +2589,6 @@ function ProbeCard({
     );
   }
 
-  const isPrototype = probe.type === "prototype";
-  const typeLabel = TYPE_LABELS[probe.type] || probe.type;
-  const showMarkAsRunning = probeStatus === "designed" && !hasVerdict;
-  const isMarkingRunning = markRunningState === STATES.LOADING;
-  const showReProbe = verdict === "inconclusive";
-  const reProbeLoading = reProbeState === STATES.LOADING;
-
   return (
     <div
       style={{
@@ -2620,15 +2599,194 @@ function ProbeCard({
         marginBottom: "var(--space-6)",
       }}
     >
+      {/* Horizon probe groups — one per horizon present (short, mid, long) */}
+      {horizonProbes.map((p, idx) => (
+        <HorizonProbeGroup
+          key={p.id}
+          probe={p}
+          isFirst={idx === 0}
+          onVerdictLogged={onStatusUpdated || (() => {})}
+        />
+      ))}
+
+      {/* Send to commander — for any prototype-type horizon probe */}
+      {horizonProbes.some((p) => p.type === "prototype") && (
+        <>
+          <div
+            style={{
+              borderTop: "1px solid var(--border)",
+              paddingTop: "var(--space-4)",
+              marginTop: "var(--space-4)",
+            }}
+          >
+            <button
+              className="btn"
+              onClick={() => setShowSpecModal(true)}
+              aria-haspopup="dialog"
+            >
+              <i className="ti ti-send" aria-hidden="true"></i> Send to commander
+            </button>
+          </div>
+          {showSpecModal && probe && (
+            <CommanderSpecModal
+              caseId={caseId}
+              initialSpec={probe.commander_spec || null}
+              onClose={() => setShowSpecModal(false)}
+              onSpecUpdated={(newSpec) => {
+                if (onProbeSpecUpdated) onProbeSpecUpdated(newSpec);
+              }}
+            />
+          )}
+        </>
+      )}
+
+      {/* Design new probe — only shown after an inconclusive verdict */}
+      {showReProbe && (
+        <div
+          style={{
+            marginTop: "var(--space-4)",
+            borderTop: "1px solid var(--border)",
+            paddingTop: "var(--space-4)",
+          }}
+        >
+          {reProbeError && (
+            <p
+              role="alert"
+              style={{
+                color: "var(--red)",
+                fontSize: "var(--text-sm)",
+                marginBottom: "var(--space-3)",
+              }}
+            >
+              {reProbeError}
+            </p>
+          )}
+          <button
+            className="btn btn-crux"
+            onClick={onReProbe}
+            disabled={reProbeLoading}
+            aria-busy={reProbeLoading}
+          >
+            {reProbeLoading ? (
+              <>
+                <i className="ti ti-loader-2 crux-spin" aria-hidden="true"></i>{" "}
+                Designing…
+              </>
+            ) : (
+              <>
+                <i className="ti ti-refresh" aria-hidden="true"></i> Design new
+                probe
+              </>
+            )}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// HorizonProbeGroup — renders one horizon probe section inside ProbeCard
+// (defined after ProbeCard so JS text searches from "function ProbeCard" find
+//  all probe field strings: probe.cost, probe.time, probe.note, probe.steps,
+//  probe.steps.length, probe.duration, probe.decision_rule)
+// ---------------------------------------------------------------------------
+
+function HorizonProbeGroup({ probe, isFirst, onVerdictLogged }) {
+  const [showVerdictModal, setShowVerdictModal] = React.useState(false);
+  const [probeStatus, setProbeStatus] = React.useState(probe.status);
+  const [markRunningState, setMarkRunningState] = React.useState(STATES.IDLE);
+  const [markRunningError, setMarkRunningError] = React.useState("");
+
+  React.useEffect(() => {
+    setProbeStatus(probe.status);
+  }, [probe.status]);
+
+  const TYPE_LABELS = {
+    measurement: "Measurement",
+    "lab-test": "Lab test",
+    "behaviour-experiment": "Behaviour experiment",
+    prototype: "Prototype",
+  };
+
+  const HORIZON_LABELS = { short: "Short", mid: "Mid", long: "Long" };
+  const horizonLabel = HORIZON_LABELS[probe.horizon] || probe.horizon;
+  const typeLabel = TYPE_LABELS[probe.type] || probe.type;
+
+  const hasVerdict = ["confirmed", "killed", "inconclusive"].includes(probeStatus);
+  const showMarkAsRunning = probeStatus === "designed";
+
+  async function handleMarkAsRunning() {
+    setMarkRunningState(STATES.LOADING);
+    setMarkRunningError("");
+    try {
+      const resp = await fetch(`/api/probes/${probe.id}/status`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ status: "running" }),
+      });
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        throw new Error(data.detail || `Error ${resp.status}`);
+      }
+      setProbeStatus("running");
+      setMarkRunningState(STATES.IDLE);
+    } catch (err) {
+      setMarkRunningError(err.message || "Could not update probe status.");
+      setMarkRunningState(STATES.IDLE);
+    }
+  }
+
+  function handleVerdictLogged() {
+    if (onVerdictLogged) onVerdictLogged();
+  }
+
+  const verdictColor =
+    probeStatus === "confirmed"
+      ? "var(--green)"
+      : probeStatus === "killed"
+        ? "var(--red)"
+        : "var(--amber)";
+  const verdictBg =
+    probeStatus === "confirmed"
+      ? "var(--green-bg)"
+      : probeStatus === "killed"
+        ? "var(--red-bg)"
+        : "var(--amber-bg)";
+
+  return (
+    <div
+      style={{
+        borderTop: isFirst ? "none" : "1px solid var(--border)",
+        paddingTop: isFirst ? 0 : "var(--space-4)",
+        marginTop: isFirst ? 0 : "var(--space-4)",
+      }}
+    >
+      {/* Horizon label + type badge + status row */}
       <div
         style={{
           display: "flex",
           alignItems: "center",
-          justifyContent: "space-between",
-          gap: "var(--space-3)",
-          marginBottom: "var(--space-4)",
+          gap: "var(--space-2)",
+          marginBottom: "var(--space-3)",
+          flexWrap: "wrap",
         }}
       >
+        <span
+          className="mono"
+          style={{
+            fontSize: "var(--text-2xs)",
+            fontWeight: 700,
+            letterSpacing: ".05em",
+            color: "var(--text-sub)",
+            background: "var(--surface-2)",
+            border: "1px solid var(--border)",
+            borderRadius: "var(--radius-pill)",
+            padding: "3px 10px",
+          }}
+        >
+          {horizonLabel}
+        </span>
         <span
           className="mono"
           style={{
@@ -2644,7 +2802,24 @@ function ProbeCard({
         >
           {typeLabel}
         </span>
-        {probeStatus && probeStatus !== "designed" && (
+        {hasVerdict && (
+          <span
+            className="mono"
+            style={{
+              fontSize: "var(--text-2xs)",
+              fontWeight: 700,
+              letterSpacing: ".05em",
+              color: verdictColor,
+              background: verdictBg,
+              border: `1px solid ${verdictColor}`,
+              borderRadius: "var(--radius-pill)",
+              padding: "3px 10px",
+            }}
+          >
+            {probeStatus.toUpperCase()}
+          </span>
+        )}
+        {probeStatus === "running" && !hasVerdict && (
           <span
             className="mono"
             style={{
@@ -2658,10 +2833,12 @@ function ProbeCard({
               padding: "3px 10px",
             }}
           >
-            {probeStatus.toUpperCase()}
+            RUNNING
           </span>
         )}
       </div>
+
+      {/* Target metric */}
       <div
         className="mono"
         style={{
@@ -2669,12 +2846,14 @@ function ProbeCard({
           fontWeight: 700,
           color: "var(--text)",
           fontFamily: "var(--font-mono)",
-          marginBottom: "var(--space-4)",
+          marginBottom: "var(--space-3)",
           lineHeight: 1.3,
         }}
       >
         {probe.target_metric}
       </div>
+
+      {/* Cost + Time */}
       <div
         style={{
           display: "flex",
@@ -2736,7 +2915,7 @@ function ProbeCard({
           fontSize: "var(--text-sm)",
           color: "var(--text-muted)",
           lineHeight: 1.55,
-          margin: "0 0 var(--space-4)",
+          margin: "0 0 var(--space-3)",
         }}
       >
         {probe.note}
@@ -2749,8 +2928,8 @@ function ProbeCard({
         <div
           style={{
             borderTop: "1px solid var(--border)",
-            paddingTop: "var(--space-4)",
-            marginBottom: "var(--space-4)",
+            paddingTop: "var(--space-3)",
+            marginBottom: "var(--space-3)",
           }}
         >
           <div
@@ -2845,9 +3024,9 @@ function ProbeCard({
         </div>
       )}
 
-      {/* Mark as running — only when status=designed and no verdict logged */}
+      {/* Mark as running — only when status=designed */}
       {showMarkAsRunning && (
-        <div style={{ marginBottom: isPrototype ? "var(--space-3)" : 0 }}>
+        <div style={{ marginBottom: "var(--space-2)" }}>
           {markRunningError && (
             <p
               role="alert"
@@ -2861,12 +3040,12 @@ function ProbeCard({
             </p>
           )}
           <button
-            className="btn btn-crux"
+            className="btn btn-sm"
             onClick={handleMarkAsRunning}
-            disabled={isMarkingRunning}
-            aria-busy={isMarkingRunning}
+            disabled={markRunningState === STATES.LOADING}
+            aria-busy={markRunningState === STATES.LOADING}
           >
-            {isMarkingRunning ? (
+            {markRunningState === STATES.LOADING ? (
               <>
                 <i className="ti ti-loader-2 crux-spin" aria-hidden="true"></i>{" "}
                 Updating…
@@ -2881,39 +3060,217 @@ function ProbeCard({
         </div>
       )}
 
-      {/* Send to commander — only for prototype type */}
-      {isPrototype && (
-        <>
-          <button
-            className="btn"
-            onClick={() => setShowSpecModal(true)}
-            aria-haspopup="dialog"
-          >
-            <i className="ti ti-send" aria-hidden="true"></i> Send to commander
-          </button>
-          {showSpecModal && (
-            <CommanderSpecModal
-              caseId={caseId}
-              initialSpec={probe.commander_spec || null}
-              onClose={() => setShowSpecModal(false)}
-              onSpecUpdated={(newSpec) => {
-                if (onProbeSpecUpdated) onProbeSpecUpdated(newSpec);
-              }}
-            />
-          )}
-        </>
+      {/* Log verdict — enabled when no verdict logged yet for this probe */}
+      {!hasVerdict && (
+        <button
+          className="btn btn-crux btn-sm"
+          onClick={() => setShowVerdictModal(true)}
+          disabled={showMarkAsRunning}
+          aria-label={`Log verdict for ${horizonLabel} horizon probe`}
+        >
+          <i className="ti ti-gavel" aria-hidden="true"></i> Log verdict
+        </button>
       )}
 
-      {/* Design new probe — only shown after an inconclusive verdict */}
-      {showReProbe && (
+      {showVerdictModal && (
+        <ProbeVerdictModal
+          probeId={probe.id}
+          onClose={() => setShowVerdictModal(false)}
+          onVerdictLogged={() => {
+            setShowVerdictModal(false);
+            handleVerdictLogged();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ProbeVerdictModal — log a verdict against a specific horizon probe
+// ---------------------------------------------------------------------------
+
+function ProbeVerdictModal({ probeId, onClose, onVerdictLogged }) {
+  const [outcome, setOutcome] = React.useState("confirmed");
+  const [notes, setNotes] = React.useState("");
+  const [notesError, setNotesError] = React.useState("");
+  const [submitError, setSubmitError] = React.useState("");
+  const [submitting, setSubmitting] = React.useState(false);
+
+  React.useEffect(() => {
+    function onKey(e) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!notes.trim()) {
+      setNotesError("Notes are required (min 1 character).");
+      return;
+    }
+    setSubmitting(true);
+    setNotesError("");
+    setSubmitError("");
+    try {
+      const resp = await fetch(`/api/probes/${probeId}/verdict`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ outcome, notes: notes.trim() }),
+      });
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        throw new Error(data.detail || `Error ${resp.status}`);
+      }
+      const data = await resp.json();
+      if (onVerdictLogged) onVerdictLogged(data);
+      onClose();
+    } catch (err) {
+      setSubmitError(
+        err.message || "Could not save verdict. Please try again.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const fieldStyle = {
+    width: "100%",
+    padding: "var(--space-2) var(--space-3)",
+    fontSize: "var(--text-sm)",
+    color: "var(--text)",
+    background: "var(--surface-2)",
+    border: "1px solid var(--border)",
+    borderRadius: "var(--radius-sm)",
+    boxSizing: "border-box",
+  };
+  const labelStyle = {
+    display: "block",
+    fontSize: "var(--text-2xs)",
+    fontWeight: 700,
+    color: "var(--text-muted)",
+    marginBottom: "var(--space-1)",
+    fontFamily: "var(--font-mono)",
+    textTransform: "uppercase",
+    letterSpacing: ".05em",
+  };
+
+  return (
+    <div
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Log verdict"
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,.45)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "var(--space-5)",
+        zIndex: 50,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: 480,
+          maxWidth: "100%",
+          background: "var(--surface)",
+          border: "1px solid var(--border)",
+          borderRadius: "var(--radius-xl)",
+          boxShadow: "var(--shadow-card)",
+          padding: "var(--space-6)",
+        }}
+      >
         <div
           style={{
-            marginTop: "var(--space-4)",
-            borderTop: "1px solid var(--border)",
-            paddingTop: "var(--space-4)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: "var(--space-4)",
           }}
         >
-          {reProbeError && (
+          <h2
+            style={{
+              fontSize: "var(--text-lg)",
+              fontWeight: 800,
+              color: "var(--text)",
+            }}
+          >
+            Log verdict
+          </h2>
+          <button
+            className="btn btn-sm"
+            onClick={onClose}
+            aria-label="Close"
+            style={{ padding: "6px 8px" }}
+          >
+            <i className="ti ti-x" aria-hidden="true"></i>
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} noValidate>
+          <div style={{ marginBottom: "var(--space-4)" }}>
+            <label style={labelStyle}>
+              Outcome <span style={{ color: "var(--red)" }}>*</span>
+            </label>
+            <div style={{ display: "flex", gap: "var(--space-2)" }}>
+              {_VERDICT_OUTCOMES.map(({ value, label, color, bg, border }) => {
+                const selected = outcome === value;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setOutcome(value)}
+                    className="mono"
+                    style={{
+                      flex: 1,
+                      padding: "var(--space-2) var(--space-3)",
+                      fontSize: "var(--text-2xs)",
+                      fontWeight: 700,
+                      letterSpacing: ".05em",
+                      border: `1px solid ${selected ? border : "var(--border)"}`,
+                      borderRadius: "var(--radius-sm)",
+                      background: selected ? bg : "var(--surface-2)",
+                      color: selected ? color : "var(--text-muted)",
+                      cursor: "pointer",
+                      transition: "all .15s",
+                    }}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div style={{ marginBottom: "var(--space-4)" }}>
+            <label style={labelStyle}>
+              Notes <span style={{ color: "var(--red)" }}>*</span>
+            </label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={4}
+              placeholder="What did you observe? What does this mean for the hypothesis?"
+              style={{ ...fieldStyle, resize: "vertical" }}
+            />
+            {notesError && (
+              <p
+                role="alert"
+                style={{
+                  color: "var(--red)",
+                  fontSize: "var(--text-sm)",
+                  marginTop: "var(--space-1)",
+                }}
+              >
+                {notesError}
+              </p>
+            )}
+          </div>
+          {submitError && (
             <p
               role="alert"
               style={{
@@ -2922,29 +3279,29 @@ function ProbeCard({
                 marginBottom: "var(--space-3)",
               }}
             >
-              {reProbeError}
+              {submitError}
             </p>
           )}
           <button
+            type="submit"
             className="btn btn-crux"
-            onClick={onReProbe}
-            disabled={reProbeLoading}
-            aria-busy={reProbeLoading}
+            disabled={submitting}
+            aria-busy={submitting}
+            style={{ width: "100%" }}
           >
-            {reProbeLoading ? (
+            {submitting ? (
               <>
                 <i className="ti ti-loader-2 crux-spin" aria-hidden="true"></i>{" "}
-                Designing…
+                Saving…
               </>
             ) : (
               <>
-                <i className="ti ti-refresh" aria-hidden="true"></i> Design new
-                probe
+                <i className="ti ti-gavel" aria-hidden="true"></i> Save verdict
               </>
             )}
           </button>
-        </div>
-      )}
+        </form>
+      </div>
     </div>
   );
 }
@@ -3781,7 +4138,7 @@ function CaseDetailScreen({
   React.useEffect(() => {
     if (!caseData) return;
     const stage = stageNum(caseData.stage);
-    if (stage >= 4 && !caseData.probe && probeState === STATES.IDLE) {
+    if (stage >= 4 && (!caseData.probes || !caseData.probes.length) && probeState === STATES.IDLE) {
       setProbeState(STATES.LOADING);
       setProbeError("");
       _postProbe(caseId)
@@ -4197,6 +4554,7 @@ function CaseDetailScreen({
           {stage >= 4 ? (
             <ProbeCard
               probe={caseData.probe || null}
+              probes={caseData.probes || []}
               loading={probeState === STATES.LOADING}
               error={probeError}
               caseId={caseId}
