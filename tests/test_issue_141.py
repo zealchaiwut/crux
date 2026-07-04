@@ -6,7 +6,6 @@ AC coverage:
   AC3 – The updated comment is syntactically valid JSX (no broken braces or delimiters).
 """
 import pathlib
-import re
 
 CASES_JS = pathlib.Path(__file__).parent.parent / "app" / "static" / "js" / "cases.js"
 
