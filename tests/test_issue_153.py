@@ -168,7 +168,7 @@ def test_all_four_enum_variants_persist(plan, status):
     session.add(src)
     session.commit()
     result = session.execute(
-        text(f"SELECT support_status FROM source WHERE id='{src_id}'")
+        text("SELECT support_status FROM source WHERE id=:id").bindparams(id=src_id)
     ).scalar()
     assert result == status
 
