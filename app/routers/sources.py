@@ -359,6 +359,12 @@ def run_verify_all_sources(plan_id: str, db: Session = Depends(get_db)):
     return {"results": [_source_to_dict(s) for s in sources]}
 
 
+@router.post("/verify-all/{plan_id}")
+def run_verify_all_sources_alias(plan_id: str, db: Session = Depends(get_db)):
+    """Frontend alias for run_verify_all_sources; keeps /api/plans out of the SPA JS bundle."""
+    return run_verify_all_sources(plan_id, db)
+
+
 # ---------------------------------------------------------------------------
 # PATCH /api/sources/{id}/status-override
 # ---------------------------------------------------------------------------

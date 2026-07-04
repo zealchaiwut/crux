@@ -1731,7 +1731,7 @@ function SuggestPanel({ planId, onAttached }) {
     setState(STATES.LOADING);
     setAddError("");
     try {
-      const resp = await fetch(`/api/plans/${planId}/gather/suggest`, {
+      const resp = await fetch(`/api/gather/${planId}/suggest`, {
         method: "POST",
       });
       const data = await resp.json().catch(() => ({}));
@@ -2175,7 +2175,7 @@ function PlanCard({
   async function triggerVerifyAll() {
     setVerifyingAll(true);
     try {
-      const resp = await fetch(`/api/plans/${planId}/run-verify-all`, { method: "POST" });
+      const resp = await fetch(`/api/verify-all/${planId}`, { method: "POST" });
       const data = await resp.json().catch(() => ({}));
       if (!resp.ok) return;
       if (data.results) {
