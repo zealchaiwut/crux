@@ -813,24 +813,24 @@ async def generate_probe_commander_spec(
 
 
 # ---------------------------------------------------------------------------
-# POST /api/cases/{id}/summary
+# GET /api/cases/{id}/summary
 # ---------------------------------------------------------------------------
 
 _PRE_PROBE_STAGES = {"sharpened", "bake_off", "gather", "weigh"}
 
 
-@router.post("/cases/{case_id}/summary")
+@router.get("/cases/{case_id}/summary")
 async def generate_case_summary(
     case_id: str,
     force: bool = False,
     db: Session = Depends(get_db),
 ):
-    """Generate and cache an AI-powered synthesis for a case at the probe stage.
+    """Return a literature-review-style cited summary for a case at the probe stage.
 
-    Returns a JSON object with four sections:
-      problem_statement, option_ranking, recommended_plan, probe_plan.
+    Response body: {"paragraphs": [...], "references": [...], "cached": bool}
 
     Pass ?force=true to discard the cached value and regenerate.
+    Returns 422 when the case has not yet reached the probe stage.
     """
     import json as _json
 
@@ -856,16 +856,8 @@ async def generate_case_summary(
         )
 
     if case.summary and not force:
-        return {"summary": _json.loads(case.summary), "cached": True}
-
-    probe = _latest_probe(case.probes)
-    probe_data = None
-    if probe:
-        probe_data = {
-            "type": probe.type,
-            "target_metric": probe.target_metric or "",
-            "note": probe.note or "",
-        }
+        cached = _json.loads(case.summary)
+        return {**cached, "cached": True}
 
     plans_input = [
         {
@@ -877,9 +869,8 @@ async def generate_case_summary(
                 {
                     "id": s.id,
                     "title": s.title or "",
+                    "url": s.url or "",
                     "claim": s.claim or "",
-                    "citation": s.citation or "",
-                    "support_status": s.support_status,
                 }
                 for s in (p.sources or [])
             ],
@@ -891,7 +882,6 @@ async def generate_case_summary(
         "sharpened": case.sharpened or case.raw_problem,
         "raw_problem": case.raw_problem,
         "plans": plans_input,
-        "probe": probe_data,
     }
 
     try:
@@ -902,4 +892,5 @@ async def generate_case_summary(
     case.summary = summary_json
     db.commit()
 
-    return {"summary": _json.loads(summary_json), "cached": False}
+    result = _json.loads(summary_json)
+    return {**result, "cached": False}
