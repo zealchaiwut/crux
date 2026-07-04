@@ -19,7 +19,7 @@ _SYSTEM = (
     '  "label": the plan label ("A", "B", or "C")\n'
     '  "rank": integer 1–3 (1 = best fit for this user)\n'
     '  "standing": one of "ruled-in", "ruled-out", or null (null = neutral/uncertain)\n'
-    '  "rationale": 1–2 sentences explaining why this plan holds its rank position, '
+    '  "rationale": non-empty text explaining why this plan holds its rank position, '
     "explicitly citing a specific source, document, URL, or data point gathered during research where relevant\n\n"
     "Rules:\n"
     "- Every plan must appear exactly once.\n"
@@ -129,6 +129,8 @@ async def rerank_plans(sharpened: str, plans: list[dict], context: str | None) -
                 raise ValueError(f"invalid rank: {item['rank']}")
             if item["standing"] not in valid_standings:
                 raise ValueError(f"invalid standing: {item['standing']}")
+            # Policy: non-empty only. The _SYSTEM prompt requires non-empty rationale text;
+            # no sentence-count constraint is enforced here or in the prompt.
             rationale = item.get("rationale")
             if not (isinstance(rationale, str) and rationale.strip()):
                 raise ValueError("rationale is required and must be a non-empty string")
