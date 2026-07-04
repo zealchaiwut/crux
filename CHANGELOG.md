@@ -3,6 +3,16 @@
 Per-sprint changelog for crux. Entries are written by the documentor when a
 sprint finishes. Dated per-sprint files live under [docs/changelog/](docs/changelog/).
 
+## Sprint 55 (2026-07-04)
+
+- #163: [follow-up] Remove redundant dict comprehension in summary.py json.dumps call
+- #168: Add horizon enum and generate three probes per case
+- #169: Render three horizon probes as grouped set in ProbeCard
+- #170: Gate action plan provisionally on first probe verdict
+- #171: Store extracted content and summary per source
+- #172: Add source detail modal to SourceChip click
+- #173: Rewrite case summary as cited literature-review JSON
+
 ## Sprint 54 (2026-06-29)
 
 - #153: Add source-verification fields to Source model
