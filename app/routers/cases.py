@@ -12,7 +12,7 @@ from app import models
 from app.bake_off import BakeOffError, generate_plans
 from app.commander_spec import CommanderSpecError, generate_commander_spec
 from app.db import get_db
-from app.probe import ProbeError, design_probe, design_probes
+from app.probe import ProbeError, design_probes
 from app.sharpen import SharpenError, sharpen_problem
 from app.summary import SummaryError, generate_summary
 from app.weigh import WeighError, apply_source_penalties, rerank_plans

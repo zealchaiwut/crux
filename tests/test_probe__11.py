@@ -450,7 +450,6 @@ def test_probe_stage_unchanged_on_failure(api_client, db_session):
 
 def test_probe_service_rejects_invalid_type():
     """AC2: ProbeError raised when Claude returns an invalid type."""
-    from app.probe import design_probe
 
     bad_response = {
         "type": "app",  # not in valid types
