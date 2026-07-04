@@ -640,18 +640,315 @@ const _STATUS_LABEL = {
   unverified:  "Unverified",
 };
 
+// ---------------------------------------------------------------------------
+// SourceDetailModal — shows all source fields inline; Fetch content action
+// ---------------------------------------------------------------------------
+
+function SourceDetailModal({
+  id,
+  kind,
+  title,
+  url,
+  claim,
+  citation,
+  support_status,
+  support_rationale,
+  content_summary: initialContentSummary,
+  extracted_content: initialExtractedContent,
+  onClose,
+  onUpdate,
+}) {
+  const [showContent, setShowContent] = React.useState(false);
+  const [fetchState, setFetchState] = React.useState("idle");
+  const [fetchError, setFetchError] = React.useState("");
+  const [currentExtractedContent, setCurrentExtractedContent] = React.useState(initialExtractedContent || null);
+  const [currentContentSummary, setCurrentContentSummary] = React.useState(initialContentSummary || null);
+
+  React.useEffect(() => {
+    function onKey(e) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const isFetching = fetchState === "loading";
+  const iconMap = { book: "ti-book", article: "ti-article", youtube: "ti-brand-youtube" };
+  const icon = iconMap[kind] || "ti-file";
+  const colors = _CHIP_COLORS[support_status] || _CHIP_UNVERIFIED;
+  const statusLabel = _STATUS_LABEL[support_status] || "Unverified";
+
+  async function handleFetchContent() {
+    if (!id) return;
+    setFetchState("loading");
+    setFetchError("");
+    try {
+      const resp = await fetch(`/api/sources/${id}/fetch-content`, { method: "POST" });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data.detail || `Error ${resp.status}`);
+      setCurrentExtractedContent(data.extracted_content || null);
+      setCurrentContentSummary(data.content_summary || null);
+      setFetchState("idle");
+      if (onUpdate) onUpdate(data);
+    } catch (err) {
+      setFetchError(err.message || "Failed to fetch content. Please try again.");
+      setFetchState("error");
+    }
+  }
+
+  const fieldLabelStyle = {
+    display: "block",
+    fontSize: "var(--text-2xs)",
+    fontWeight: 700,
+    color: "var(--text-sub)",
+    marginBottom: "var(--space-1)",
+    fontFamily: "var(--font-mono)",
+    textTransform: "uppercase",
+    letterSpacing: ".05em",
+  };
+
+  function FieldRow({ label, value }) {
+    if (!value) return null;
+    return (
+      <div style={{ marginBottom: "var(--space-3)" }}>
+        <span style={fieldLabelStyle}>{label}</span>
+        <p style={{ fontSize: "var(--text-sm)", color: "var(--text-muted)", margin: 0, lineHeight: 1.5 }}>
+          {value}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Source details"
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,.45)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "var(--space-5)",
+        zIndex: 50,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: 560,
+          maxWidth: "100%",
+          maxHeight: "85vh",
+          display: "flex",
+          flexDirection: "column",
+          background: "var(--surface)",
+          border: "1px solid var(--border)",
+          borderRadius: "var(--radius-xl)",
+          boxShadow: "var(--shadow-card)",
+        }}
+      >
+        {/* Header */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: "var(--space-3)",
+            padding: "var(--space-5) var(--space-6) var(--space-4)",
+            borderBottom: "1px solid var(--border)",
+            flexShrink: 0,
+          }}
+        >
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "var(--space-2)",
+                marginBottom: "var(--space-2)",
+                flexWrap: "wrap",
+              }}
+            >
+              <span className={`src ${kind}`} style={{ flex: "none" }}>
+                <i className={`ti ${icon}`} aria-hidden="true"></i>
+                {kind}
+              </span>
+              <span
+                className="mono"
+                style={{
+                  fontSize: "var(--text-2xs)",
+                  fontWeight: 700,
+                  color: colors.text,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: "var(--radius-pill)",
+                  padding: "2px 8px",
+                }}
+              >
+                {statusLabel}
+              </span>
+            </div>
+            <h2
+              style={{
+                fontSize: "var(--text-lg)",
+                fontWeight: 800,
+                color: "var(--text)",
+                margin: 0,
+                lineHeight: 1.3,
+              }}
+            >
+              {title || "—"}
+            </h2>
+          </div>
+          <button
+            className="btn btn-sm"
+            onClick={onClose}
+            aria-label="Close"
+            style={{ padding: "6px 8px", flexShrink: 0 }}
+          >
+            <i className="ti ti-x" aria-hidden="true"></i>
+          </button>
+        </div>
+
+        {/* Body */}
+        <div style={{ flex: 1, overflow: "auto", padding: "var(--space-5) var(--space-6)" }}>
+          {/* URL — clickable link */}
+          {url ? (
+            <div style={{ marginBottom: "var(--space-3)" }}>
+              <span style={fieldLabelStyle}>URL</span>
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  fontSize: "var(--text-sm)",
+                  color: "var(--crux)",
+                  wordBreak: "break-all",
+                  lineHeight: 1.5,
+                }}
+              >
+                {url}
+              </a>
+            </div>
+          ) : (
+            <div style={{ marginBottom: "var(--space-3)" }}>
+              <span style={fieldLabelStyle}>URL</span>
+              <p style={{ fontSize: "var(--text-sm)", color: "var(--text-sub)", margin: 0 }}>—</p>
+            </div>
+          )}
+
+          <FieldRow label="Claim" value={claim || "—"} />
+          <FieldRow label="Citation" value={citation || "—"} />
+          <FieldRow label="Support Rationale" value={support_rationale || "—"} />
+          <FieldRow label="Content Summary" value={currentContentSummary || "—"} />
+
+          {/* Transcript / extracted_content — collapsed Show more expander */}
+          {currentExtractedContent ? (
+            <div style={{ marginBottom: "var(--space-3)" }}>
+              <span style={fieldLabelStyle}>Full Content</span>
+              <button
+                onClick={() => setShowContent((p) => !p)}
+                className="btn btn-sm"
+                aria-expanded={showContent}
+                style={{ fontSize: "var(--text-2xs)", marginBottom: "var(--space-2)" }}
+              >
+                {showContent ? (
+                  <><i className="ti ti-chevron-up" aria-hidden="true"></i> Show less</>
+                ) : (
+                  <><i className="ti ti-chevron-down" aria-hidden="true"></i> Show more</>
+                )}
+              </button>
+              {showContent && (
+                <pre
+                  style={{
+                    fontFamily: "var(--font-mono)",
+                    fontSize: "var(--text-xs)",
+                    color: "var(--text-muted)",
+                    background: "var(--surface-2)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "var(--radius)",
+                    padding: "var(--space-3)",
+                    whiteSpace: "pre-wrap",
+                    wordBreak: "break-word",
+                    lineHeight: 1.6,
+                    margin: 0,
+                    maxHeight: 320,
+                    overflow: "auto",
+                  }}
+                >
+                  {currentExtractedContent}
+                </pre>
+              )}
+            </div>
+          ) : (
+            <div style={{ marginBottom: "var(--space-3)" }}>
+              <span style={fieldLabelStyle}>Full Content</span>
+              {fetchError && (
+                <p
+                  role="alert"
+                  style={{
+                    fontSize: "var(--text-sm)",
+                    color: "var(--red)",
+                    marginBottom: "var(--space-2)",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "var(--space-1)",
+                  }}
+                >
+                  <i className="ti ti-alert-circle" aria-hidden="true"></i> {fetchError}
+                </p>
+              )}
+              <button
+                className="btn btn-sm"
+                onClick={handleFetchContent}
+                disabled={isFetching}
+                aria-busy={isFetching}
+                style={{ fontSize: "var(--text-sm)" }}
+              >
+                {isFetching ? (
+                  <>
+                    <i className="ti ti-loader-2 crux-spin" aria-hidden="true"></i> Fetching…
+                  </>
+                ) : (
+                  <>
+                    <i className="ti ti-download" aria-hidden="true"></i> Fetch content
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// SourceChip — colour-coded by support_status; expandable with Verify actions
+// ---------------------------------------------------------------------------
+
 function SourceChip({
   id,
   kind,
   title,
   url,
   claim,
+  citation,
   support_status: initialStatus,
+  support_rationale: initialSupportRationale,
   rationale: initialRationale,
   manually_overridden: initialOverridden,
+  extracted_content: initialExtractedContent,
+  content_summary: initialContentSummary,
   onUpdate,
 }) {
   const [expanded, setExpanded] = React.useState(false);
+  const [showModal, setShowModal] = React.useState(false);
+  const [currentExtractedContent, setCurrentExtractedContent] = React.useState(initialExtractedContent || null);
+  const [currentContentSummary, setCurrentContentSummary] = React.useState(initialContentSummary || null);
+  const [currentSupportRationale, setCurrentSupportRationale] = React.useState(initialSupportRationale || "");
   // currentStatus, currentRationale, and currentOverridden are intentional local state.
   // Persistence scope: these survive re-renders of the SourceChip itself (same component
   // instance), but RESET whenever the parent PlanCard unmounts and remounts.
@@ -684,6 +981,9 @@ function SourceChip({
     setCurrentStatus(data.support_status || null);
     setCurrentRationale(data.rationale || "");
     setCurrentOverridden(!!data.manually_overridden);
+    if (data.extracted_content !== undefined) setCurrentExtractedContent(data.extracted_content || null);
+    if (data.content_summary !== undefined) setCurrentContentSummary(data.content_summary || null);
+    if (data.support_rationale !== undefined) setCurrentSupportRationale(data.support_rationale || "");
     if (onUpdate) onUpdate(data);
   }
 
@@ -732,35 +1032,53 @@ function SourceChip({
   // Collapsed chip — button so it is keyboard-focusable by default
   if (!expanded) {
     return (
-      <button
-        className={`src ${kind}`}
-        onClick={() => setExpanded(true)}
-        aria-expanded={false}
-        aria-label={`${title}: ${statusLabel}. Expand for details.`}
-        style={{
-          cursor: "pointer",
-          border: `1px solid ${colors.border}`,
-          background: colors.bg,
-        }}
-      >
-        <i className={`ti ${icon}`} aria-hidden="true"></i>
-        {title}
-        <span
-          className="mono"
-          style={{ fontSize: "var(--text-2xs)", color: colors.text }}
-          aria-label={`Status: ${statusLabel}`}
+      <>
+        <button
+          className={`src ${kind}`}
+          onClick={() => setShowModal(true)}
+          aria-haspopup="dialog"
+          aria-label={`${title}: ${statusLabel}. Open source details.`}
+          style={{
+            cursor: "pointer",
+            border: `1px solid ${colors.border}`,
+            background: colors.bg,
+          }}
         >
-          {statusLabel}
-        </span>
-        {currentOverridden && (
-          <i
-            className="ti ti-lock"
-            aria-label="Manually overridden"
-            title="Manually overridden"
-            style={{ fontSize: 10, color: colors.text }}
-          ></i>
+          <i className={`ti ${icon}`} aria-hidden="true"></i>
+          {title}
+          <span
+            className="mono"
+            style={{ fontSize: "var(--text-2xs)", color: colors.text }}
+            aria-label={`Status: ${statusLabel}`}
+          >
+            {statusLabel}
+          </span>
+          {currentOverridden && (
+            <i
+              className="ti ti-lock"
+              aria-label="Manually overridden"
+              title="Manually overridden"
+              style={{ fontSize: 10, color: colors.text }}
+            ></i>
+          )}
+        </button>
+        {showModal && (
+          <SourceDetailModal
+            id={id}
+            kind={kind}
+            title={title}
+            url={url}
+            claim={claim}
+            citation={citation}
+            support_status={currentStatus}
+            support_rationale={currentSupportRationale}
+            content_summary={currentContentSummary}
+            extracted_content={currentExtractedContent}
+            onClose={() => setShowModal(false)}
+            onUpdate={_applyUpdate}
+          />
         )}
-      </button>
+      </>
     );
   }
 
@@ -2124,9 +2442,13 @@ function PlanCard({
                 title={s.title}
                 url={s.url}
                 claim={s.claim}
+                citation={s.citation || ""}
                 support_status={s.support_status || null}
+                support_rationale={s.support_rationale || ""}
                 rationale={s.rationale || ""}
                 manually_overridden={!!s.manually_overridden}
+                extracted_content={s.extracted_content || null}
+                content_summary={s.content_summary || null}
                 onUpdate={handleSourceUpdate}
               />
             ))}
