@@ -51,7 +51,6 @@ class TestPromptTemplate:
     def test_prompt_does_not_contain_partially_supports(self):
         """AC2: The system prompt must not mention 'partially_supports'."""
         import app.services.source_verifier as sv
-        src = inspect.getsource(sv)
         # Only fail if the string appears in a string literal context (the prompt)
         assert "partially_supports" not in sv._SYSTEM_PROMPT, (
             "The Claude prompt template must use 'partial', not 'partially_supports'"
