@@ -78,6 +78,18 @@ _VALID_STAGES = {"sharpened", "bake_off", "gather", "weigh", "probe", "verdict"}
 _VALID_VERDICT_PARAMS = {"confirmed", "killed", "inconclusive", "open"}
 
 
+def _validate_query_param(name: str, value: str | None, valid: set) -> None:
+    """Raise HTTPException(400) if value is not None and not in valid."""
+    if value is not None and value not in valid:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Invalid {name} value {value!r}. "
+                f"Valid values: {', '.join(sorted(valid))}"
+            ),
+        )
+
+
 @router.get("/cases")
 def list_cases(
     db: Session = Depends(get_db),
@@ -85,23 +97,8 @@ def list_cases(
     stage: str | None = Query(default=None),
     verdict: str | None = Query(default=None),
 ):
-    if stage is not None and stage not in _VALID_STAGES:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"Invalid stage value {stage!r}. "
-                f"Valid values: {', '.join(sorted(_VALID_STAGES))}"
-            ),
-        )
-
-    if verdict is not None and verdict not in _VALID_VERDICT_PARAMS:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"Invalid verdict value {verdict!r}. "
-                f"Valid values: {', '.join(sorted(_VALID_VERDICT_PARAMS))}"
-            ),
-        )
+    _validate_query_param("stage", stage, _VALID_STAGES)
+    _validate_query_param("verdict", verdict, _VALID_VERDICT_PARAMS)
 
     query = db.query(models.Case).options(
         joinedload(models.Case.plans),
