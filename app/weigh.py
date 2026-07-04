@@ -121,7 +121,7 @@ async def rerank_plans(sharpened: str, plans: list[dict], context: str | None) -
         valid_labels = {p["label"] for p in plans}
         valid_standings = {"ruled-in", "ruled-out", None}
         for item in result:
-            if not all(k in item for k in ("label", "rank", "standing", "rationale")):
+            if not all(k in item for k in ("label", "rank", "standing")):
                 raise ValueError(f"item missing required fields: {item}")
             if item["label"] not in valid_labels:
                 raise ValueError(f"unexpected label: {item['label']}")
@@ -129,8 +129,9 @@ async def rerank_plans(sharpened: str, plans: list[dict], context: str | None) -
                 raise ValueError(f"invalid rank: {item['rank']}")
             if item["standing"] not in valid_standings:
                 raise ValueError(f"invalid standing: {item['standing']}")
-            if not isinstance(item["rationale"], str) or not item["rationale"].strip():
-                raise ValueError(f"rationale must be a non-empty string: {item}")
+            rationale = item.get("rationale")
+            if not (isinstance(rationale, str) and rationale.strip()):
+                raise ValueError("rationale is required and must be a non-empty string")
         return result
     except (KeyError, IndexError, ValueError, json.JSONDecodeError) as exc:
         raise WeighError(f"Failed to parse Claude response: {exc}") from exc
