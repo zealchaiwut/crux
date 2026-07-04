@@ -547,7 +547,7 @@ async def rerank_case(case_id: str, body: RerankRequest, db: Session = Depends(g
         if item:
             plan.current_rank = item["rank"]
             plan.standing = item["standing"]
-            plan.rationale = item.get("rationale") or None
+            plan.rationale = item.get("rationale") or None  # Weigh may return empty string; treat as NULL per AC
 
     case.weigh_context = body.context
     case.stage = "weigh"
