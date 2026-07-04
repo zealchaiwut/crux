@@ -110,9 +110,9 @@ def _seed_case_with_summary(session, summary_json=None):
         stage="probe",
         summary=summary_json or json.dumps({
             "paragraphs": [
-                f"The retention drop coincides with the pricing change [1].",
-                f"A secondary factor is competitive pressure [2].",
-                f"Evidence points primarily to price sensitivity [1] as root cause.",
+                "The retention drop coincides with the pricing change [1].",
+                "A secondary factor is competitive pressure [2].",
+                "Evidence points primarily to price sensitivity [1] as root cause.",
             ],
             "references": [
                 {"id": 1, "source_id": src_id_a, "title": "Price Study Q1", "url": "https://example.com/price"},
