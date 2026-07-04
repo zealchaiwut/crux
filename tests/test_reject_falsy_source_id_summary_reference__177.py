@@ -1,6 +1,6 @@
 """Tests for issue #177: Reject falsy source_id in summary reference validation"""
 import pytest
-from app.summary import _validate_source_ids, _validate_citations, SummaryError
+from app.summary import _validate_source_ids, SummaryError
 
 
 class TestRejectFalsySourceIdInCitedReferences:
