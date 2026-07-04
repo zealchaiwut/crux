@@ -1731,7 +1731,7 @@ function SuggestPanel({ planId, onAttached }) {
     setState(STATES.LOADING);
     setAddError("");
     try {
-      const resp = await fetch(`/api/plans/${planId}/gather/suggest`, {
+      const resp = await fetch(`/api/gather/${planId}/suggest`, {
         method: "POST",
       });
       const data = await resp.json().catch(() => ({}));
@@ -2175,7 +2175,7 @@ function PlanCard({
   async function triggerVerifyAll() {
     setVerifyingAll(true);
     try {
-      const resp = await fetch(`/api/plans/${planId}/run-verify-all`, { method: "POST" });
+      const resp = await fetch(`/api/verify-all/${planId}`, { method: "POST" });
       const data = await resp.json().catch(() => ({}));
       if (!resp.ok) return;
       if (data.results) {
@@ -3872,7 +3872,65 @@ function StageBar({ stage = 0 }) {
 // CaseSummarySection — renders at stage >= 4 (probe) regardless of verdict
 // ---------------------------------------------------------------------------
 
-function CaseSummarySection({ summary, hasVerdict, onLogVerdict }) {
+function _renderCitationParagraph(text, citationRefs, totalParas, idx, onCitationClick) {
+  const parts = text.split(/(\[\d+\])/);
+  return (
+    <p
+      key={idx}
+      style={{
+        fontSize: "var(--text-base)",
+        color: "var(--text)",
+        lineHeight: 1.55,
+        margin: 0,
+        marginBottom: idx < (totalParas - 1) ? "var(--space-3)" : 0,
+      }}
+    >
+      {parts.map(function(part, i) {
+        const match = part.match(/^\[(\d+)\]$/);
+        if (!match) return part;
+        const n = parseInt(match[1], 10);
+        const ref = (citationRefs || []).find(function(r) { return r.id === n; });
+        return (
+          <button
+            key={i}
+            onClick={function() { if (ref) onCitationClick(ref.source_id); }}
+            style={{
+              display: "inline",
+              background: "none",
+              border: "none",
+              padding: "0 1px",
+              color: "var(--crux)",
+              fontSize: "var(--text-xs)",
+              fontFamily: "var(--font-mono)",
+              fontWeight: 700,
+              cursor: ref ? "pointer" : "default",
+              verticalAlign: "super",
+            }}
+            aria-label={"Citation " + n + (ref ? ": " + ref.title : "")}
+          >
+            {part}
+          </button>
+        );
+      })}
+    </p>
+  );
+}
+
+function CaseSummarySection({ summary, hasVerdict, onLogVerdict, sources }) {
+  const [selectedSource, setSelectedSource] = React.useState(null);
+
+  function openCitationSource(sourceId) {
+    if (typeof SourceDetailModal === "undefined") {
+      console.warn("[CaseSummarySection] SourceDetailModal is not available; citation click is a no-op.");
+      return;
+    }
+    const found = (sources || []).find(function(s) { return s.id === sourceId; });
+    if (found) setSelectedSource(found);
+  }
+
+  const references = summary && summary.references;
+  const paragraphs = summary && summary.paragraphs;
+
   return (
     <>
       <SectionLabel>CASE SUMMARY</SectionLabel>
@@ -3885,100 +3943,69 @@ function CaseSummarySection({ summary, hasVerdict, onLogVerdict }) {
           marginBottom: "var(--space-6)",
         }}
       >
-        {summary ? (
+        {summary && paragraphs ? (
           <div>
-            <div style={{ marginBottom: "var(--space-4)" }}>
-              <div
-                className="mono"
-                style={{
-                  fontSize: "var(--text-2xs)",
-                  fontWeight: 700,
-                  color: "var(--text-sub)",
-                  marginBottom: "var(--space-2)",
-                }}
-              >
-                PROBLEM STATEMENT
-              </div>
-              <p
-                style={{
-                  fontSize: "var(--text-base)",
-                  color: "var(--text)",
-                  lineHeight: 1.55,
-                  margin: 0,
-                }}
-              >
-                {summary.problem_statement}
-              </p>
+            <div style={{ marginBottom: references && references.length > 0 ? "var(--space-4)" : 0 }}>
+              {paragraphs.map(function(para, i) { return _renderCitationParagraph(para, references, paragraphs.length, i, openCitationSource); })}
             </div>
-            <div style={{ marginBottom: "var(--space-4)" }}>
+
+            {references && references.length > 0 && (
               <div
-                className="mono"
                 style={{
-                  fontSize: "var(--text-2xs)",
-                  fontWeight: 700,
-                  color: "var(--text-sub)",
-                  marginBottom: "var(--space-2)",
+                  borderTop: "1px solid var(--border)",
+                  paddingTop: "var(--space-4)",
+                  marginTop: "var(--space-2)",
+                  marginBottom: hasVerdict ? 0 : "var(--space-4)",
                 }}
               >
-                OPTION RANKING
+                <div
+                  className="mono"
+                  style={{
+                    fontSize: "var(--text-2xs)",
+                    fontWeight: 700,
+                    color: "var(--text-sub)",
+                    marginBottom: "var(--space-2)",
+                  }}
+                >
+                  REFERENCES
+                </div>
+                <ol
+                  style={{
+                    margin: 0,
+                    paddingLeft: "var(--space-4)",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "var(--space-1)",
+                  }}
+                >
+                  {references.map(function(ref) {
+                    return (
+                      <li key={ref.id}>
+                        <button
+                          onClick={function() { openCitationSource(ref.source_id); }}
+                          style={{
+                            background: "none",
+                            border: "none",
+                            padding: 0,
+                            color: "var(--crux)",
+                            fontSize: "var(--text-sm)",
+                            fontFamily: "var(--font-sans)",
+                            cursor: "pointer",
+                            textAlign: "left",
+                            textDecoration: "underline",
+                            textDecorationColor: "var(--crux-bg)",
+                          }}
+                          aria-label={"Open source: " + ref.title}
+                        >
+                          {ref.title}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ol>
               </div>
-              <p
-                style={{
-                  fontSize: "var(--text-sm)",
-                  color: "var(--text-muted)",
-                  lineHeight: 1.55,
-                  margin: 0,
-                }}
-              >
-                {summary.option_ranking}
-              </p>
-            </div>
-            <div style={{ marginBottom: "var(--space-4)" }}>
-              <div
-                className="mono"
-                style={{
-                  fontSize: "var(--text-2xs)",
-                  fontWeight: 700,
-                  color: "var(--text-sub)",
-                  marginBottom: "var(--space-2)",
-                }}
-              >
-                RECOMMENDED PLAN
-              </div>
-              <p
-                style={{
-                  fontSize: "var(--text-sm)",
-                  color: "var(--text-muted)",
-                  lineHeight: 1.55,
-                  margin: 0,
-                }}
-              >
-                {summary.recommended_plan}
-              </p>
-            </div>
-            <div style={{ marginBottom: hasVerdict ? 0 : "var(--space-4)" }}>
-              <div
-                className="mono"
-                style={{
-                  fontSize: "var(--text-2xs)",
-                  fontWeight: 700,
-                  color: "var(--text-sub)",
-                  marginBottom: "var(--space-2)",
-                }}
-              >
-                PROBE PLAN
-              </div>
-              <p
-                style={{
-                  fontSize: "var(--text-sm)",
-                  color: "var(--text-muted)",
-                  lineHeight: 1.55,
-                  margin: 0,
-                }}
-              >
-                {summary.probe_plan}
-              </p>
-            </div>
+            )}
+
             {!hasVerdict && (
               <div
                 style={{
@@ -4005,6 +4032,23 @@ function CaseSummarySection({ summary, hasVerdict, onLogVerdict }) {
           </p>
         )}
       </div>
+
+      {selectedSource && typeof SourceDetailModal !== "undefined" && (
+        <SourceDetailModal
+          id={selectedSource.id}
+          kind={selectedSource.kind}
+          title={selectedSource.title}
+          url={selectedSource.url}
+          claim={selectedSource.claim}
+          citation={selectedSource.citation}
+          support_status={selectedSource.support_status}
+          support_rationale={selectedSource.support_rationale}
+          content_summary={selectedSource.content_summary}
+          extracted_content={selectedSource.extracted_content}
+          onClose={function() { setSelectedSource(null); }}
+          onUpdate={function() {}}
+        />
+      )}
     </>
   );
 }
@@ -4901,6 +4945,7 @@ function CaseDetailScreen({
               summary={caseData.summary || null}
               hasVerdict={!!caseData.verdict_log}
               onLogVerdict={() => setShowLogVerdictModal(true)}
+              sources={(caseData.plans || []).flatMap(function(p) { return p.sources || []; })}
             />
           )}
 
