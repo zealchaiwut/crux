@@ -444,7 +444,6 @@ def test_probe__non_prototype_no_button_rendered(api_client, db_session):
     case = _seed_case(db_session, stage="weigh")
     _seed_plans(db_session, case.id)
 
-    non_prototype_types = {"measurement", "lab-test", "behaviour-experiment"}
     mock_three = _make_three_probes("measurement")
 
     with patch("app.routers.cases.design_probes", new_callable=AsyncMock) as mock_design:
