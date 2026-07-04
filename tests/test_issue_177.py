@@ -132,6 +132,6 @@ def test_mixed_refs_only_cited_falsy_raises():
         {"id": 1, "source_id": id_a},
         {"id": 2, "source_id": None},
     ]
-    paragraphs = [f"Evidence [1] and [2] show the trend."]
+    paragraphs = ["Evidence [1] and [2] show the trend."]
     with pytest.raises(SummaryError):
         _validate_source_ids(refs, {id_a}, paragraphs)
