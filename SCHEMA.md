@@ -1,6 +1,6 @@
 # Schema
 
-Database: Neon Postgres. Migrations managed by Alembic (revision `n4o5p6q7r8s9`).
+Database: Neon Postgres. Migrations managed by Alembic (revision `q7r8s9t0u1v2`).
 
 ## Enum types
 
@@ -12,6 +12,7 @@ Database: Neon Postgres. Migrations managed by Alembic (revision `n4o5p6q7r8s9`)
 | `support_status_enum` | `supports`, `partial`, `contradicts`, `unverified` |
 | `probe_type_enum` | `measurement`, `lab-test`, `behaviour-experiment`, `prototype` |
 | `probe_status_enum` | `designed`, `running`, `confirmed`, `killed`, `inconclusive` |
+| `probe_horizon_enum` | `short`, `mid`, `long` (issue #168) |
 | `verdict_outcome_enum` | `confirmed`, `killed`, `inconclusive` |
 
 ## Tables
@@ -57,6 +58,8 @@ Database: Neon Postgres. Migrations managed by Alembic (revision `n4o5p6q7r8s9`)
 | `support_status` | support_status_enum | NOT NULL, default `unverified` — updated enum values in sprint 54 (issue #153) |
 | `support_rationale` | text | nullable — free-text explanation of verification result; replaces `rationale` column (issues #99, #155) |
 | `manually_overridden` | boolean | NOT NULL, default false — true when support_status was set by user override (issue #100) |
+| `extracted_content` | text | nullable — raw fetched source content, capped at 50,000 chars with a `[TRUNCATED]` sentinel; stays null on fetch failure (issue #171) |
+| `content_summary` | text | nullable — Claude-generated neutral 2–4 sentence summary of the source's own content, independent of support status (issue #171) |
 
 ### `source_verification`
 
@@ -86,6 +89,7 @@ Added in sprint 11 (issue #99). Stores raw pipeline results from the fetch→Cla
 | `duration` | text | How long to run the probe, e.g. "7 days" (issue #93) |
 | `decision_rule` | text | Confirmatory outcome and kill condition, e.g. "if X ≥ Y → proceed" (issue #93) |
 | `status` | probe_status_enum | NOT NULL, default `designed` |
+| `horizon` | probe_horizon_enum | nullable — `short`, `mid`, or `long`; each case now holds three probes, one per horizon (issue #168) |
 | `due_date` | date | |
 | `commander_spec` | text | |
 
