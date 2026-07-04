@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 os.environ.setdefault("AUTH_SECRET", "test_auth_secret_12345678901")
 
-from app.models import Base, Case, Plan, Source, _SUPPORT_STATUS
+from app.models import Base, Case, Plan, Source, _SUPPORT_STATUS  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
