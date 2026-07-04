@@ -664,13 +664,68 @@ function SourceDetailModal({
   const [currentExtractedContent, setCurrentExtractedContent] = React.useState(initialExtractedContent || null);
   const [currentContentSummary, setCurrentContentSummary] = React.useState(initialContentSummary || null);
 
+  // Capture the element that triggered this modal so we can return focus on close (AC1).
+  const triggerRef = React.useRef(document.activeElement);
+  const dialogRef = React.useRef(null);
+
+  // Return focus to the triggering element (graceful fallback to body if removed from DOM).
+  function returnFocus() {
+    const el = triggerRef.current;
+    if (el && (el.isConnected || document.body.contains(el))) {
+      el.focus();
+    } else {
+      document.body.focus();
+    }
+  }
+
+  // Unified close: restore focus then call the parent onClose callback (AC2).
+  function handleClose() {
+    returnFocus();
+    onClose();
+  }
+
+  // Focusable element selector used for the focus trap (AC3, AC4).
+  const FOCUSABLE = 'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])';
+
   React.useEffect(() => {
+    // Move focus into the dialog when it mounts.
+    if (dialogRef.current) {
+      const first = dialogRef.current.querySelector(FOCUSABLE);
+      if (first) first.focus();
+    }
+
     function onKey(e) {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        handleClose();
+        return;
+      }
+      // Focus trap: confine Tab / Shift+Tab to the modal's focusable elements (AC3, AC4).
+      if (e.key === "Tab" && dialogRef.current) {
+        const focusable = Array.from(dialogRef.current.querySelectorAll(FOCUSABLE)).filter(
+          (el) => !el.closest('[aria-hidden="true"]')
+        );
+        if (!focusable.length) return;
+        const firstFocusable = focusable[0];
+        const lastFocusable = focusable[focusable.length - 1];
+        if (e.shiftKey) {
+          // Shift+Tab: wrap from first → last (AC4).
+          if (document.activeElement === firstFocusable) {
+            e.preventDefault();
+            lastFocusable.focus();
+          }
+        } else {
+          // Tab: wrap from last → first (AC3).
+          if (document.activeElement === lastFocusable) {
+            e.preventDefault();
+            firstFocusable.focus();
+          }
+        }
+      }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const isFetching = fetchState === "loading";
   const iconMap = { book: "ti-book", article: "ti-article", youtube: "ti-brand-youtube" };
@@ -721,7 +776,7 @@ function SourceDetailModal({
 
   return (
     <div
-      onClick={onClose}
+      onClick={handleClose}
       role="dialog"
       aria-modal="true"
       aria-label="Source details"
@@ -737,6 +792,7 @@ function SourceDetailModal({
       }}
     >
       <div
+        ref={dialogRef}
         onClick={(e) => e.stopPropagation()}
         style={{
           width: 560,
@@ -804,7 +860,7 @@ function SourceDetailModal({
           </div>
           <button
             className="btn btn-sm"
-            onClick={onClose}
+            onClick={handleClose}
             aria-label="Close"
             style={{ padding: "6px 8px", flexShrink: 0 }}
           >
