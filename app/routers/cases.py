@@ -32,6 +32,13 @@ def _latest_probe(probes):
 
 _VERDICTED_STATUSES = {"confirmed", "killed", "inconclusive"}
 
+_HORIZON_ORDER = ("short", "mid", "long")
+
+
+def _horizon_sort_key(probe) -> int:
+    """Return a numeric sort key for probe horizon: short=0, mid=1, long=2, other=99."""
+    return _HORIZON_ORDER.index(probe.horizon) if probe.horizon in _HORIZON_ORDER else 99
+
 
 def compute_action_plan_state(probes) -> str:
     """Return 'locked', 'provisional', or 'final' based on probe verdict states.
@@ -280,8 +287,7 @@ def get_case(case_id: str, db: Session = Depends(get_db)):
             "horizon": p.horizon,
             "commander_spec": p.commander_spec,
         }
-        for p in sorted(case.probes, key=lambda p: ("short", "mid", "long").index(p.horizon)
-                         if p.horizon in ("short", "mid", "long") else 99)
+        for p in sorted(case.probes, key=_horizon_sort_key)
     ]
 
     verdict_log = None
@@ -639,9 +645,7 @@ async def design_probe_for_case(case_id: str, db: Session = Depends(get_db)):
     for probe in new_probes:
         db.refresh(probe)
 
-    horizon_order = ("short", "mid", "long")
-    sorted_probes = sorted(new_probes, key=lambda p: horizon_order.index(p.horizon)
-                           if p.horizon in horizon_order else 99)
+    sorted_probes = sorted(new_probes, key=_horizon_sort_key)
 
     return {
         "probes": [
