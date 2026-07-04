@@ -183,7 +183,6 @@ class TestPartialPersistsWithoutConstraintError:
     def test_partially_supports_would_fail_db_constraint(self, db_session):
         """AC4: 'partially_supports' is NOT a valid DB enum value (documents the mismatch)."""
         import sqlalchemy.exc
-        from app import models
 
         source = _seed_source(db_session)
         source.support_status = "partially_supports"
