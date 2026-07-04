@@ -242,7 +242,10 @@ def get_case(case_id: str, db: Session = Depends(get_db)):
                     "citation": s.citation,
                     "support_status": s.support_status,
                     "rationale": s.rationale,
+                    "support_rationale": s.support_rationale,
                     "manually_overridden": bool(s.manually_overridden),
+                    "extracted_content": s.extracted_content,
+                    "content_summary": s.content_summary,
                 }
                 for s in (plan.sources or [])
             ],
