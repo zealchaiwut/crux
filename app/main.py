@@ -20,6 +20,7 @@ from app.auth import (
 )
 from app.config import AUTH_SECRET, ENV
 from app.routers import (
+    action_plan_router,
     cases_router,
     gather_router,
     probes_router,
@@ -69,6 +70,7 @@ app = FastAPI(title="crux", version="0.1.0")
 app.add_middleware(_AuthMiddleware)
 
 app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
+app.include_router(action_plan_router)
 app.include_router(cases_router)
 app.include_router(gather_router)
 app.include_router(probes_router)
