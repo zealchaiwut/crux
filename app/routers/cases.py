@@ -30,6 +30,27 @@ def _latest_probe(probes):
     return without_ts[0] if without_ts else None
 
 
+_VERDICTED_STATUSES = {"confirmed", "killed", "inconclusive"}
+
+
+def compute_action_plan_state(probes) -> str:
+    """Return 'locked', 'provisional', or 'final' based on probe verdict states.
+
+    - locked:      no probe has a verdict yet
+    - provisional: at least one probe has a verdict, but not the long-horizon probe
+    - final:       the long-horizon probe has a verdict
+    """
+    if not probes:
+        return "locked"
+    any_verdict = any(p.status in _VERDICTED_STATUSES for p in probes)
+    if not any_verdict:
+        return "locked"
+    long_probe = next((p for p in probes if p.horizon == "long"), None)
+    if long_probe and long_probe.status in _VERDICTED_STATUSES:
+        return "final"
+    return "provisional"
+
+
 router = APIRouter(prefix="/api")
 
 _STAGE_ORDER = {
@@ -181,7 +202,11 @@ def get_case(case_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Case not found")
 
     probe = _latest_probe(case.probes)
-    verdict_obj = (probe.verdicts[0] if probe and probe.verdicts else None)
+    # Use any probe that has verdict records — long-horizon takes priority (final state)
+    _probes_with_verdict = [p for p in case.probes if p.verdicts]
+    _long_with_verdict = next((p for p in _probes_with_verdict if p.horizon == "long"), None)
+    _verdict_probe = _long_with_verdict or (_probes_with_verdict[0] if _probes_with_verdict else None)
+    verdict_obj = _verdict_probe.verdicts[0] if _verdict_probe else None
 
     not_investigating = []
     if case.not_investigating:
@@ -289,6 +314,7 @@ def get_case(case_id: str, db: Session = Depends(get_db)):
         "probe": probe_out,
         "probes": probes_out,
         "summary": summary_out,
+        "action_plan_state": compute_action_plan_state(case.probes),
     }
 
 

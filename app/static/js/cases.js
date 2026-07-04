@@ -4582,19 +4582,55 @@ function CaseDetailScreen({
             />
           )}
 
-          {/* ACTION PLAN — only rendered once a verdict has been logged */}
+          {/* ACTION PLAN — unlocks on first probe verdict (provisional), final on long-horizon */}
           {stage >= 4 && !!caseData.verdict_log && (
             <>
               <SectionLabel>ACTION PLAN</SectionLabel>
               <div
                 style={{
                   background: "var(--surface)",
-                  border: "1px solid var(--border)",
+                  border: caseData.action_plan_state === "provisional"
+                    ? "1px dashed var(--border)"
+                    : "1px solid var(--border)",
                   borderRadius: "var(--radius)",
                   padding: "var(--space-5)",
                   marginBottom: "var(--space-6)",
+                  opacity: caseData.action_plan_state === "provisional" ? 0.88 : 1,
                 }}
               >
+                {/* provisional badge — shown until long-horizon probe verdict is logged */}
+                {caseData.action_plan_state === "provisional" && (
+                  <div
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "var(--space-1)",
+                      background: "var(--amber-bg)",
+                      border: "1px solid var(--amber)",
+                      borderRadius: "var(--radius-pill)",
+                      padding: "2px 10px",
+                      marginBottom: "var(--space-4)",
+                    }}
+                  >
+                    <i
+                      className="ti ti-clock"
+                      aria-hidden="true"
+                      style={{ fontSize: 11, color: "var(--amber)" }}
+                    ></i>
+                    <span
+                      className="mono"
+                      style={{
+                        fontSize: "var(--text-2xs)",
+                        fontWeight: 700,
+                        color: "var(--amber)",
+                        fontStyle: "italic",
+                        letterSpacing: ".04em",
+                      }}
+                    >
+                      provisional · pending long-horizon
+                    </span>
+                  </div>
+                )}
                 <div style={{ marginBottom: "var(--space-4)" }}>
                   <div
                     className="mono"
