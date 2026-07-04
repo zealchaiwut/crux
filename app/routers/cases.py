@@ -60,6 +60,8 @@ def compute_action_plan_state(probes) -> str:
 
 router = APIRouter(prefix="/api")
 
+# Retained for legacy fallback and UI mapping only — not used in API response
+# serialization (stage is returned as a string enum value since issue #75).
 _STAGE_ORDER = {
     "sharpened": 0,
     "bake_off": 1,
