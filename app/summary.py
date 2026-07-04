@@ -8,12 +8,14 @@ Provides two interfaces:
 
   generate_summary(case_data: dict) -> str
     Web-API interface. Accepts the raw case dict (as assembled by the router)
-    and returns a JSON-encoded summary string.
+    and returns a JSON-encoded literature-review-style summary string with
+    inline numbered citations.
 
 All summary logic lives here; the router calls generate_summary() and handles
 persistence and caching.
 """
 import json
+import re
 
 from app.claude_cli import ClaudeCLIError, complete
 
@@ -37,22 +39,28 @@ any source documents by title or ID
 - Return only the markdown document — no preamble or trailing commentary
 """
 
-_SYSTEM = """\
-You are a decision-support analyst. Given a structured case investigation, produce a concise \
-executive summary in JSON format.
+_LITERATURE_REVIEW_SYSTEM = """\
+You are a research analyst synthesising a case investigation into a literature-review-style report.
 
-Return ONLY a JSON object with exactly these four keys:
-  "problem_statement" - one sentence restating the sharpened problem being investigated
-  "option_ranking"    - for each option (A, B, C), one paragraph covering its rank, core \
-mechanism, and evidence from any cited source documents (cite by title or ID)
-  "recommended_plan"  - one paragraph naming the top-ranked option and why it should be pursued
-  "probe_plan"        - one paragraph describing the current or suggested probe design
+Given a problem statement and a numbered list of evidence sources, write 3-4 cohesive paragraphs that:
+- Summarise the core problem and the evidence landscape
+- Use inline citations in the form [1], [2], etc., matching the provided numbered sources
+- Synthesise competing explanations and the strongest evidence
+
+Return your output as a JSON object with exactly two top-level keys:
+  "paragraphs": ordered array of 3-4 paragraph strings, each containing inline [N] citation markers
+  "references": array of objects, one per cited source, each with:
+    - "id": integer matching the inline citation marker
+    - "source_id": the exact source identifier from the provided source list
+    - "title": the source title
+    - "url": the source URL
 
 Rules:
-- Do not wrap the JSON in a code fence
-- Do not add any prose outside the JSON object
-- Every field must be a non-empty string
-- If source documents are attached, cite at least one by name or ID in option_ranking
+- Return ONLY the JSON object — no preamble, no code fence
+- Only cite sources from the provided numbered list; do not invent citations
+- Every [N] marker that appears in any paragraph must have a matching entry in references with "id": N
+- Every entry in references must correspond to an [N] marker in at least one paragraph
+- If no sources are provided, write paragraphs without citation markers and return "references": []
 """
 
 
@@ -189,57 +197,69 @@ async def run(
 
 
 async def generate_summary(case_data: dict) -> str:
-    """Generate a JSON-encoded summary string for the given case data.
+    """Generate a literature-review-style cited JSON summary for the given case data.
 
     Args:
         case_data: dict with keys:
             sharpened (str), plans (list of plan dicts), probe (dict | None)
             Each plan dict has: label, name, mechanism, current_rank, sources (list)
-            Each source dict has: id, title, claim, citation
+            Each source dict has: id, title, url, claim
 
     Returns:
-        A JSON string with keys: problem_statement, option_ranking,
-        recommended_plan, probe_plan.
+        A JSON string with keys:
+            paragraphs: list of 3-4 paragraph strings with inline [N] citation markers
+            references: list of objects each with id, source_id, title, url
 
     Raises:
-        SummaryError: if the Claude call fails or the response is unparseable.
+        SummaryError: if the Claude call fails, the response is unparseable, citation
+            markers are inconsistent, or any reference source_id is not a real case source.
     """
     sharpened = case_data.get("sharpened") or case_data.get("raw_problem", "")
     plans = case_data.get("plans") or []
-    probe = case_data.get("probe")
 
-    plans_text = _format_plans(plans)
-    probe_text = _format_probe(probe)
+    # Collect all sources across all plans, preserving insertion order
+    all_sources = []
+    seen_ids = set()
+    for plan in plans:
+        for src in (plan.get("sources") or []):
+            src_id = src.get("id")
+            if src_id and src_id not in seen_ids:
+                seen_ids.add(src_id)
+                all_sources.append({
+                    "source_id": src_id,
+                    "title": src.get("title") or "",
+                    "url": src.get("url") or "",
+                    "claim": src.get("claim") or "",
+                })
+
+    valid_source_ids = {s["source_id"] for s in all_sources}
+
+    if all_sources:
+        sources_block = "Evidence sources available for citation:\n" + "\n".join(
+            f"[{i + 1}] source_id={s['source_id']!r}, title={s['title']!r}, url={s['url']!r}"
+            + (f", claim: {s['claim']}" if s["claim"] else "")
+            for i, s in enumerate(all_sources)
+        )
+    else:
+        sources_block = "No evidence sources are available for citation."
 
     user_message = (
         f"Problem being investigated: {sharpened}\n\n"
-        f"{plans_text}\n"
-        f"{probe_text}\n"
-        "Generate the case summary JSON."
+        f"{_format_plans(plans)}\n\n"
+        f"{sources_block}\n\n"
+        "Generate the literature-review JSON summary."
     )
 
     try:
-        raw = await complete(_SYSTEM, user_message, _MODEL)
+        raw = await complete(_LITERATURE_REVIEW_SYSTEM, user_message, _MODEL)
     except ClaudeCLIError as exc:
         raise SummaryError(f"Claude call failed: {exc}") from exc
 
-    validated_json = _parse_and_validate(raw)
+    data = _parse_literature_review(raw)
+    _validate_citations(data["paragraphs"], data["references"])
+    _validate_source_ids(data["references"], valid_source_ids)
 
-    ranked_plans = [
-        {
-            "label": p.get("label", "?"),
-            "rank": p.get("current_rank") or 99,
-            "sources": p.get("sources") or [],
-        }
-        for p in plans
-    ]
-    contradiction_section = build_contradiction_section(ranked_plans)
-    if contradiction_section:
-        data = json.loads(validated_json)
-        data["contradicted_evidence"] = contradiction_section
-        return json.dumps({k: data[k] for k in list(data)})
-
-    return validated_json
+    return json.dumps(data)
 
 
 def _format_plans(plans: list) -> str:
@@ -252,26 +272,11 @@ def _format_plans(plans: list) -> str:
         mechanism = plan.get("mechanism") or ""
         rank = plan.get("current_rank", "?")
         lines.append(f"  Plan {label} (rank {rank}): {name} — {mechanism}")
-        for src in plan.get("sources") or []:
-            title = src.get("title") or src.get("id") or "untitled"
-            claim = src.get("claim") or ""
-            src_id = src.get("id") or ""
-            status = src.get("support_status", "unverified")
-            status_note = " [⚠ CONTRADICTED]" if status == "contradicts" else ""
-            lines.append(f"    Source: {title} (id: {src_id}) — {claim}{status_note}")
     return "\n".join(lines)
 
 
-def _format_probe(probe: dict | None) -> str:
-    if not probe:
-        return "Probe: not yet designed."
-    ptype = probe.get("type") or "unknown"
-    metric = probe.get("target_metric") or ""
-    note = probe.get("note") or ""
-    return f"Probe type: {ptype}. Target metric: {metric}. Note: {note}."
-
-
-def _parse_and_validate(raw: str) -> str:
+def _parse_literature_review(raw: str) -> dict:
+    """Parse and structurally validate the literature-review JSON from Claude."""
     raw = raw.strip()
     try:
         data = json.loads(raw)
@@ -280,11 +285,63 @@ def _parse_and_validate(raw: str) -> str:
             f"Claude returned non-JSON response: {raw[:200]!r}"
         ) from exc
 
-    required = ("problem_statement", "option_ranking", "recommended_plan", "probe_plan")
-    missing = [k for k in required if not data.get(k)]
-    if missing:
+    if "paragraphs" not in data or not isinstance(data["paragraphs"], list):
         raise SummaryError(
-            f"Summary JSON missing or empty fields: {missing}. Got: {list(data)}"
+            f"Summary JSON missing or invalid 'paragraphs' array. Got keys: {list(data)}"
+        )
+    if "references" not in data or not isinstance(data["references"], list):
+        raise SummaryError(
+            f"Summary JSON missing or invalid 'references' array. Got keys: {list(data)}"
+        )
+    if len(data["paragraphs"]) < 3 or len(data["paragraphs"]) > 4:
+        raise SummaryError(
+            f"'paragraphs' must contain 3-4 items; got {len(data['paragraphs'])}"
         )
 
-    return json.dumps({k: data[k] for k in required})
+    for ref in data["references"]:
+        for field in ("id", "source_id", "title", "url"):
+            if field not in ref:
+                raise SummaryError(
+                    f"Reference object missing required field '{field}': {ref}"
+                )
+        if not isinstance(ref["id"], int):
+            raise SummaryError(
+                f"Reference 'id' must be an integer; got {type(ref['id'])!r}: {ref['id']!r}"
+            )
+
+    return {"paragraphs": data["paragraphs"], "references": data["references"]}
+
+
+def _validate_citations(paragraphs: list, references: list) -> None:
+    """Assert every [N] marker in paragraphs has a matching reference id, and vice versa."""
+    markers_in_text: set[int] = set()
+    for para in paragraphs:
+        for m in re.findall(r'\[(\d+)\]', para):
+            markers_in_text.add(int(m))
+
+    ref_ids = {r["id"] for r in references}
+
+    missing_refs = markers_in_text - ref_ids
+    if missing_refs:
+        raise SummaryError(
+            f"Citation markers {sorted(missing_refs)} appear in paragraphs "
+            f"but have no matching entry in references"
+        )
+
+    orphan_refs = ref_ids - markers_in_text
+    if orphan_refs:
+        raise SummaryError(
+            f"Reference ids {sorted(orphan_refs)} have no corresponding [N] "
+            f"citation marker in any paragraph"
+        )
+
+
+def _validate_source_ids(references: list, valid_source_ids: set) -> None:
+    """Assert every references[].source_id is an actual source on the case."""
+    for ref in references:
+        source_id = ref.get("source_id")
+        if source_id and source_id not in valid_source_ids:
+            raise SummaryError(
+                f"Reference source_id {source_id!r} does not match any source on the case "
+                f"(valid ids: {sorted(valid_source_ids)!r})"
+            )
