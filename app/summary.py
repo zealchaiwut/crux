@@ -257,7 +257,7 @@ async def generate_summary(case_data: dict) -> str:
 
     data = _parse_literature_review(raw)
     _validate_citations(data["paragraphs"], data["references"])
-    _validate_source_ids(data["references"], valid_source_ids)
+    _validate_source_ids(data["references"], valid_source_ids, data["paragraphs"])
 
     return json.dumps(data)
 
@@ -336,11 +336,24 @@ def _validate_citations(paragraphs: list, references: list) -> None:
         )
 
 
-def _validate_source_ids(references: list, valid_source_ids: set) -> None:
-    """Assert every references[].source_id is an actual source on the case."""
+def _validate_source_ids(references: list, valid_source_ids: set, paragraphs: list) -> None:
+    """Assert every cited references[].source_id is valid and non-falsy."""
+    cited_ref_ids: set[int] = set()
+    for para in paragraphs:
+        for m in re.findall(r'\[(\d+)\]', para):
+            cited_ref_ids.add(int(m))
+
     for ref in references:
         source_id = ref.get("source_id")
-        if source_id and source_id not in valid_source_ids:
+        ref_id = ref.get("id")
+        if ref_id not in cited_ref_ids:
+            continue
+        if not source_id:
+            raise SummaryError(
+                f"Reference [{ref_id}] has a falsy source_id ({source_id!r}) "
+                f"but is cited in the summary text — phantom citation"
+            )
+        if source_id not in valid_source_ids:
             raise SummaryError(
                 f"Reference source_id {source_id!r} does not match any source on the case "
                 f"(valid ids: {sorted(valid_source_ids)!r})"
