@@ -108,6 +108,8 @@ class Source(Base):
     rationale = Column(Text, nullable=True)
     support_rationale = Column(Text, nullable=True)
     manually_overridden = Column(Boolean, nullable=False, default=False)
+    extracted_content = Column(Text, nullable=True)
+    content_summary = Column(Text, nullable=True)
 
     plan = relationship("Plan", back_populates="sources")
     verifications = relationship(
