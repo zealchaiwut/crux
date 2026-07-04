@@ -12,7 +12,7 @@ from app import models
 from app.bake_off import BakeOffError, generate_plans
 from app.commander_spec import CommanderSpecError, generate_commander_spec
 from app.db import get_db
-from app.probe import ProbeError, design_probe
+from app.probe import ProbeError, design_probes
 from app.sharpen import SharpenError, sharpen_problem
 from app.summary import SummaryError, generate_summary
 from app.weigh import WeighError, apply_source_penalties, rerank_plans
@@ -236,8 +236,28 @@ def get_case(case_id: str, db: Session = Depends(get_db)):
             "duration": probe.duration or "",
             "decision_rule": probe.decision_rule or "",
             "status": probe.status,
+            "horizon": probe.horizon,
             "commander_spec": probe.commander_spec,
         }
+
+    probes_out = [
+        {
+            "id": p.id,
+            "type": p.type,
+            "target_metric": p.target_metric or "",
+            "cost": p.cost or "",
+            "time": p.time or "",
+            "note": p.note or "",
+            "steps": p.steps if p.steps is not None else [],
+            "duration": p.duration or "",
+            "decision_rule": p.decision_rule or "",
+            "status": p.status,
+            "horizon": p.horizon,
+            "commander_spec": p.commander_spec,
+        }
+        for p in sorted(case.probes, key=lambda p: ("short", "mid", "long").index(p.horizon)
+                         if p.horizon in ("short", "mid", "long") else 99)
+    ]
 
     verdict_log = None
     if verdict_obj:
@@ -267,6 +287,7 @@ def get_case(case_id: str, db: Session = Depends(get_db)):
         "weigh_context": case.weigh_context or "",
         "plans": plans_out,
         "probe": probe_out,
+        "probes": probes_out,
         "summary": summary_out,
     }
 
@@ -542,23 +563,7 @@ async def design_probe_for_case(case_id: str, db: Session = Depends(get_db)):
     if not plans:
         raise HTTPException(status_code=422, detail="Case has no plans to design a probe for")
 
-    existing = _latest_probe(case.probes)
-    if existing:
-        existing_verdict = existing.verdicts[0] if existing.verdicts else None
-        if not (existing_verdict and existing_verdict.outcome == "inconclusive"):
-            return {
-                "id": existing.id,
-                "type": existing.type,
-                "target_metric": existing.target_metric or "",
-                "cost": existing.cost or "",
-                "time": existing.time or "",
-                "note": existing.note or "",
-                "steps": existing.steps if existing.steps is not None else [],
-                "duration": existing.duration or "",
-                "decision_rule": existing.decision_rule or "",
-                "status": existing.status,
-                "commander_spec": existing.commander_spec,
-            }
+    is_first_probe = len(case.probes) == 0
 
     plans_input = [
         {
@@ -570,46 +575,66 @@ async def design_probe_for_case(case_id: str, db: Session = Depends(get_db)):
         for p in plans
     ]
     try:
-        result = await design_probe(
+        results = await design_probes(
             sharpened=case.sharpened or case.raw_problem,
             plans=plans_input,
         )
     except ProbeError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 
-    is_reprobe = existing is not None
-    probe = models.Probe(
-        id=str(_uuid_mod.uuid4()),
-        case_id=case.id,
-        type=result["type"],
-        target_metric=result["target_metric"],
-        cost=result["cost"],
-        time=result["time"],
-        note=result["note"],
-        steps=result.get("steps") or [],
-        duration=result.get("duration") or "",
-        decision_rule=result.get("decision_rule") or "",
-        status="designed",
-        created_at=datetime.now(tz=timezone.utc),
-    )
-    db.add(probe)
-    if not is_reprobe:
+    # Replace all existing probes (cascade delete via relationship assignment)
+    case.probes = []
+    db.flush()
+
+    now = datetime.now(tz=timezone.utc)
+    new_probes = []
+    for result in results:
+        probe = models.Probe(
+            id=str(_uuid_mod.uuid4()),
+            case_id=case.id,
+            type=result["type"],
+            target_metric=result["target_metric"],
+            cost=result["cost"],
+            time=result["time"],
+            note=result["note"],
+            steps=result.get("steps") or [],
+            duration=result.get("duration") or "",
+            decision_rule=result.get("decision_rule") or "",
+            horizon=result["horizon"],
+            status="designed",
+            created_at=now,
+        )
+        db.add(probe)
+        new_probes.append(probe)
+
+    if is_first_probe:
         case.stage = "probe"
     db.commit()
-    db.refresh(probe)
+    for probe in new_probes:
+        db.refresh(probe)
+
+    horizon_order = ("short", "mid", "long")
+    sorted_probes = sorted(new_probes, key=lambda p: horizon_order.index(p.horizon)
+                           if p.horizon in horizon_order else 99)
 
     return {
-        "id": probe.id,
-        "type": probe.type,
-        "target_metric": probe.target_metric or "",
-        "cost": probe.cost or "",
-        "time": probe.time or "",
-        "note": probe.note or "",
-        "steps": probe.steps if probe.steps is not None else [],
-        "duration": probe.duration or "",
-        "decision_rule": probe.decision_rule or "",
-        "status": probe.status,
-        "commander_spec": probe.commander_spec,
+        "probes": [
+            {
+                "id": p.id,
+                "type": p.type,
+                "target_metric": p.target_metric or "",
+                "cost": p.cost or "",
+                "time": p.time or "",
+                "note": p.note or "",
+                "steps": p.steps if p.steps is not None else [],
+                "duration": p.duration or "",
+                "decision_rule": p.decision_rule or "",
+                "horizon": p.horizon,
+                "status": p.status,
+                "commander_spec": p.commander_spec,
+            }
+            for p in sorted_probes
+        ]
     }
 
 

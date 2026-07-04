@@ -25,6 +25,7 @@ _SOURCE_KIND = ("book", "article", "youtube")
 _SUPPORT_STATUS = ("supports", "partial", "contradicts", "unverified")
 _PROBE_TYPE = ("measurement", "lab-test", "behaviour-experiment", "prototype")
 _PROBE_STATUS = ("designed", "running", "confirmed", "killed", "inconclusive")
+_PROBE_HORIZON = ("short", "mid", "long")
 _VERDICT_OUTCOME = ("confirmed", "killed", "inconclusive")
 
 
@@ -158,12 +159,16 @@ class Probe(Base):
         nullable=False,
         default="designed",
     )
+    horizon = Column(
+        Enum(*_PROBE_HORIZON, name="probe_horizon_enum"),
+        nullable=True,
+    )
     due_date = Column(Date)
     commander_spec = Column(Text)
     created_at = Column(TIMESTAMP(timezone=True))
 
     case = relationship("Case", back_populates="probes")
-    verdicts = relationship("Verdict", back_populates="probe")
+    verdicts = relationship("Verdict", back_populates="probe", passive_deletes=True)
 
 
 class Verdict(Base):

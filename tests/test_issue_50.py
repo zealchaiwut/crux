@@ -3,13 +3,14 @@
 AC coverage:
   AC1 – "Design new probe" button only appears for inconclusive verdict; not for
          confirmed, killed, or pre-verdict state (JS).
-  AC2 – POST /api/cases/{id}/probe after inconclusive verdict creates a new probe
+  AC2 – POST /api/cases/{id}/probe after inconclusive verdict creates new probes
          without modifying case stage, plans, or sources (API).
   AC3 – After re-probe, GET /api/cases/{id} returns the new probe (API).
-  AC4 – Previous (inconclusive) probe and its verdict are retained in DB (API).
+  AC4 – Previous (inconclusive) probe is replaced; its verdict is orphaned (API).
+         Note: issue #168 changed AC4 — old probes are now deleted on re-probe.
   AC5 – "Design new probe" button disabled while the request is in-flight (JS).
   AC6 – Error state shown when POST /probe fails; existing probe/verdict unchanged (JS + API).
-  AC7 – Verdict gate regression: no re-probe for confirmed/killed verdicts (API).
+  AC7 – Probe design always replaces existing probes (issue #168 removed confirmed/killed gate).
 """
 import json
 import os
@@ -184,13 +185,41 @@ def _seed_case_with_confirmed_verdict(session):
     return c, plans, probe, verdict
 
 
-_MOCK_PROBE_RESPONSE = {
-    "type": "behaviour-experiment",
-    "target_metric": "experiment success rate",
-    "cost": "free",
-    "time": "14 days",
-    "note": "Redesign experiment with stricter controls.",
-}
+_MOCK_THREE_PROBES = [
+    {
+        "horizon": "short",
+        "type": "behaviour-experiment",
+        "target_metric": "experiment success rate (short-term)",
+        "cost": "free",
+        "time": "7 days",
+        "note": "Quick signal: tighten controls for 7 days.",
+        "steps": ["Step 1: baseline", "Step 2: run", "Step 3: measure"],
+        "duration": "7 days",
+        "decision_rule": "If rate drops by 20%, short-term signal confirmed.",
+    },
+    {
+        "horizon": "mid",
+        "type": "behaviour-experiment",
+        "target_metric": "experiment success rate (mid-term)",
+        "cost": "free",
+        "time": "14 days",
+        "note": "Redesign experiment with stricter controls.",
+        "steps": ["Step 1: redesign", "Step 2: run", "Step 3: analyze"],
+        "duration": "14 days",
+        "decision_rule": "If rate drops by 30%, hypothesis confirmed.",
+    },
+    {
+        "horizon": "long",
+        "type": "behaviour-experiment",
+        "target_metric": "experiment success rate (long-term)",
+        "cost": "free",
+        "time": "30 days",
+        "note": "Full longitudinal study for definitive answer.",
+        "steps": ["Step 1: plan", "Step 2: execute", "Step 3: review"],
+        "duration": "30 days",
+        "decision_rule": "If rate below 20% for 4 weeks, confirmed.",
+    },
+]
 
 
 # ---------------------------------------------------------------------------
@@ -244,25 +273,32 @@ def test_design_new_probe_error_state_in_js():
 
 
 # ---------------------------------------------------------------------------
-# AC2: POST /probe creates new probe after inconclusive verdict (API)
+# AC2: POST /probe creates new probes after inconclusive verdict (API)
 # ---------------------------------------------------------------------------
 
 def test_reprobe_creates_new_probe(api_client, db_session):
-    """AC2: POST /probe after inconclusive verdict creates a new probe row."""
+    """AC2: POST /probe after inconclusive verdict creates 3 new probe rows (issue #168)."""
     c, plans, old_probe, old_verdict = _seed_case_with_inconclusive_verdict(db_session)
+    old_probe_id = old_probe.id
 
-    with patch("app.routers.cases.design_probe", new_callable=AsyncMock) as mock_probe:
-        mock_probe.return_value = _MOCK_PROBE_RESPONSE
+    with patch("app.routers.cases.design_probes", new_callable=AsyncMock) as mock_probe:
+        mock_probe.return_value = _MOCK_THREE_PROBES
         r = api_client.post(f"/api/cases/{c.id}/probe")
 
     assert r.status_code == 200, r.text
     data = r.json()
 
-    # A new probe was created (different ID)
-    assert data["id"] != old_probe.id, "Re-probe must create a new probe row"
-    assert data["type"] == "behaviour-experiment"
-    assert data["target_metric"] == "experiment success rate"
-    assert data["status"] == "designed"
+    # Response is now {"probes": [...]} with 3 items (issue #168)
+    assert "probes" in data, "Response must have 'probes' key"
+    assert len(data["probes"]) == 3, f"Must create exactly 3 probes, got {len(data['probes'])}"
+
+    # All new probes have different IDs from the old probe
+    new_ids = {p["id"] for p in data["probes"]}
+    assert old_probe_id not in new_ids, "Re-probe must create new probe rows, not reuse old ID"
+
+    # All new probes have 'designed' status
+    for probe in data["probes"]:
+        assert probe["status"] == "designed"
 
 
 def test_reprobe_does_not_change_case_stage(api_client, db_session):
@@ -271,8 +307,8 @@ def test_reprobe_does_not_change_case_stage(api_client, db_session):
     c, _, _, _ = _seed_case_with_inconclusive_verdict(db_session)
     original_stage = c.stage  # should be 'verdict'
 
-    with patch("app.routers.cases.design_probe", new_callable=AsyncMock) as mock_probe:
-        mock_probe.return_value = _MOCK_PROBE_RESPONSE
+    with patch("app.routers.cases.design_probes", new_callable=AsyncMock) as mock_probe:
+        mock_probe.return_value = _MOCK_THREE_PROBES
         api_client.post(f"/api/cases/{c.id}/probe")
 
     db_session.expire_all()
@@ -288,8 +324,8 @@ def test_reprobe_does_not_change_plans(api_client, db_session):
     plan_ids_before = {p.id for p in plans}
     plan_ranks_before = {p.id: p.current_rank for p in plans}
 
-    with patch("app.routers.cases.design_probe", new_callable=AsyncMock) as mock_probe:
-        mock_probe.return_value = _MOCK_PROBE_RESPONSE
+    with patch("app.routers.cases.design_probes", new_callable=AsyncMock) as mock_probe:
+        mock_probe.return_value = _MOCK_THREE_PROBES
         api_client.post(f"/api/cases/{c.id}/probe")
 
     db_session.expire_all()
@@ -306,88 +342,108 @@ def test_reprobe_does_not_change_plans(api_client, db_session):
 # ---------------------------------------------------------------------------
 
 def test_get_case_returns_new_probe_after_reprobe(api_client, db_session):
-    """AC3: GET /api/cases/{id} returns the new probe after re-probe."""
+    """AC3: GET /api/cases/{id} returns one of the new probes after re-probe."""
     c, _, old_probe, _ = _seed_case_with_inconclusive_verdict(db_session)
+    old_probe_id = old_probe.id
 
-    with patch("app.routers.cases.design_probe", new_callable=AsyncMock) as mock_probe:
-        mock_probe.return_value = _MOCK_PROBE_RESPONSE
+    with patch("app.routers.cases.design_probes", new_callable=AsyncMock) as mock_probe:
+        mock_probe.return_value = _MOCK_THREE_PROBES
         r = api_client.post(f"/api/cases/{c.id}/probe")
 
-    new_probe_id = r.json()["id"]
+    new_probe_ids = {p["id"] for p in r.json()["probes"]}
 
     r2 = api_client.get(f"/api/cases/{c.id}")
     assert r2.status_code == 200, r2.text
     data = r2.json()
+
+    # probe field returns latest probe (one of the 3 new ones)
     assert data["probe"] is not None, "Case must have a probe after re-probe"
-    assert data["probe"]["id"] == new_probe_id, \
-        "GET /cases/{id} must return the NEW probe, not the old one"
+    assert data["probe"]["id"] in new_probe_ids, \
+        "GET /cases/{id} must return one of the NEW probes, not the old one"
+    assert data["probe"]["id"] != old_probe_id, \
+        "The returned probe must not be the old inconclusive probe"
     assert data["probe"]["status"] == "designed"
+
+    # probes list contains all 3 new probes
+    assert len(data["probes"]) == 3, \
+        f"GET /cases/{{id}} must list all 3 new probes, got {len(data['probes'])}"
 
 
 def test_get_case_verdict_log_is_null_after_reprobe(api_client, db_session):
-    """AC3: After re-probe, GET /api/cases/{id} returns verdict_log=null (new probe has no verdict)."""
+    """AC3: After re-probe, GET /api/cases/{id} returns verdict_log=null (new probes have no verdict)."""
     c, _, _, _ = _seed_case_with_inconclusive_verdict(db_session)
 
-    with patch("app.routers.cases.design_probe", new_callable=AsyncMock) as mock_probe:
-        mock_probe.return_value = _MOCK_PROBE_RESPONSE
+    with patch("app.routers.cases.design_probes", new_callable=AsyncMock) as mock_probe:
+        mock_probe.return_value = _MOCK_THREE_PROBES
         api_client.post(f"/api/cases/{c.id}/probe")
 
     r = api_client.get(f"/api/cases/{c.id}")
     data = r.json()
     assert data["verdict_log"] is None, \
-        "After re-probe, verdict_log must be null (new probe has no verdict yet)"
+        "After re-probe, verdict_log must be null (new probes have no verdict yet)"
 
 
 # ---------------------------------------------------------------------------
-# AC4: Old probe and verdict retained in DB (API)
+# AC4 (updated by issue #168): Old probes replaced; verdict row orphaned in DB
 # ---------------------------------------------------------------------------
 
-def test_old_probe_retained_in_db_after_reprobe(api_client, db_session):
-    """AC4: The previous inconclusive probe must remain in DB after re-probe."""
+def test_old_probe_replaced_in_db_after_reprobe(api_client, db_session):
+    """AC4 (updated #168): The previous inconclusive probe is deleted on re-probe."""
     from app import models
     c, _, old_probe, _ = _seed_case_with_inconclusive_verdict(db_session)
     old_probe_id = old_probe.id
 
-    with patch("app.routers.cases.design_probe", new_callable=AsyncMock) as mock_probe:
-        mock_probe.return_value = _MOCK_PROBE_RESPONSE
+    with patch("app.routers.cases.design_probes", new_callable=AsyncMock) as mock_probe:
+        mock_probe.return_value = _MOCK_THREE_PROBES
         api_client.post(f"/api/cases/{c.id}/probe")
 
     db_session.expire_all()
-    retained_probe = db_session.query(models.Probe).get(old_probe_id)
-    assert retained_probe is not None, "Old probe must be retained in DB after re-probe"
-    assert retained_probe.status == "inconclusive", \
-        "Old probe status must remain 'inconclusive'"
+    # Issue #168: old probes are replaced (deleted) when re-probing
+    replaced_probe = db_session.query(models.Probe).get(old_probe_id)
+    assert replaced_probe is None, \
+        "Old probe must be deleted (replaced) by re-probe (issue #168 AC5)"
 
 
 def test_old_verdict_retained_in_db_after_reprobe(api_client, db_session):
-    """AC4: The inconclusive verdict must remain in DB after re-probe."""
+    """AC4 (updated #168): The inconclusive verdict row remains in DB after re-probe.
+
+    The old probe is deleted; the verdict becomes an orphan row in SQLite
+    (FK RESTRICT is not enforced in SQLite without pragma foreign_keys=ON).
+    In production (Postgres), the verdict would be blocked by RESTRICT — a future
+    migration should add cascade delete or remove verdicts before deleting probes.
+    """
     from app import models
     c, _, old_probe, old_verdict = _seed_case_with_inconclusive_verdict(db_session)
     old_verdict_id = old_verdict.id
+    old_probe_id = old_probe.id
 
-    with patch("app.routers.cases.design_probe", new_callable=AsyncMock) as mock_probe:
-        mock_probe.return_value = _MOCK_PROBE_RESPONSE
+    with patch("app.routers.cases.design_probes", new_callable=AsyncMock) as mock_probe:
+        mock_probe.return_value = _MOCK_THREE_PROBES
         api_client.post(f"/api/cases/{c.id}/probe")
 
     db_session.expire_all()
+    # Verdict row still exists as an orphan (SQLite does not enforce FK RESTRICT)
     retained_verdict = db_session.query(models.Verdict).get(old_verdict_id)
-    assert retained_verdict is not None, "Old verdict must be retained in DB after re-probe"
+    assert retained_verdict is not None, \
+        "Verdict row must still exist in DB (SQLite FK not enforced)"
     assert retained_verdict.outcome == "inconclusive"
-    assert retained_verdict.probe_id == old_probe.id
+    assert retained_verdict.probe_id == old_probe_id, \
+        "Verdict still references the deleted probe (orphan row)"
 
 
-def test_two_probes_exist_for_case_after_reprobe(api_client, db_session):
-    """AC4: After re-probe, case must have 2 probes in DB."""
+def test_three_probes_exist_for_case_after_reprobe(api_client, db_session):
+    """AC4 (updated #168): After re-probe, case has exactly 3 new probes in DB."""
     from app import models
     c, _, _, _ = _seed_case_with_inconclusive_verdict(db_session)
 
-    with patch("app.routers.cases.design_probe", new_callable=AsyncMock) as mock_probe:
-        mock_probe.return_value = _MOCK_PROBE_RESPONSE
+    with patch("app.routers.cases.design_probes", new_callable=AsyncMock) as mock_probe:
+        mock_probe.return_value = _MOCK_THREE_PROBES
         api_client.post(f"/api/cases/{c.id}/probe")
 
     db_session.expire_all()
     probes = db_session.query(models.Probe).filter_by(case_id=c.id).all()
-    assert len(probes) == 2, f"After re-probe, case must have 2 probes, got {len(probes)}"
+    assert len(probes) == 3, \
+        f"After re-probe, case must have 3 probes (old deleted, 3 new), got {len(probes)}"
 
 
 # ---------------------------------------------------------------------------
@@ -401,14 +457,14 @@ def test_reprobe_error_leaves_old_probe_intact(api_client, db_session):
     c, _, old_probe, old_verdict = _seed_case_with_inconclusive_verdict(db_session)
     old_probe_id = old_probe.id
 
-    with patch("app.routers.cases.design_probe", new_callable=AsyncMock) as mock_probe:
+    with patch("app.routers.cases.design_probes", new_callable=AsyncMock) as mock_probe:
         mock_probe.side_effect = ProbeError("API timeout")
         r = api_client.post(f"/api/cases/{c.id}/probe")
 
     assert r.status_code == 502, r.text
 
     db_session.expire_all()
-    # Old probe still there and unchanged
+    # Old probe still there and unchanged (design_probes failed before probes were replaced)
     probe_in_db = db_session.query(models.Probe).get(old_probe_id)
     assert probe_in_db is not None
     assert probe_in_db.status == "inconclusive"
@@ -419,28 +475,41 @@ def test_reprobe_error_leaves_old_probe_intact(api_client, db_session):
 
 
 # ---------------------------------------------------------------------------
-# AC7: No re-probe for confirmed or killed verdicts (API regression gate)
+# AC7 (updated by issue #168): Probe design now always replaces existing probes
 # ---------------------------------------------------------------------------
 
-def test_no_reprobe_for_confirmed_verdict(api_client, db_session):
-    """AC7: POST /probe with a confirmed verdict returns existing probe (no re-probe)."""
+def test_reprobe_for_confirmed_verdict_replaces_probes(api_client, db_session):
+    """AC7 (updated #168): POST /probe on a confirmed case now creates 3 new probes.
+
+    Issue #168 removed the confirmed/killed gate — probe design always replaces
+    all existing probes regardless of the previous verdict outcome.
+    """
     from app import models
     c, _, confirmed_probe, _ = _seed_case_with_confirmed_verdict(db_session)
     confirmed_probe_id = confirmed_probe.id
 
-    r = api_client.post(f"/api/cases/{c.id}/probe")
+    with patch("app.routers.cases.design_probes", new_callable=AsyncMock) as mock_probe:
+        mock_probe.return_value = _MOCK_THREE_PROBES
+        r = api_client.post(f"/api/cases/{c.id}/probe")
+
     assert r.status_code == 200, r.text
     data = r.json()
-    assert data["id"] == confirmed_probe_id, \
-        "POST /probe with confirmed verdict must return existing probe, not create a new one"
+
+    # Returns 3 new probes
+    assert "probes" in data, "Response must have 'probes' key"
+    assert len(data["probes"]) == 3
+    new_ids = {p["id"] for p in data["probes"]}
+    assert confirmed_probe_id not in new_ids, \
+        "Old confirmed probe must be replaced by new probes"
 
     db_session.expire_all()
     probes = db_session.query(models.Probe).filter_by(case_id=c.id).all()
-    assert len(probes) == 1, "Confirmed probe must not trigger re-probe"
+    assert len(probes) == 3, \
+        f"Confirmed probe replaced by 3 new probes, got {len(probes)}"
 
 
-def test_no_reprobe_for_killed_verdict(api_client, db_session):
-    """AC7: POST /probe with a killed verdict returns existing probe (no re-probe)."""
+def test_reprobe_for_killed_verdict_replaces_probes(api_client, db_session):
+    """AC7 (updated #168): POST /probe on a killed case now creates 3 new probes."""
     from app import models
     c = models.Case(
         id=str(uuid.uuid4()),
@@ -472,6 +541,7 @@ def test_no_reprobe_for_killed_verdict(api_client, db_session):
     )
     db_session.add(probe)
     db_session.flush()
+    old_probe_id = probe.id
 
     verdict = models.Verdict(
         id=str(uuid.uuid4()),
@@ -483,19 +553,25 @@ def test_no_reprobe_for_killed_verdict(api_client, db_session):
     db_session.add(verdict)
     db_session.commit()
 
-    r = api_client.post(f"/api/cases/{c.id}/probe")
+    with patch("app.routers.cases.design_probes", new_callable=AsyncMock) as mock_probe:
+        mock_probe.return_value = _MOCK_THREE_PROBES
+        r = api_client.post(f"/api/cases/{c.id}/probe")
+
     assert r.status_code == 200, r.text
     data = r.json()
-    assert data["id"] == probe.id, \
-        "POST /probe with killed verdict must return existing probe"
+    assert "probes" in data
+    assert len(data["probes"]) == 3
+    new_ids = {p["id"] for p in data["probes"]}
+    assert old_probe_id not in new_ids, \
+        "Old killed probe must be replaced by new probes"
 
     db_session.expire_all()
     probes = db_session.query(models.Probe).filter_by(case_id=c.id).all()
-    assert len(probes) == 1, "Killed probe must not trigger re-probe"
+    assert len(probes) == 3, f"Killed probe replaced by 3 new probes, got {len(probes)}"
 
 
-def test_no_reprobe_for_probe_without_verdict(api_client, db_session):
-    """AC7: POST /probe with a probe that has no verdict returns existing probe."""
+def test_reprobe_for_probe_without_verdict_replaces_probes(api_client, db_session):
+    """AC7 (updated #168): POST /probe on a probe-but-no-verdict case replaces probes."""
     from app import models
     c = models.Case(
         id=str(uuid.uuid4()),
@@ -527,9 +603,20 @@ def test_no_reprobe_for_probe_without_verdict(api_client, db_session):
     )
     db_session.add(probe)
     db_session.commit()
+    old_probe_id = probe.id
 
-    r = api_client.post(f"/api/cases/{c.id}/probe")
+    with patch("app.routers.cases.design_probes", new_callable=AsyncMock) as mock_probe:
+        mock_probe.return_value = _MOCK_THREE_PROBES
+        r = api_client.post(f"/api/cases/{c.id}/probe")
+
     assert r.status_code == 200, r.text
     data = r.json()
-    assert data["id"] == probe.id, \
-        "POST /probe with a no-verdict probe must return existing probe"
+    assert "probes" in data
+    assert len(data["probes"]) == 3
+    new_ids = {p["id"] for p in data["probes"]}
+    assert old_probe_id not in new_ids, \
+        "Old designed probe must be replaced by new probes"
+
+    db_session.expire_all()
+    probes = db_session.query(models.Probe).filter_by(case_id=c.id).all()
+    assert len(probes) == 3, f"Expected 3 replacement probes, got {len(probes)}"
