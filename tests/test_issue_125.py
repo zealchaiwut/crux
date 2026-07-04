@@ -8,8 +8,6 @@ fallback/UI mapping but is no longer used in API response serialization
 AC: A human-readable comment must appear adjacent to the _STAGE_ORDER
     definition that explains its retained purpose.
 """
-import ast
-import inspect
 import pathlib
 
 
