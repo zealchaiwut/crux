@@ -1019,14 +1019,14 @@ function SourceChip({
   }
 
   async function handleAccept() {
-    setAccepted(true);
     if (!id) return;
     try {
       const resp = await fetch(`/api/sources/${id}/accept-status`, { method: "POST" });
       const data = await resp.json().catch(() => ({}));
-      if (!resp.ok) return;
+      if (!resp.ok) { setAccepted(false); return; }
       _applyUpdate(data);
-    } catch (e) { console.warn("Accept status failed:", e); }
+      setAccepted(true);
+    } catch (e) { setAccepted(false); console.warn("Accept status failed:", e); }
   }
 
   // Collapsed chip — button so it is keyboard-focusable by default
