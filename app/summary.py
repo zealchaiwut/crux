@@ -237,7 +237,7 @@ async def generate_summary(case_data: dict) -> str:
     if contradiction_section:
         data = json.loads(validated_json)
         data["contradicted_evidence"] = contradiction_section
-        return json.dumps({k: data[k] for k in list(data)})
+        return json.dumps(data)
 
     return validated_json
 
