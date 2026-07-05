@@ -26,19 +26,19 @@ logger = logging.getLogger(__name__)
 
 _YT_PATTERN = re.compile(r"(youtube\.com|youtu\.be)", re.IGNORECASE)
 
-SUPPORT_STATUSES = frozenset({"supports", "partially_supports", "contradicts", "unverified"})
+SUPPORT_STATUSES = frozenset({"supports", "partial", "contradicts", "unverified"})
 
 _SYSTEM_PROMPT = (
     "You are a fact-checking assistant. Analyze whether the provided source content "
     "supports, partially supports, contradicts, or is unrelated to the stated claim.\n\n"
     "Respond with ONLY a JSON object in this exact format:\n"
-    '{"support_status": "<supports|partially_supports|contradicts|unverified>", '
+    '{"support_status": "<supports|partial|contradicts|unverified>", '
     '"support_rationale": "<brief explanation citing specific content from the source>"}\n\n'
     "Definitions:\n"
-    "  supports          — content clearly and directly validates the claim\n"
-    "  partially_supports — content addresses some but not all aspects, or gives weak/indirect support\n"
-    "  contradicts       — content clearly refutes or is inconsistent with the claim\n"
-    "  unverified        — content is unrelated, insufficient, or the relationship cannot be determined"
+    "  supports    — content clearly and directly validates the claim\n"
+    "  partial     — content addresses some but not all aspects, or gives weak/indirect support\n"
+    "  contradicts — content clearly refutes or is inconsistent with the claim\n"
+    "  unverified  — content is unrelated, insufficient, or the relationship cannot be determined"
 )
 
 
@@ -100,7 +100,7 @@ def verify_source(
 
     Returns:
         ``{"support_status": str, "support_rationale": str}`` where ``support_status``
-        is one of ``supports``, ``partially_supports``, ``contradicts``, ``unverified``.
+        is one of ``supports``, ``partial``, ``contradicts``, ``unverified``.
     """
     if classify_fn is None:
         classify_fn = _default_classify
