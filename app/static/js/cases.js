@@ -2532,7 +2532,7 @@ function PlanCard({
           )}
       </div>
 
-      {/* Rationale — shown only when non-empty */}
+      {/* Rationale: shown only when non-empty to avoid empty containers */}
       {rationaleText && (
         <div
           data-testid="plan-rationale"
