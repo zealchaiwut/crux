@@ -3,6 +3,12 @@
 Per-sprint changelog for crux. Entries are written by the documentor when a
 sprint finishes. Dated per-sprint files live under [docs/changelog/](docs/changelog/).
 
+## Sprint 56.1 (2026-07-05)
+
+- #125: [follow-up] Add clarifying comment to _STAGE_ORDER definition
+- #141: [follow-up] Improve PlanCard rationale comment in cases.js
+- #161: [follow-up] Align source_verifier.py status vocabulary with Source model enum (partially_supports vs partial)
+
 ## Sprint 56 (2026-07-05)
 
 - #124: [follow-up] Centralize verdict validation logic
