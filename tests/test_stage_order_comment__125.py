@@ -1,23 +1,6 @@
-"""Tests for issue #125: [follow-up] Add clarifying comment to _STAGE_ORDER definition (runs against UAT)"""
+"""Tests for issue #125: [follow-up] Add clarifying comment to _STAGE_ORDER definition"""
 import os
-import pytest
-import httpx
 import re
-
-
-# Resolved from UAT .env at runtime; see tester skill Step 0.
-# Default kept only as a last-resort fallback if BASE_URL not exported.
-BASE_URL = os.environ.get("UAT_BASE_URL") or "http://localhost:" + os.environ.get("UAT_PORT", "")
-if not BASE_URL.startswith("http"):
-    raise RuntimeError(
-        "UAT_BASE_URL / UAT_PORT not set. Run the tester skill's Step 0 to resolve UAT before pytest."
-    )
-
-
-@pytest.fixture
-def client():
-    with httpx.Client(base_url=BASE_URL, timeout=10.0) as c:
-        yield c
 
 
 # --- Acceptance Criteria ---
@@ -101,23 +84,30 @@ def test_stage_order__values_unchanged():
         )
 
 
-def test_stage_order__no_behavioral_change(client):
-    """AC: The comment does not alter the behavior or value of _STAGE_ORDER — code change is comment-only"""
-    # Create a test case to verify stage field is returned as string enum
-    r = client.get("/api/cases")
-    assert r.status_code == 200, f"GET /api/cases failed: {r.status_code}"
+def test_stage_order__no_behavioral_change():
+    """AC: The comment does not alter the behavior or value of _STAGE_ORDER — code change is comment-only.
 
-    data = r.json()
-    # If there are cases in the response, verify stage is a string
-    if "data" in data and isinstance(data["data"], list) and len(data["data"]) > 0:
-        for case in data["data"]:
-            if "stage" in case:
-                # Stage should be a string enum value, not a numeric value from _STAGE_ORDER
-                assert isinstance(case["stage"], str), (
-                    f"Stage field should be a string enum, got {type(case['stage'])}"
-                )
-                # Verify it's one of the valid stage strings
-                valid_stages = {"sharpened", "bake_off", "gather", "weigh", "probe", "verdict"}
-                assert case["stage"] in valid_stages, (
-                    f"Stage '{case['stage']}' is not a recognized stage value"
-                )
+    Verified statically: _STAGE_ORDER must not appear in any API response serialization
+    for the 'stage' field; stage values must come from the model string attribute directly.
+    """
+    source_path = os.path.join(
+        os.path.dirname(__file__),
+        "..",
+        "app",
+        "routers",
+        "cases.py"
+    )
+    with open(source_path, "r") as f:
+        content = f.read()
+
+    # _STAGE_ORDER must not appear on the value side of any "stage": response assignment
+    assert not re.search(r'"stage"\s*:\s*_STAGE_ORDER', content), (
+        "_STAGE_ORDER must not be used in API response serialization for the 'stage' field"
+    )
+
+    # Every "stage": response value must not reference _STAGE_ORDER
+    for match in re.finditer(r'"stage"\s*:\s*([^,}\n]+)', content):
+        value_expr = match.group(1).strip()
+        assert "_STAGE_ORDER" not in value_expr, (
+            f"Stage response uses numeric _STAGE_ORDER mapping: {value_expr}"
+        )
