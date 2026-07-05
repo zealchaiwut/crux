@@ -32,6 +32,13 @@ def _latest_probe(probes):
 
 _VERDICTED_STATUSES = {"confirmed", "killed", "inconclusive"}
 
+_HORIZON_ORDER = ("short", "mid", "long")
+
+
+def _horizon_sort_key(probe) -> int:
+    """Return a numeric sort key for probe horizon: short=0, mid=1, long=2, other=99."""
+    return _HORIZON_ORDER.index(probe.horizon) if probe.horizon in _HORIZON_ORDER else 99
+
 
 def compute_action_plan_state(probes) -> str:
     """Return 'locked', 'provisional', or 'final' based on probe verdict states.
@@ -53,6 +60,8 @@ def compute_action_plan_state(probes) -> str:
 
 router = APIRouter(prefix="/api")
 
+# Retained for legacy fallback and UI mapping only — not used in API response
+# serialization (stage is returned as a string enum value since issue #75).
 _STAGE_ORDER = {
     "sharpened": 0,
     "bake_off": 1,
@@ -78,6 +87,18 @@ _VALID_STAGES = {"sharpened", "bake_off", "gather", "weigh", "probe", "verdict"}
 _VALID_VERDICT_PARAMS = {"confirmed", "killed", "inconclusive", "open"}
 
 
+def _validate_query_param(name: str, value: str | None, valid: set) -> None:
+    """Raise HTTPException(400) if value is not None and not in valid."""
+    if value is not None and value not in valid:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Invalid {name} value {value!r}. "
+                f"Valid values: {', '.join(sorted(valid))}"
+            ),
+        )
+
+
 @router.get("/cases")
 def list_cases(
     db: Session = Depends(get_db),
@@ -85,23 +106,8 @@ def list_cases(
     stage: str | None = Query(default=None),
     verdict: str | None = Query(default=None),
 ):
-    if stage is not None and stage not in _VALID_STAGES:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"Invalid stage value {stage!r}. "
-                f"Valid values: {', '.join(sorted(_VALID_STAGES))}"
-            ),
-        )
-
-    if verdict is not None and verdict not in _VALID_VERDICT_PARAMS:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"Invalid verdict value {verdict!r}. "
-                f"Valid values: {', '.join(sorted(_VALID_VERDICT_PARAMS))}"
-            ),
-        )
+    _validate_query_param("stage", stage, _VALID_STAGES)
+    _validate_query_param("verdict", verdict, _VALID_VERDICT_PARAMS)
 
     query = db.query(models.Case).options(
         joinedload(models.Case.plans),
@@ -283,8 +289,7 @@ def get_case(case_id: str, db: Session = Depends(get_db)):
             "horizon": p.horizon,
             "commander_spec": p.commander_spec,
         }
-        for p in sorted(case.probes, key=lambda p: ("short", "mid", "long").index(p.horizon)
-                         if p.horizon in ("short", "mid", "long") else 99)
+        for p in sorted(case.probes, key=_horizon_sort_key)
     ]
 
     verdict_log = None
@@ -550,7 +555,7 @@ async def rerank_case(case_id: str, body: RerankRequest, db: Session = Depends(g
         if item:
             plan.current_rank = item["rank"]
             plan.standing = item["standing"]
-            plan.rationale = item.get("rationale") or None
+            plan.rationale = item.get("rationale") or None  # Weigh may return empty string; treat as NULL per AC
 
     case.weigh_context = body.context
     case.stage = "weigh"
@@ -642,9 +647,7 @@ async def design_probe_for_case(case_id: str, db: Session = Depends(get_db)):
     for probe in new_probes:
         db.refresh(probe)
 
-    horizon_order = ("short", "mid", "long")
-    sorted_probes = sorted(new_probes, key=lambda p: horizon_order.index(p.horizon)
-                           if p.horizon in horizon_order else 99)
+    sorted_probes = sorted(new_probes, key=_horizon_sort_key)
 
     return {
         "probes": [
