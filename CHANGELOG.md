@@ -3,6 +3,15 @@
 Per-sprint changelog for crux. Entries are written by the documentor when a
 sprint finishes. Dated per-sprint files live under [docs/changelog/](docs/changelog/).
 
+## Sprint 58 (2026-07-06)
+
+- #189: Add Groq as a switchable LLM provider
+- #190: Route judgment stages to provider with structured outputs
+- #191: Route bulk pipeline stages to CRUX_BULK_MODEL
+- #192: Wire Groq token spend into USD budget tracker
+- #193: Add Groq regression gate for known-deficit test case
+- #160: [follow-up] Use SQLAlchemy bindparams instead of f-string in SQL query in test_issue_153.py
+
 ## Sprint 54 (2026-06-29)
 
 - #153: Add source-verification fields to Source model

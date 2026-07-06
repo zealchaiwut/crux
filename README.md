@@ -72,7 +72,19 @@ DATABASE_URL=<Neon Postgres connection string>
 ANTHROPIC_API_KEY=<Claude API key>          # needed for related-case embeddings, and for the optional "Anthropic API" provider
 EMBEDDING_MODEL=claude-haiku-4-5-20251001   # model used for related-case embeddings (issue #68)
 VERIFIER_ENGINE=stub                        # verification backend: stub (default, dev/testing only) or ai (issue #115)
+
+# LLM provider selection (issue #189) — default unset, uses the in-app Settings toggle
+CRUX_LLM_PROVIDER=groq                       # one of: groq | anthropic_api | claude_cli (issue #189)
+GROQ_API_KEY=<Groq API key>                  # required when CRUX_LLM_PROVIDER=groq; from console.groq.com (issue #189)
+CRUX_JUDGMENT_MODEL=openai/gpt-oss-120b      # Groq model for judgment stages: sharpen, plans, weigh, probe, summary (issues #189, #190)
+CRUX_BULK_MODEL=llama-3.1-8b-instant         # Groq model for high-volume bulk stages: content summary, dedup, candidate summarization (issue #191)
 ```
+
+When `CRUX_LLM_PROVIDER=groq`, the Groq (OpenAI-compatible) API is used exclusively:
+judgment stages use structured outputs (`response_format` JSON schema) via
+`CRUX_JUDGMENT_MODEL`, and bulk stages always route to `CRUX_BULK_MODEL`. Groq token
+spend is priced from per-model rates and counted against the same USD budget as the
+Anthropic API (issue #192).
 
 After migrating an existing database, backfill embeddings for pre-existing cases:
 
