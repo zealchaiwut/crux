@@ -229,6 +229,8 @@ def _api_complete_sync(system: str, user: str, model: str | None) -> tuple[str, 
 class ClaudeCLIProvider:
     """Provider that dispatches to the local ``claude -p`` CLI subprocess."""
 
+    supports_structured_output: bool = False
+
     async def complete(self, system: str, user: str, model: str | None = None) -> str:
         return await _cli_complete(system, user, model)
 
@@ -238,6 +240,8 @@ class ClaudeCLIProvider:
 
 class AnthropicAPIProvider:
     """Provider that calls the Anthropic HTTP API directly."""
+
+    supports_structured_output: bool = False
 
     async def complete(self, system: str, user: str, model: str | None = None) -> str:
         text, cost = await _api_complete(system, user, model)

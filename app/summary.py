@@ -1,4 +1,4 @@
-"""Case summary generation using Claude.
+"""Case summary generation using the configured LLM provider.
 
 Provides two interfaces:
 
@@ -16,6 +16,7 @@ persistence and caching.
 import json
 
 from app.claude_cli import ClaudeCLIError, complete
+from app.llm_providers import call_stage
 
 _MODEL = "claude-haiku-4-5-20251001"
 
@@ -56,8 +57,22 @@ Rules:
 """
 
 
+_SUMMARY_SCHEMA_NAME = "summary_output"
+_SUMMARY_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "problem_statement": {"type": "string"},
+        "option_ranking": {"type": "string"},
+        "recommended_plan": {"type": "string"},
+        "probe_plan": {"type": "string"},
+    },
+    "required": ["problem_statement", "option_ranking", "recommended_plan", "probe_plan"],
+    "additionalProperties": False,
+}
+
+
 class SummaryError(Exception):
-    """Raised when Claude fails to return a usable summary."""
+    """Raised when the LLM call fails or returns a unusable summary."""
 
 
 def _build_ranking_text(ranking: dict) -> str:
@@ -202,7 +217,7 @@ async def generate_summary(case_data: dict) -> str:
         recommended_plan, probe_plan.
 
     Raises:
-        SummaryError: if the Claude call fails or the response is unparseable.
+        SummaryError: if the LLM call fails or the response is unparseable.
     """
     sharpened = case_data.get("sharpened") or case_data.get("raw_problem", "")
     plans = case_data.get("plans") or []
@@ -219,11 +234,11 @@ async def generate_summary(case_data: dict) -> str:
     )
 
     try:
-        raw = await complete(_SYSTEM, user_message, _MODEL)
-    except ClaudeCLIError as exc:
-        raise SummaryError(f"Claude call failed: {exc}") from exc
+        data = await call_stage(_SYSTEM, user_message, _MODEL, _SUMMARY_SCHEMA_NAME, _SUMMARY_JSON_SCHEMA)
+    except Exception as exc:
+        raise SummaryError(f"LLM call failed: {exc}") from exc
 
-    validated_json = _parse_and_validate(raw)
+    validated_json = _parse_and_validate_dict(data)
 
     ranked_plans = [
         {
@@ -235,9 +250,9 @@ async def generate_summary(case_data: dict) -> str:
     ]
     contradiction_section = build_contradiction_section(ranked_plans)
     if contradiction_section:
-        data = json.loads(validated_json)
-        data["contradicted_evidence"] = contradiction_section
-        return json.dumps({k: data[k] for k in list(data)})
+        parsed = json.loads(validated_json)
+        parsed["contradicted_evidence"] = contradiction_section
+        return json.dumps({k: parsed[k] for k in list(parsed)})
 
     return validated_json
 
@@ -277,9 +292,14 @@ def _parse_and_validate(raw: str) -> str:
         data = json.loads(raw)
     except json.JSONDecodeError as exc:
         raise SummaryError(
-            f"Claude returned non-JSON response: {raw[:200]!r}"
+            f"LLM returned non-JSON response: {raw[:200]!r}"
         ) from exc
 
+    return _parse_and_validate_dict(data)
+
+
+def _parse_and_validate_dict(data: dict) -> str:
+    """Validate a parsed summary dict and return a JSON-encoded string of required fields."""
     required = ("problem_statement", "option_ranking", "recommended_plan", "probe_plan")
     missing = [k for k in required if not data.get(k)]
     if missing:

@@ -9,7 +9,6 @@ AC coverage:
   AC6 – Existing plan fields (rank, score, etc.) are unaffected
   AC7 – Unit tests cover happy path and two failure paths (missing field, blank value)
 """
-import json
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -85,8 +84,8 @@ async def test_rerank_plans_accepts_valid_rationale():
     """AC7 happy path: rerank_plans returns plans when rationale is present and non-empty."""
     from app.weigh import rerank_plans
 
-    with patch("app.weigh.complete", new_callable=AsyncMock,
-               return_value=json.dumps(_VALID_RESULT)):
+    with patch("app.weigh.call_stage", new_callable=AsyncMock,
+               return_value=_VALID_RESULT):
         result = await rerank_plans("sharpened problem", _PLANS, "some context")
 
     assert len(result) == 2
@@ -104,8 +103,8 @@ async def test_rerank_plans_raises_on_missing_rationale():
     """AC4: rerank_plans raises WeighError (or ValueError) when rationale field is absent."""
     from app.weigh import rerank_plans, WeighError
 
-    with patch("app.weigh.complete", new_callable=AsyncMock,
-               return_value=json.dumps(_RESULT_MISSING_RATIONALE)):
+    with patch("app.weigh.call_stage", new_callable=AsyncMock,
+               return_value=_RESULT_MISSING_RATIONALE):
         with pytest.raises((WeighError, ValueError)):
             await rerank_plans("sharpened problem", _PLANS, "some context")
 
@@ -119,8 +118,8 @@ async def test_rerank_plans_raises_on_blank_rationale():
     """AC5: rerank_plans raises WeighError (or ValueError) when rationale is empty string."""
     from app.weigh import rerank_plans, WeighError
 
-    with patch("app.weigh.complete", new_callable=AsyncMock,
-               return_value=json.dumps(_RESULT_BLANK_RATIONALE)):
+    with patch("app.weigh.call_stage", new_callable=AsyncMock,
+               return_value=_RESULT_BLANK_RATIONALE):
         with pytest.raises((WeighError, ValueError)):
             await rerank_plans("sharpened problem", _PLANS, "some context")
 
@@ -130,8 +129,8 @@ async def test_rerank_plans_raises_on_whitespace_rationale():
     """AC5: rerank_plans raises WeighError (or ValueError) when rationale is whitespace-only."""
     from app.weigh import rerank_plans, WeighError
 
-    with patch("app.weigh.complete", new_callable=AsyncMock,
-               return_value=json.dumps(_RESULT_WHITESPACE_RATIONALE)):
+    with patch("app.weigh.call_stage", new_callable=AsyncMock,
+               return_value=_RESULT_WHITESPACE_RATIONALE):
         with pytest.raises((WeighError, ValueError)):
             await rerank_plans("sharpened problem", _PLANS, "some context")
 
@@ -145,8 +144,8 @@ async def test_rerank_plans_existing_fields_intact():
     """AC6: label, rank, and standing fields are still present and valid in output."""
     from app.weigh import rerank_plans
 
-    with patch("app.weigh.complete", new_callable=AsyncMock,
-               return_value=json.dumps(_VALID_RESULT)):
+    with patch("app.weigh.call_stage", new_callable=AsyncMock,
+               return_value=_VALID_RESULT):
         result = await rerank_plans("sharpened problem", _PLANS, "some context")
 
     for item in result:
