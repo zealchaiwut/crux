@@ -12,8 +12,6 @@ AC coverage:
 import os
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 
 # ============================================================================
 # Test AC1: content_summary uses CRUX_BULK_MODEL
