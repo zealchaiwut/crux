@@ -3,9 +3,6 @@
 PRODUCT.md §9: "LLM: Claude API for the stage prompts (sharpen, plans, weigh, probe design)."
 Stage 4 (probe): leading Plan(s) → three probe designs, one per horizon (short/mid/long).
 """
-import json
-
-from app.claude_cli import ClaudeCLIError, complete
 from app.llm_providers import call_stage
 
 _MODEL = "claude-haiku-4-5-20251001"
@@ -104,19 +101,52 @@ _SYSTEM_THREE = (
     "- Be honest: if the right answer is a lab test, say 'lab-test' and direct the user to see a professional.\n"
     "- Provide 3–6 concrete, ordered steps per probe.\n"
     "- State clear decision rules with confirmatory AND kill conditions.\n\n"
-    "Return ONLY a JSON array of exactly three objects — no markdown fences, no commentary.\n"
-    "Each object must have these fields:\n"
-    '  "horizon": "short" | "mid" | "long"\n'
-    '  "type": "<measurement|lab-test|behaviour-experiment|prototype>"\n'
-    '  "target_metric": "<the one metric to measure>"\n'
-    '  "cost": "<cost estimate>"\n'
-    '  "time": "<time estimate>"\n'
-    '  "note": "<brief honest instruction>"\n'
-    '  "steps": ["<step 1>", "<step 2>", ...]  (3–6 ordered action steps)\n'
-    '  "duration": "<how long to run this probe>"\n'
-    '  "decision_rule": "<if X ≥ Y → proceed; if X < Y → discard>"\n'
+    "Return ONLY a JSON object — no markdown fences, no commentary — with exactly one field:\n"
+    '  "probes": an array of exactly three objects, each with these fields:\n'
+    '    "horizon": "short" | "mid" | "long"\n'
+    '    "type": "<measurement|lab-test|behaviour-experiment|prototype>"\n'
+    '    "target_metric": "<the one metric to measure>"\n'
+    '    "cost": "<cost estimate>"\n'
+    '    "time": "<time estimate>"\n'
+    '    "note": "<brief honest instruction>"\n'
+    '    "steps": ["<step 1>", "<step 2>", ...]  (3–6 ordered action steps)\n'
+    '    "duration": "<how long to run this probe>"\n'
+    '    "decision_rule": "<if X ≥ Y → proceed; if X < Y → discard>"\n'
     "Order the array: short first, mid second, long third.\n"
 )
+
+_SCHEMA_NAME_THREE = "probe_horizons_output"
+_JSON_SCHEMA_THREE = {
+    "type": "object",
+    "properties": {
+        "probes": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "items": {
+                "type": "object",
+                "properties": {
+                    "horizon": {"type": "string"},
+                    "type": {"type": "string"},
+                    "target_metric": {"type": "string"},
+                    "cost": {"type": "string"},
+                    "time": {"type": "string"},
+                    "note": {"type": "string"},
+                    "steps": {"type": "array", "items": {"type": "string"}},
+                    "duration": {"type": "string"},
+                    "decision_rule": {"type": "string"},
+                },
+                "required": [
+                    "horizon", "type", "target_metric", "cost", "time",
+                    "note", "steps", "duration", "decision_rule",
+                ],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["probes"],
+    "additionalProperties": False,
+}
 
 _VALID_HORIZONS = {"short", "mid", "long"}
 
@@ -145,14 +175,10 @@ def _validate_horizon_probe(data: dict, horizon: str) -> dict:
 
 
 async def design_probes(sharpened: str, plans: list[dict]) -> list[dict]:
-    """Call Claude API to design three probes (short/mid/long) for the leading Plan(s).
+    """Call the judgment model to design three probes (short/mid/long) for the leading Plan(s).
 
     Returns a list of exactly three dicts, each with keys: horizon, type, target_metric,
     cost, time, note, steps, duration, decision_rule.
-
-    NOTE: not yet routed through app.llm_providers.call_stage (issue #190 landed on a
-    branch cut before this function existed) — still calls app.claude_cli.complete
-    directly. See follow-up ticket to bring this in line with design_probe() below.
     """
     plans_text = "\n".join(
         f"Plan {p['label']} (rank {p.get('current_rank', '?')}): "
@@ -166,24 +192,26 @@ async def design_probes(sharpened: str, plans: list[dict]) -> list[dict]:
     )
 
     try:
-        text = await complete(_SYSTEM_THREE, user_message, _MODEL)
-    except ClaudeCLIError as exc:
-        raise ProbeError(f"Claude call failed: {exc}") from exc
+        data = await call_stage(_SYSTEM_THREE, user_message, _MODEL, _SCHEMA_NAME_THREE, _JSON_SCHEMA_THREE)
+    except Exception as exc:
+        raise ProbeError(f"LLM call failed: {exc}") from exc
 
     try:
-        data = json.loads(text)
-        if not isinstance(data, list):
-            raise ValueError(f"expected a JSON array, got {type(data).__name__}")
-        if len(data) != 3:
-            raise ValueError(f"expected exactly 3 probe objects, got {len(data)}")
-        horizons_in_response = [item.get("horizon") for item in data]
+        if not isinstance(data, dict) or "probes" not in data:
+            raise ValueError(f"expected an object with a 'probes' array, got {type(data).__name__}")
+        items = data["probes"]
+        if not isinstance(items, list):
+            raise ValueError(f"expected 'probes' to be a JSON array, got {type(items).__name__}")
+        if len(items) != 3:
+            raise ValueError(f"expected exactly 3 probe objects, got {len(items)}")
+        horizons_in_response = [item.get("horizon") for item in items]
         if set(horizons_in_response) != _VALID_HORIZONS:
             raise ValueError(
                 f"expected horizons {_VALID_HORIZONS}, got {set(horizons_in_response)}"
             )
-        return [_validate_horizon_probe(item, item["horizon"]) for item in data]
-    except (KeyError, IndexError, ValueError, json.JSONDecodeError) as exc:
-        raise ProbeError(f"Failed to parse Claude response: {exc}") from exc
+        return [_validate_horizon_probe(item, item["horizon"]) for item in items]
+    except (KeyError, IndexError, ValueError) as exc:
+        raise ProbeError(f"Failed to validate response: {exc}") from exc
 
 
 async def design_probe(sharpened: str, plans: list[dict]) -> dict:

@@ -13,11 +13,21 @@ AC coverage:
 import json
 import os
 import uuid
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 os.environ.setdefault("AUTH_SECRET", "test_auth_secret_12345678901")
+
+
+def _mock_probes_provider(probes_list):
+    """Mock provider (issue #199): design_probes now routes through call_stage,
+    which expects a text-completion response wrapped as {"probes": [...]}."""
+    p = MagicMock()
+    p.supports_structured_output = False
+    p.complete = AsyncMock(return_value=json.dumps({"probes": probes_list}))
+    p.complete_structured = AsyncMock()
+    return p
 
 
 # ---------------------------------------------------------------------------
@@ -367,8 +377,8 @@ def test_design_probes_returns_three(db_session):
     """AC7: design_probes service must return exactly 3 probe dicts."""
     from app.probe import design_probes
 
-    mock_text = json.dumps(_MOCK_THREE_PROBES)
-    with patch("app.probe.complete", new_callable=AsyncMock, return_value=mock_text):
+    provider = _mock_probes_provider(_MOCK_THREE_PROBES)
+    with patch("app.llm_providers.get_provider", return_value=provider):
         import asyncio
         result = asyncio.run(
             design_probes("Test problem", [{"label": "A", "name": "Plan A",
@@ -381,8 +391,8 @@ def test_design_probes_has_all_horizons(db_session):
     """AC7: design_probes returns probes with horizons short, mid, and long."""
     from app.probe import design_probes
 
-    mock_text = json.dumps(_MOCK_THREE_PROBES)
-    with patch("app.probe.complete", new_callable=AsyncMock, return_value=mock_text):
+    provider = _mock_probes_provider(_MOCK_THREE_PROBES)
+    with patch("app.llm_providers.get_provider", return_value=provider):
         import asyncio
         result = asyncio.run(
             design_probes("Test problem", [{"label": "A", "name": "Plan A",
@@ -424,8 +434,8 @@ def test_design_probes_fields_differ(db_session):
     """AC8: design_probes service output has distinct fields across horizons."""
     from app.probe import design_probes
 
-    mock_text = json.dumps(_MOCK_THREE_PROBES)
-    with patch("app.probe.complete", new_callable=AsyncMock, return_value=mock_text):
+    provider = _mock_probes_provider(_MOCK_THREE_PROBES)
+    with patch("app.llm_providers.get_provider", return_value=provider):
         import asyncio
         result = asyncio.run(
             design_probes("Test problem", [{"label": "A", "name": "Plan A",
