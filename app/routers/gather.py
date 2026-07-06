@@ -335,9 +335,9 @@ def gather_plan_by_id(plan_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/gather/{plan_id}/suggest")
-def suggest_plan_sources_alias(plan_id: str, db: Session = Depends(get_db)):
+async def suggest_plan_sources_alias(plan_id: str, db: Session = Depends(get_db)):
     """Frontend alias for suggest_plan_sources; keeps /api/plans out of the SPA JS bundle."""
-    return suggest_plan_sources(plan_id, db)
+    return await suggest_plan_sources(plan_id, db)
 
 
 # ---------------------------------------------------------------------------
