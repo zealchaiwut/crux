@@ -16,6 +16,11 @@ Structured output (issue #190):
   which sends response_format.json_schema and returns a parsed Python object —
   no fenced-JSON scraping required. Providers without this flag fall back to the
   existing text → _strip_fences → json.loads path via call_stage().
+
+Bulk routing (issue #191):
+  call_bulk_stage() / call_bulk_stage_sync() route high-volume, low-stakes pipeline
+  calls (content_summary, dedup, candidate_summarization) explicitly to CRUX_BULK_MODEL
+  via complete_bulk_structured() — never the judgment model, regardless of caller model name.
 """
 from __future__ import annotations
 
@@ -124,6 +129,70 @@ class GroqProvider:
         content = resp.json()["choices"][0]["message"]["content"]
         return _json.loads(content)
 
+    async def complete_bulk_structured(
+        self,
+        system: str,
+        user: str,
+        schema_name: str,
+        json_schema: dict,
+    ) -> dict | list:
+        """Structured output always using CRUX_BULK_MODEL — no model-name inference.
+
+        Unlike complete_structured(), this method never inspects the caller's model
+        name to decide routing; it always dispatches to self._bulk_model.
+        """
+        payload = {
+            "model": self._bulk_model,
+            "messages": self._build_messages(system, user),
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": schema_name,
+                    "schema": json_schema,
+                    "strict": True,
+                },
+            },
+        }
+        async with httpx.AsyncClient(timeout=_GROQ_TIMEOUT) as client:
+            resp = await client.post(
+                f"{_GROQ_BASE_URL}/chat/completions",
+                json=payload,
+                headers=self._headers(),
+            )
+        resp.raise_for_status()
+        content = resp.json()["choices"][0]["message"]["content"]
+        return _json.loads(content)
+
+    def complete_bulk_structured_sync(
+        self,
+        system: str,
+        user: str,
+        schema_name: str,
+        json_schema: dict,
+    ) -> dict | list:
+        """Synchronous version of complete_bulk_structured."""
+        payload = {
+            "model": self._bulk_model,
+            "messages": self._build_messages(system, user),
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": schema_name,
+                    "schema": json_schema,
+                    "strict": True,
+                },
+            },
+        }
+        with httpx.Client(timeout=_GROQ_TIMEOUT) as client:
+            resp = client.post(
+                f"{_GROQ_BASE_URL}/chat/completions",
+                json=payload,
+                headers=self._headers(),
+            )
+        resp.raise_for_status()
+        content = resp.json()["choices"][0]["message"]["content"]
+        return _json.loads(content)
+
 
 _VALID_PROVIDERS = {"", "groq", "anthropic_api", "claude_cli"}
 
@@ -183,4 +252,69 @@ async def call_stage(
     else:
         text = await _cli_complete(system, user, model)
 
+    return _json.loads(_strip_fences(text))
+
+
+async def call_bulk_stage(
+    system: str,
+    user: str,
+    schema_name: str,
+    json_schema: dict,
+) -> dict | list:
+    """Route a bulk-stage call to CRUX_BULK_MODEL via the active provider.
+
+    Unlike call_stage(), always dispatches to the configured bulk model (CRUX_BULK_MODEL)
+    regardless of the caller's model name — never falls through to the judgment model.
+
+    When the provider exposes complete_bulk_structured(), that is called for explicit
+    bulk routing with structured output. Falls back to text completion + JSON parsing
+    when the provider lacks structured-output support.
+    """
+    from app.claude_cli import _strip_fences
+    from app.claude_cli import complete as _cli_complete
+
+    provider = get_provider()
+
+    if provider is not None and getattr(provider, "supports_structured_output", False):
+        if hasattr(provider, "complete_bulk_structured"):
+            return await provider.complete_bulk_structured(system, user, schema_name, json_schema)
+        return await provider.complete_structured(system, user, None, schema_name, json_schema)
+
+    _log.warning(
+        "Bulk provider %s does not support response_format json_schema; using fenced-JSON fallback",
+        type(provider).__name__ if provider is not None else "none (settings_store)",
+    )
+    if provider is not None:
+        text = await provider.complete(system, user, None)
+    else:
+        text = await _cli_complete(system, user, None)
+
+    return _json.loads(_strip_fences(text))
+
+
+def call_bulk_stage_sync(
+    system: str,
+    user: str,
+    schema_name: str,
+    json_schema: dict,
+) -> dict | list:
+    """Synchronous version of call_bulk_stage for use in sync contexts (e.g. research orchestrator).
+
+    Routes to CRUX_BULK_MODEL via complete_bulk_structured_sync() when available.
+    Falls back to complete_sync() + JSON parsing otherwise.
+    """
+    from app.claude_cli import _strip_fences
+    from app.claude_cli import complete_sync as _cli_complete_sync
+
+    provider = get_provider()
+
+    if provider is not None and getattr(provider, "supports_structured_output", False):
+        if hasattr(provider, "complete_bulk_structured_sync"):
+            return provider.complete_bulk_structured_sync(system, user, schema_name, json_schema)
+
+    if provider is not None and hasattr(provider, "complete_sync"):
+        text = provider.complete_sync(system, user, None)
+        return _json.loads(_strip_fences(text))
+
+    text = _cli_complete_sync(system, user, None)
     return _json.loads(_strip_fences(text))

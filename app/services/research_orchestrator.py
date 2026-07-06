@@ -114,6 +114,10 @@ class _CustomEngine:
         # Cap total read-fetches by config
         candidates_to_read = all_candidates[: config.max_fetches]
 
+        # Detect whether a bulk provider is configured for bulk-stage routing.
+        from app.llm_providers import get_provider as _get_provider
+        _bulk_provider = _get_provider()
+
         # Read step: fetch each candidate; skip on failure
         fetched_candidates: list[dict] = []
         for candidate in candidates_to_read:
@@ -134,6 +138,21 @@ class _CustomEngine:
                     url=doc.url,
                     text=doc.text,
                 )
+
+                # Per-source content summary via bulk model when a provider is configured.
+                if _bulk_provider is not None:
+                    import app.bulk_stages as _bulk_stages
+                    try:
+                        _summary = _bulk_stages.content_summary_sync(doc.text, src_doc.title)
+                        logger.info(
+                            "CustomEngine: content_summary via bulk model: %d chars for %r",
+                            len(_summary), src_doc.title,
+                        )
+                    except Exception as _exc:
+                        logger.warning(
+                            "CustomEngine: content_summary failed for %r: %s", src_doc.title, _exc
+                        )
+
                 claims = extractor.extract(src_doc)
                 for claim in claims:
                     fetched_candidates.append({
@@ -148,6 +167,46 @@ class _CustomEngine:
 
         if not fetched_candidates:
             return []
+
+        # When a bulk provider is configured, route dedup and candidate summarization
+        # through CRUX_BULK_MODEL instead of the CitationSynthesiser.
+        if _bulk_provider is not None:
+            import app.bulk_stages as _bulk_stages
+            from app.research.types import Source as _Source
+
+            if len(fetched_candidates) > 1:
+                try:
+                    before = len(fetched_candidates)
+                    fetched_candidates = _bulk_stages.dedup_candidates_sync(fetched_candidates)
+                    logger.info(
+                        "CustomEngine: dedup_candidates: %d → %d candidates",
+                        before, len(fetched_candidates),
+                    )
+                except Exception as _exc:
+                    logger.warning("CustomEngine: dedup_candidates failed: %s", _exc)
+
+            try:
+                raw_rows = _bulk_stages.summarize_candidates_sync(
+                    plan.mechanism, plan.prior, fetched_candidates
+                )
+                sources = []
+                for row in raw_rows:
+                    try:
+                        sources.append(_Source(
+                            kind=row["kind"],
+                            title=row["title"],
+                            url=row["url"],
+                            claim=row["claim"],
+                            citation=row["citation"],
+                        ))
+                    except (KeyError, TypeError) as _exc:
+                        logger.warning("CustomEngine: dropping invalid source row %r: %s", row, _exc)
+                return sources
+            except Exception as _exc:
+                logger.warning(
+                    "CustomEngine: summarize_candidates_sync failed, falling back to "
+                    "CitationSynthesiser: %s", _exc
+                )
 
         return synthesiser.synthesise(plan, fetched_candidates)
 
