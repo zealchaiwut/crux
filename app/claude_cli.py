@@ -222,6 +222,35 @@ def _api_complete_sync(system: str, user: str, model: str | None) -> tuple[str, 
 
 
 # ---------------------------------------------------------------------------
+# Named provider classes (issue #189)
+# ---------------------------------------------------------------------------
+
+
+class ClaudeCLIProvider:
+    """Provider that dispatches to the local ``claude -p`` CLI subprocess."""
+
+    async def complete(self, system: str, user: str, model: str | None = None) -> str:
+        return await _cli_complete(system, user, model)
+
+    def complete_sync(self, system: str, user: str, model: str | None = None) -> str:
+        return _cli_complete_sync(system, user, model)
+
+
+class AnthropicAPIProvider:
+    """Provider that calls the Anthropic HTTP API directly."""
+
+    async def complete(self, system: str, user: str, model: str | None = None) -> str:
+        text, cost = await _api_complete(system, user, model)
+        settings_store.add_spend(cost)
+        return text
+
+    def complete_sync(self, system: str, user: str, model: str | None = None) -> str:
+        text, cost = _api_complete_sync(system, user, model)
+        settings_store.add_spend(cost)
+        return text
+
+
+# ---------------------------------------------------------------------------
 # Provider dispatch
 # ---------------------------------------------------------------------------
 
@@ -229,10 +258,15 @@ def _api_complete_sync(system: str, user: str, model: str | None) -> tuple[str, 
 async def complete(system: str, user: str, model: str | None = None) -> str:
     """Run a one-shot prompt via the configured provider; fall back to CLI.
 
-    API path is used when selected, keyed, and under budget; on success its USD
-    cost is recorded. Any API failure (or exhausted budget) falls through to the
-    CLI so the pipeline keeps working.
+    When CRUX_LLM_PROVIDER is set, the named provider is used exclusively.
+    Otherwise falls back to the settings_store runtime toggle (api vs cli)
+    with automatic CLI fallback on API failure or budget exhaustion.
     """
+    from app.llm_providers import get_provider
+    provider = get_provider()
+    if provider is not None:
+        return await provider.complete(system, user, model)
+
     settings = settings_store.get_settings()
     if _use_api(settings):
         try:
@@ -247,6 +281,11 @@ async def complete(system: str, user: str, model: str | None = None) -> str:
 
 def complete_sync(system: str, user: str, model: str | None = None) -> str:
     """Blocking variant of :func:`complete` with the same provider dispatch."""
+    from app.llm_providers import get_provider
+    provider = get_provider()
+    if provider is not None:
+        return provider.complete_sync(system, user, model)
+
     settings = settings_store.get_settings()
     if _use_api(settings):
         try:
