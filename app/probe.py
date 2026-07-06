@@ -1,4 +1,4 @@
-"""Stage 4 probe service — calls Claude API to design probes across time horizons.
+"""Stage 4 probe service — calls the judgment model to design probes across time horizons.
 
 PRODUCT.md §9: "LLM: Claude API for the stage prompts (sharpen, plans, weigh, probe design)."
 Stage 4 (probe): leading Plan(s) → three probe designs, one per horizon (short/mid/long).
@@ -6,6 +6,7 @@ Stage 4 (probe): leading Plan(s) → three probe designs, one per horizon (short
 import json
 
 from app.claude_cli import ClaudeCLIError, complete
+from app.llm_providers import call_stage
 
 _MODEL = "claude-haiku-4-5-20251001"
 
@@ -40,22 +41,39 @@ _SYSTEM = (
     '  "decision_rule": "<if X ≥ Y → proceed with Plan A; if X < Y → discard Plan A>"\n'
 )
 
+_SCHEMA_NAME = "probe_output"
+_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "type": {"type": "string"},
+        "target_metric": {"type": "string"},
+        "cost": {"type": "string"},
+        "time": {"type": "string"},
+        "note": {"type": "string"},
+        "steps": {"type": "array", "items": {"type": "string"}},
+        "duration": {"type": "string"},
+        "decision_rule": {"type": "string"},
+    },
+    "required": ["type", "target_metric", "cost", "time", "note", "steps", "duration", "decision_rule"],
+    "additionalProperties": False,
+}
+
 
 class ProbeError(Exception):
-    """Raised when the Claude API call fails or returns unparseable output."""
+    """Raised when the LLM call fails or returns unparseable output."""
 
 
 def _validate_probe_response(data: dict) -> dict:
-    """Validate the Claude response dict; raise ProbeError if invalid."""
+    """Validate the response dict; raise ProbeError if invalid."""
     required = ("type", "target_metric", "cost", "time", "note")
     missing = [f for f in required if not data.get(f)]
     if missing:
-        raise ProbeError(f"Claude response missing required fields: {missing}")
+        raise ProbeError(f"Response missing required fields: {missing}")
     if data["type"] not in _VALID_TYPES:
         raise ProbeError(
             f"Invalid probe type {data['type']!r}; must be one of {sorted(_VALID_TYPES)}"
         )
-    # Normalise optional new fields to safe defaults if absent
+    # Normalise optional fields to safe defaults if absent
     if "steps" not in data or data["steps"] is None:
         data["steps"] = []
     if "duration" not in data or data["duration"] is None:
@@ -131,6 +149,10 @@ async def design_probes(sharpened: str, plans: list[dict]) -> list[dict]:
 
     Returns a list of exactly three dicts, each with keys: horizon, type, target_metric,
     cost, time, note, steps, duration, decision_rule.
+
+    NOTE: not yet routed through app.llm_providers.call_stage (issue #190 landed on a
+    branch cut before this function existed) — still calls app.claude_cli.complete
+    directly. See follow-up ticket to bring this in line with design_probe() below.
     """
     plans_text = "\n".join(
         f"Plan {p['label']} (rank {p.get('current_rank', '?')}): "
@@ -165,7 +187,10 @@ async def design_probes(sharpened: str, plans: list[dict]) -> list[dict]:
 
 
 async def design_probe(sharpened: str, plans: list[dict]) -> dict:
-    """Legacy single-probe design. Kept for backward compatibility with older callers."""
+    """Legacy single-probe design. Kept for backward compatibility with older callers.
+
+    Returns dict with keys: type, target_metric, cost, time, note.
+    """
     plans_text = "\n".join(
         f"Plan {p['label']} (rank {p.get('current_rank', '?')}): "
         f"{p.get('name') or p['label']} — {p.get('mechanism', '')}"
@@ -178,14 +203,13 @@ async def design_probe(sharpened: str, plans: list[dict]) -> dict:
     )
 
     try:
-        text = await complete(_SYSTEM, user_message, _MODEL)
-    except ClaudeCLIError as exc:
-        raise ProbeError(f"Claude call failed: {exc}") from exc
+        data = await call_stage(_SYSTEM, user_message, _MODEL, _SCHEMA_NAME, _JSON_SCHEMA)
+    except Exception as exc:
+        raise ProbeError(f"LLM call failed: {exc}") from exc
 
     try:
-        data = json.loads(text)
         if not isinstance(data, dict):
             raise ValueError(f"expected a JSON object, got {type(data).__name__}")
         return _validate_probe_response(data)
-    except (KeyError, IndexError, ValueError, json.JSONDecodeError) as exc:
-        raise ProbeError(f"Failed to parse Claude response: {exc}") from exc
+    except (KeyError, IndexError, ValueError) as exc:
+        raise ProbeError(f"Failed to validate response: {exc}") from exc

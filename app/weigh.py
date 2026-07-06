@@ -1,11 +1,10 @@
-"""Stage 3 weigh service — calls Claude API to re-rank Plans against user context.
+"""Stage 3 weigh service — calls the judgment model to re-rank Plans against user context.
 
 PRODUCT.md §9: "LLM: Claude API for the stage prompts (sharpen, plans, weigh, probe design)."
 Stage 3 (weigh): plans + user context → re-ranked plans with ruled-in/ruled-out flags.
 """
-import json
 
-from app.claude_cli import ClaudeCLIError, complete
+from app.llm_providers import call_stage
 
 _MODEL = "claude-haiku-4-5-20251001"
 
@@ -29,6 +28,29 @@ _SYSTEM = (
     "- The 'rationale' field is required on every plan object and must not be empty.\n"
     "- Return only the JSON array — no markdown fences, no commentary."
 )
+
+_SCHEMA_NAME = "weigh_output"
+_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "rankings": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "label": {"type": "string"},
+                    "rank": {"type": "integer"},
+                    "standing": {"type": ["string", "null"]},
+                    "rationale": {"type": "string"},
+                },
+                "required": ["label", "rank", "standing", "rationale"],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["rankings"],
+    "additionalProperties": False,
+}
 
 
 CONTRADICTED_MULTIPLIER = 0.5
@@ -88,7 +110,7 @@ def apply_source_penalties(
 
 
 async def rerank_plans(sharpened: str, plans: list[dict], context: str | None) -> list[dict]:
-    """Call Claude to re-rank plans against user context.
+    """Call the judgment model to re-rank plans against user context.
 
     context may be None or empty — in that case ranking is done on gathered sources alone.
     Returns list of dicts with keys: label, rank, standing (null|"ruled-in"|"ruled-out").
@@ -107,12 +129,19 @@ async def rerank_plans(sharpened: str, plans: list[dict], context: str | None) -
     )
 
     try:
-        text = await complete(_SYSTEM, user_message, _MODEL)
-    except ClaudeCLIError as exc:
-        raise WeighError(f"Claude call failed: {exc}") from exc
+        data = await call_stage(_SYSTEM, user_message, _MODEL, _SCHEMA_NAME, _JSON_SCHEMA)
+    except Exception as exc:
+        raise WeighError(f"LLM call failed: {exc}") from exc
 
     try:
-        result = json.loads(text)
+        # Structured output wraps rankings in {"rankings": [...]}; fallback returns bare list.
+        if isinstance(data, dict) and "rankings" in data:
+            result = data["rankings"]
+        elif isinstance(data, list):
+            result = data
+        else:
+            raise ValueError(f"unexpected response shape: {type(data).__name__}")
+
         if not isinstance(result, list) or len(result) != len(plans):
             raise ValueError(
                 f"expected list of {len(plans)} items, got {type(result).__name__} "
@@ -135,5 +164,5 @@ async def rerank_plans(sharpened: str, plans: list[dict], context: str | None) -
             if not (isinstance(rationale, str) and rationale.strip()):
                 raise ValueError("rationale is required and must be a non-empty string")
         return result
-    except (KeyError, IndexError, ValueError, json.JSONDecodeError) as exc:
-        raise WeighError(f"Failed to parse Claude response: {exc}") from exc
+    except (KeyError, IndexError, ValueError) as exc:
+        raise WeighError(f"Failed to validate response: {exc}") from exc

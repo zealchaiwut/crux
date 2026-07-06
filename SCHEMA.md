@@ -109,6 +109,10 @@ Added in sprint 11 (issue #99). Stores raw pipeline results from the fetch→Cla
 | Variable | Values | Notes |
 |---|---|---|
 | `VERIFIER_ENGINE` | `stub` (default), `ai` | Controls which verification backend is used. **`stub` is for development and testing only — it is not production-ready.** The stub uses hardcoded keyword matching to produce deterministic results so the UI can be exercised without a live AI service. Set to `ai` when a real AI verifier is configured (tracked in issue #98). |
+| `CRUX_LLM_PROVIDER` | `""` (default), `groq`, `anthropic_api`, `claude_cli` | Selects the LLM backend for pipeline stages. When unset, falls through to the in-app Settings toggle (`cli` vs `api`). When set, that provider is used exclusively. Invalid values or `groq` without `GROQ_API_KEY` abort startup (issue #189). |
+| `GROQ_API_KEY` | Groq API key | Required when `CRUX_LLM_PROVIDER=groq`. Obtain from console.groq.com (issue #189). |
+| `CRUX_JUDGMENT_MODEL` | model id (default `openai/gpt-oss-120b`) | Groq model for judgment stages (sharpen, plans, weigh, probe, summary), called with structured outputs (issues #189, #190). |
+| `CRUX_BULK_MODEL` | model id (default `llama-3.1-8b-instant`) | Groq model for high-volume bulk stages (content summary, dedup, candidate summarization); bulk stages always route here regardless of caller (issue #191). |
 
 ### `case_embedding`
 

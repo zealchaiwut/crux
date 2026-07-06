@@ -1,4 +1,4 @@
-"""Case summary generation using Claude.
+"""Case summary generation using the configured LLM provider.
 
 Provides two interfaces:
 
@@ -18,6 +18,7 @@ import json
 import re
 
 from app.claude_cli import ClaudeCLIError, complete
+from app.llm_providers import call_stage
 
 _MODEL = "claude-haiku-4-5-20251001"
 
@@ -63,9 +64,33 @@ Rules:
 - If no sources are provided, write paragraphs without citation markers and return "references": []
 """
 
+_SUMMARY_SCHEMA_NAME = "literature_review_output"
+_SUMMARY_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "paragraphs": {"type": "array", "items": {"type": "string"}},
+        "references": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "integer"},
+                    "source_id": {"type": "string"},
+                    "title": {"type": "string"},
+                    "url": {"type": "string"},
+                },
+                "required": ["id", "source_id", "title", "url"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["paragraphs", "references"],
+    "additionalProperties": False,
+}
+
 
 class SummaryError(Exception):
-    """Raised when Claude fails to return a usable summary."""
+    """Raised when the LLM call fails or returns an unusable summary."""
 
 
 def _build_ranking_text(ranking: dict) -> str:
@@ -211,7 +236,7 @@ async def generate_summary(case_data: dict) -> str:
             references: list of objects each with id, source_id, title, url
 
     Raises:
-        SummaryError: if the Claude call fails, the response is unparseable, citation
+        SummaryError: if the LLM call fails, the response is unparseable, citation
             markers are inconsistent, or any reference source_id is not a real case source.
     """
     sharpened = case_data.get("sharpened") or case_data.get("raw_problem", "")
@@ -251,11 +276,14 @@ async def generate_summary(case_data: dict) -> str:
     )
 
     try:
-        raw = await complete(_LITERATURE_REVIEW_SYSTEM, user_message, _MODEL)
-    except ClaudeCLIError as exc:
-        raise SummaryError(f"Claude call failed: {exc}") from exc
+        raw_data = await call_stage(
+            _LITERATURE_REVIEW_SYSTEM, user_message, _MODEL,
+            _SUMMARY_SCHEMA_NAME, _SUMMARY_JSON_SCHEMA,
+        )
+    except Exception as exc:
+        raise SummaryError(f"LLM call failed: {exc}") from exc
 
-    data = _parse_literature_review(raw)
+    data = _validate_literature_review_dict(raw_data)
     _validate_citations(data["paragraphs"], data["references"])
     _validate_source_ids(data["references"], valid_source_ids, data["paragraphs"])
 
@@ -276,15 +304,19 @@ def _format_plans(plans: list) -> str:
 
 
 def _parse_literature_review(raw: str) -> dict:
-    """Parse and structurally validate the literature-review JSON from Claude."""
+    """Parse the literature-review JSON text from a text-completion fallback path."""
     raw = raw.strip()
     try:
         data = json.loads(raw)
     except json.JSONDecodeError as exc:
         raise SummaryError(
-            f"Claude returned non-JSON response: {raw[:200]!r}"
+            f"LLM returned non-JSON response: {raw[:200]!r}"
         ) from exc
+    return _validate_literature_review_dict(data)
 
+
+def _validate_literature_review_dict(data: dict) -> dict:
+    """Structurally validate an already-parsed literature-review response dict."""
     if "paragraphs" not in data or not isinstance(data["paragraphs"], list):
         raise SummaryError(
             f"Summary JSON missing or invalid 'paragraphs' array. Got keys: {list(data)}"
