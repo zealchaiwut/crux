@@ -1,11 +1,10 @@
-"""Stage 1 bake-off service — calls Claude API to generate Plan A/B/C.
+"""Stage 1 bake-off service — calls the judgment model to generate Plan A/B/C.
 
 PRODUCT.md §9: "LLM: Claude API for the stage prompts (sharpen, plans, weigh, probe design)."
 Stage 1 (bake-off): sharpened problem → Plan A/B/C each with label, name, mechanism, prior.
 """
-import json
 
-from app.claude_cli import ClaudeCLIError, complete
+from app.llm_providers import call_stage
 
 _MODEL = "claude-haiku-4-5-20251001"
 
@@ -22,20 +21,54 @@ _SYSTEM = (
     "Return only the JSON array — no markdown fences, no commentary."
 )
 
+_SCHEMA_NAME = "bake_off_output"
+_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "plans": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "label": {"type": "string"},
+                    "name": {"type": "string"},
+                    "mechanism": {"type": "string"},
+                    "prior": {"type": "number"},
+                },
+                "required": ["label", "name", "mechanism", "prior"],
+                "additionalProperties": False,
+            },
+            "minItems": 3,
+            "maxItems": 3,
+        }
+    },
+    "required": ["plans"],
+    "additionalProperties": False,
+}
+
 
 class BakeOffError(Exception):
-    """Raised when the Claude call fails or returns unparseable output."""
+    """Raised when the LLM call fails or returns unparseable output."""
+
+
+def _extract_plans(data: dict | list) -> list:
+    """Extract the plans list from either wrapped ({plans: [...]}) or bare ([...]) response."""
+    if isinstance(data, dict) and "plans" in data:
+        return data["plans"]
+    if isinstance(data, list):
+        return data
+    raise ValueError(f"unexpected response shape: {type(data).__name__}")
 
 
 async def generate_plans(sharpened: str) -> list[dict]:
-    """Call Claude, parse response, return list of 3 plan dicts."""
+    """Call the judgment model, parse response, return list of 3 plan dicts."""
     try:
-        text = await complete(_SYSTEM, sharpened, _MODEL)
-    except ClaudeCLIError as exc:
-        raise BakeOffError(f"Claude call failed: {exc}") from exc
+        data = await call_stage(_SYSTEM, sharpened, _MODEL, _SCHEMA_NAME, _JSON_SCHEMA)
+    except Exception as exc:
+        raise BakeOffError(f"LLM call failed: {exc}") from exc
 
     try:
-        plans = json.loads(text)
+        plans = _extract_plans(data)
         if not isinstance(plans, list) or len(plans) != 3:
             raise ValueError(
                 f"expected list of 3 plans, got {type(plans).__name__} "
@@ -50,5 +83,5 @@ async def generate_plans(sharpened: str) -> list[dict]:
             if not (0.0 <= prior <= 1.0):
                 raise ValueError(f"prior out of range: {prior}")
         return plans
-    except (KeyError, IndexError, ValueError, json.JSONDecodeError) as exc:
-        raise BakeOffError(f"Failed to parse Claude response: {exc}") from exc
+    except (KeyError, IndexError, ValueError) as exc:
+        raise BakeOffError(f"Failed to validate response: {exc}") from exc

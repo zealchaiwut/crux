@@ -1,11 +1,10 @@
-"""Stage 0 sharpen service — calls Claude API to produce a falsifiable problem statement.
+"""Stage 0 sharpen service — calls the judgment model to produce a falsifiable problem statement.
 
 PRODUCT.md §9: "LLM: Claude API for the stage prompts (sharpen, plans, weigh, probe design)."
 Stage 0 (sharpen): raw problem → sharpened statement + not_investigating list.
 """
-import json
 
-from app.claude_cli import ClaudeCLIError, complete
+from app.llm_providers import call_stage
 
 _MODEL = "claude-haiku-4-5-20251001"
 
@@ -20,24 +19,34 @@ _SYSTEM = (
     "Return only the JSON object — no markdown fences, no commentary."
 )
 
+_SCHEMA_NAME = "sharpen_output"
+_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "sharpened": {"type": "string"},
+        "not_investigating": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["sharpened", "not_investigating"],
+    "additionalProperties": False,
+}
+
 
 class SharpenError(Exception):
-    """Raised when the Claude call fails or returns unparseable output."""
+    """Raised when the LLM call fails or returns unparseable output."""
 
 
 async def sharpen_problem(raw_problem: str) -> dict:
-    """Call Claude, parse response, return {sharpened, not_investigating}."""
+    """Call the judgment model, parse response, return {sharpened, not_investigating}."""
     try:
-        text = await complete(_SYSTEM, raw_problem, _MODEL)
-    except ClaudeCLIError as exc:
-        raise SharpenError(f"Claude call failed: {exc}") from exc
+        data = await call_stage(_SYSTEM, raw_problem, _MODEL, _SCHEMA_NAME, _JSON_SCHEMA)
+    except Exception as exc:
+        raise SharpenError(f"LLM call failed: {exc}") from exc
 
     try:
-        result = json.loads(text)
-        sharpened = result["sharpened"]
-        not_investigating = result["not_investigating"]
+        sharpened = data["sharpened"]
+        not_investigating = data["not_investigating"]
         if not isinstance(sharpened, str) or not isinstance(not_investigating, list):
             raise ValueError("unexpected shape")
         return {"sharpened": sharpened, "not_investigating": not_investigating}
-    except (KeyError, IndexError, ValueError, json.JSONDecodeError) as exc:
-        raise SharpenError(f"Failed to parse Claude response: {exc}") from exc
+    except (KeyError, IndexError, ValueError) as exc:
+        raise SharpenError(f"Failed to validate response: {exc}") from exc

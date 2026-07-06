@@ -143,7 +143,9 @@ async def test_rerank_plans_returns_rationale_on_every_plan():
     """AC3: rerank_plans returns a list where every plan has a non-empty rationale string."""
     from app.weigh import rerank_plans
 
-    with patch("app.weigh.complete", new_callable=AsyncMock, return_value=_MOCK_CLAUDE_RESPONSE):
+    import json as _json
+    with patch("app.weigh.call_stage", new_callable=AsyncMock,
+               return_value=_json.loads(_MOCK_CLAUDE_RESPONSE)):
         result = await rerank_plans(
             sharpened="Cardiovascular fitness has plateaued for 8 weeks.",
             plans=_PLANS_INPUT,
@@ -166,21 +168,22 @@ async def test_rerank_plans_no_live_api_calls():
     """AC2: rerank_plans never makes live API calls; complete() is always mocked."""
     from app.weigh import rerank_plans
 
+    import json as _json
     call_count = 0
 
-    async def mock_complete(system, user, model):
+    async def mock_call_stage(system, user, model, schema_name, json_schema):
         nonlocal call_count
         call_count += 1
-        return _MOCK_CLAUDE_RESPONSE
+        return _json.loads(_MOCK_CLAUDE_RESPONSE)
 
-    with patch("app.weigh.complete", side_effect=mock_complete):
+    with patch("app.weigh.call_stage", side_effect=mock_call_stage):
         await rerank_plans(
             sharpened="Test problem.",
             plans=_PLANS_INPUT,
             context=None,
         )
 
-    assert call_count == 1, "complete() must be called exactly once (via mock, not live)"
+    assert call_count == 1, "call_stage() must be called exactly once (via mock, not live)"
 
 
 @pytest.mark.asyncio
@@ -188,7 +191,9 @@ async def test_rerank_plans_rationale_on_all_plans_without_context():
     """AC3: rationale is non-empty even when context is None (sources-only mode)."""
     from app.weigh import rerank_plans
 
-    with patch("app.weigh.complete", new_callable=AsyncMock, return_value=_MOCK_CLAUDE_RESPONSE):
+    import json as _json
+    with patch("app.weigh.call_stage", new_callable=AsyncMock,
+               return_value=_json.loads(_MOCK_CLAUDE_RESPONSE)):
         result = await rerank_plans(
             sharpened="Cardiovascular fitness has plateaued for 8 weeks.",
             plans=_PLANS_INPUT,
@@ -504,14 +509,15 @@ def test_weighpanel_submit_sends_context_in_body_in_js():
 
 def test_no_live_claude_calls_during_rerank_api_test(api_client, db_session):
     """AC2: The rerank endpoint test never calls Claude; the mock intercepts all calls."""
-    calls_to_claude = []
+    calls_to_stage = []
 
-    async def _spy_complete(system, user, model):
-        calls_to_claude.append((system, user, model))
-        return _MOCK_CLAUDE_RESPONSE
+    async def _spy_call_stage(system, user, model, schema_name, json_schema):
+        calls_to_stage.append((system, user, model))
+        import json as _json
+        return _json.loads(_MOCK_CLAUDE_RESPONSE)
 
     c, _ = _seed_case_with_plans(db_session, stage="gather")
-    with patch("app.weigh.complete", side_effect=_spy_complete):
+    with patch("app.weigh.call_stage", side_effect=_spy_call_stage):
         # Call rerank_plans directly via the endpoint (without mocking the router-level import)
         with patch(
             "app.routers.cases.rerank_plans",
@@ -524,7 +530,7 @@ def test_no_live_claude_calls_during_rerank_api_test(api_client, db_session):
             )
 
     assert r.status_code == 200
-    # The router mock means complete() was never called at all
-    assert calls_to_claude == [], (
-        "No live calls to Claude's complete() should occur during the mocked API test"
+    # The router mock means call_stage() was never called at all
+    assert calls_to_stage == [], (
+        "No live calls to call_stage() should occur during the mocked API test"
     )
