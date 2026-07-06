@@ -133,6 +133,42 @@ _MOCK_PROBE_RESULT_MEASUREMENT = {
     "note": "Measure HRV each morning.",
 }
 
+_MOCK_THREE_PROBES_MEASUREMENT = [
+    {
+        "horizon": "short",
+        "type": "measurement",
+        "target_metric": "resting HRV (7-day average)",
+        "cost": "free",
+        "time": "7 days",
+        "note": "Measure HRV each morning.",
+        "steps": ["Download HRV app", "Measure at wake-up", "Log readings"],
+        "duration": "7 days",
+        "decision_rule": "If HRV drops >10% → early signal; else discard",
+    },
+    {
+        "horizon": "mid",
+        "type": "measurement",
+        "target_metric": "weekly HRV trend",
+        "cost": "free",
+        "time": "3 weeks",
+        "note": "Track weekly average HRV trend.",
+        "steps": ["Measure daily", "Calculate weekly average"],
+        "duration": "3 weeks",
+        "decision_rule": "If weekly avg drops >5% vs baseline → confirming signal",
+    },
+    {
+        "horizon": "long",
+        "type": "measurement",
+        "target_metric": "HRV recovery after deload",
+        "cost": "free",
+        "time": "6 weeks",
+        "note": "Deload and track HRV recovery.",
+        "steps": ["Reduce training load", "Track HRV weekly"],
+        "duration": "6 weeks",
+        "decision_rule": "If HRV recovers to baseline → overtraining confirmed",
+    },
+]
+
 _MOCK_COMMANDER_SPEC = """\
 # Build a Minimal Engagement Tracker
 
@@ -354,14 +390,16 @@ def test_non_prototype_probe_spec_null_in_probe_response(api_client, db_session)
     """AC4: commander_spec is null in probe response for non-prototype probes."""
     case = _seed_case_with_plans(db_session, stage="weigh")
 
-    with patch("app.routers.cases.design_probe", new_callable=AsyncMock,
-               return_value=_MOCK_PROBE_RESULT_MEASUREMENT):
+    with patch("app.routers.cases.design_probes", new_callable=AsyncMock,
+               return_value=_MOCK_THREE_PROBES_MEASUREMENT):
         resp = api_client.post(f"/api/cases/{case.id}/probe")
 
     assert resp.status_code == 200
     data = resp.json()
-    assert "commander_spec" in data
-    assert data["commander_spec"] is None
+    assert "probes" in data
+    for probe in data["probes"]:
+        assert "commander_spec" in probe
+        assert probe["commander_spec"] is None
 
 
 # ---------------------------------------------------------------------------

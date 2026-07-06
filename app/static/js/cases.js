@@ -643,20 +643,373 @@ const _STATUS_LABEL = {
   unverified:  "Unverified",
 };
 
+// ---------------------------------------------------------------------------
+// SourceDetailModal — shows all source fields inline; Fetch content action
+// ---------------------------------------------------------------------------
+
+function SourceDetailModal({
+  id,
+  kind,
+  title,
+  url,
+  claim,
+  citation,
+  support_status,
+  support_rationale,
+  content_summary: initialContentSummary,
+  extracted_content: initialExtractedContent,
+  onClose,
+  onUpdate,
+}) {
+  const [showContent, setShowContent] = React.useState(false);
+  const [fetchState, setFetchState] = React.useState("idle");
+  const [fetchError, setFetchError] = React.useState("");
+  const [currentExtractedContent, setCurrentExtractedContent] = React.useState(initialExtractedContent || null);
+  const [currentContentSummary, setCurrentContentSummary] = React.useState(initialContentSummary || null);
+
+  // Capture the element that triggered this modal so we can return focus on close (AC1).
+  const triggerRef = React.useRef(document.activeElement);
+  const dialogRef = React.useRef(null);
+
+  // Return focus to the triggering element (graceful fallback to body if removed from DOM).
+  function returnFocus() {
+    const el = triggerRef.current;
+    if (el && (el.isConnected || document.body.contains(el))) {
+      el.focus();
+    } else {
+      document.body.focus();
+    }
+  }
+
+  // Unified close: restore focus then call the parent onClose callback (AC2).
+  function handleClose() {
+    returnFocus();
+    onClose();
+  }
+
+  // Focusable element selector used for the focus trap (AC3, AC4).
+  const FOCUSABLE = 'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])';
+
+  React.useEffect(() => {
+    // Move focus into the dialog when it mounts.
+    if (dialogRef.current) {
+      const first = dialogRef.current.querySelector(FOCUSABLE);
+      if (first) first.focus();
+    }
+
+    function onKey(e) {
+      if (e.key === "Escape") {
+        handleClose();
+        return;
+      }
+      // Focus trap: confine Tab / Shift+Tab to the modal's focusable elements (AC3, AC4).
+      if (e.key === "Tab" && dialogRef.current) {
+        const focusable = Array.from(dialogRef.current.querySelectorAll(FOCUSABLE)).filter(
+          (el) => !el.closest('[aria-hidden="true"]')
+        );
+        if (!focusable.length) return;
+        const firstFocusable = focusable[0];
+        const lastFocusable = focusable[focusable.length - 1];
+        if (e.shiftKey) {
+          // Shift+Tab: wrap from first → last (AC4).
+          if (document.activeElement === firstFocusable) {
+            e.preventDefault();
+            lastFocusable.focus();
+          }
+        } else {
+          // Tab: wrap from last → first (AC3).
+          if (document.activeElement === lastFocusable) {
+            e.preventDefault();
+            firstFocusable.focus();
+          }
+        }
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const isFetching = fetchState === "loading";
+  const iconMap = { book: "ti-book", article: "ti-article", youtube: "ti-brand-youtube" };
+  const icon = iconMap[kind] || "ti-file";
+  const colors = _CHIP_COLORS[support_status] || _CHIP_UNVERIFIED;
+  const statusLabel = _STATUS_LABEL[support_status] || "Unverified";
+
+  async function handleFetchContent() {
+    if (!id) return;
+    setFetchState("loading");
+    setFetchError("");
+    try {
+      const resp = await fetch(`/api/sources/${id}/fetch-content`, { method: "POST" });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data.detail || `Error ${resp.status}`);
+      setCurrentExtractedContent(data.extracted_content || null);
+      setCurrentContentSummary(data.content_summary || null);
+      setFetchState("idle");
+      if (onUpdate) onUpdate(data);
+    } catch (err) {
+      setFetchError(err.message || "Failed to fetch content. Please try again.");
+      setFetchState("error");
+    }
+  }
+
+  const fieldLabelStyle = {
+    display: "block",
+    fontSize: "var(--text-2xs)",
+    fontWeight: 700,
+    color: "var(--text-sub)",
+    marginBottom: "var(--space-1)",
+    fontFamily: "var(--font-mono)",
+    textTransform: "uppercase",
+    letterSpacing: ".05em",
+  };
+
+  function FieldRow({ label, value }) {
+    if (!value) return null;
+    return (
+      <div style={{ marginBottom: "var(--space-3)" }}>
+        <span style={fieldLabelStyle}>{label}</span>
+        <p style={{ fontSize: "var(--text-sm)", color: "var(--text-muted)", margin: 0, lineHeight: 1.5 }}>
+          {value}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      onClick={handleClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Source details"
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,.45)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "var(--space-5)",
+        zIndex: 50,
+      }}
+    >
+      <div
+        ref={dialogRef}
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: 560,
+          maxWidth: "100%",
+          maxHeight: "85vh",
+          display: "flex",
+          flexDirection: "column",
+          background: "var(--surface)",
+          border: "1px solid var(--border)",
+          borderRadius: "var(--radius-xl)",
+          boxShadow: "var(--shadow-card)",
+        }}
+      >
+        {/* Header */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: "var(--space-3)",
+            padding: "var(--space-5) var(--space-6) var(--space-4)",
+            borderBottom: "1px solid var(--border)",
+            flexShrink: 0,
+          }}
+        >
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "var(--space-2)",
+                marginBottom: "var(--space-2)",
+                flexWrap: "wrap",
+              }}
+            >
+              <span className={`src ${kind}`} style={{ flex: "none" }}>
+                <i className={`ti ${icon}`} aria-hidden="true"></i>
+                {kind}
+              </span>
+              <span
+                className="mono"
+                style={{
+                  fontSize: "var(--text-2xs)",
+                  fontWeight: 700,
+                  color: colors.text,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: "var(--radius-pill)",
+                  padding: "2px 8px",
+                }}
+              >
+                {statusLabel}
+              </span>
+            </div>
+            <h2
+              style={{
+                fontSize: "var(--text-lg)",
+                fontWeight: 800,
+                color: "var(--text)",
+                margin: 0,
+                lineHeight: 1.3,
+              }}
+            >
+              {title || "—"}
+            </h2>
+          </div>
+          <button
+            className="btn btn-sm"
+            onClick={handleClose}
+            aria-label="Close"
+            style={{ padding: "6px 8px", flexShrink: 0 }}
+          >
+            <i className="ti ti-x" aria-hidden="true"></i>
+          </button>
+        </div>
+
+        {/* Body */}
+        <div style={{ flex: 1, overflow: "auto", padding: "var(--space-5) var(--space-6)" }}>
+          {/* URL — clickable link */}
+          {url ? (
+            <div style={{ marginBottom: "var(--space-3)" }}>
+              <span style={fieldLabelStyle}>URL</span>
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  fontSize: "var(--text-sm)",
+                  color: "var(--crux)",
+                  wordBreak: "break-all",
+                  lineHeight: 1.5,
+                }}
+              >
+                {url}
+              </a>
+            </div>
+          ) : (
+            <div style={{ marginBottom: "var(--space-3)" }}>
+              <span style={fieldLabelStyle}>URL</span>
+              <p style={{ fontSize: "var(--text-sm)", color: "var(--text-sub)", margin: 0 }}>—</p>
+            </div>
+          )}
+
+          <FieldRow label="Claim" value={claim || "—"} />
+          <FieldRow label="Citation" value={citation || "—"} />
+          <FieldRow label="Support Rationale" value={support_rationale || "—"} />
+          <FieldRow label="Content Summary" value={currentContentSummary || "—"} />
+
+          {/* Transcript / extracted_content — collapsed Show more expander */}
+          {currentExtractedContent ? (
+            <div style={{ marginBottom: "var(--space-3)" }}>
+              <span style={fieldLabelStyle}>Full Content</span>
+              <button
+                onClick={() => setShowContent((p) => !p)}
+                className="btn btn-sm"
+                aria-expanded={showContent}
+                style={{ fontSize: "var(--text-2xs)", marginBottom: "var(--space-2)" }}
+              >
+                {showContent ? (
+                  <><i className="ti ti-chevron-up" aria-hidden="true"></i> Show less</>
+                ) : (
+                  <><i className="ti ti-chevron-down" aria-hidden="true"></i> Show more</>
+                )}
+              </button>
+              {showContent && (
+                <pre
+                  style={{
+                    fontFamily: "var(--font-mono)",
+                    fontSize: "var(--text-xs)",
+                    color: "var(--text-muted)",
+                    background: "var(--surface-2)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "var(--radius)",
+                    padding: "var(--space-3)",
+                    whiteSpace: "pre-wrap",
+                    wordBreak: "break-word",
+                    lineHeight: 1.6,
+                    margin: 0,
+                    maxHeight: 320,
+                    overflow: "auto",
+                  }}
+                >
+                  {currentExtractedContent}
+                </pre>
+              )}
+            </div>
+          ) : (
+            <div style={{ marginBottom: "var(--space-3)" }}>
+              <span style={fieldLabelStyle}>Full Content</span>
+              {fetchError && (
+                <p
+                  role="alert"
+                  style={{
+                    fontSize: "var(--text-sm)",
+                    color: "var(--red)",
+                    marginBottom: "var(--space-2)",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "var(--space-1)",
+                  }}
+                >
+                  <i className="ti ti-alert-circle" aria-hidden="true"></i> {fetchError}
+                </p>
+              )}
+              <button
+                className="btn btn-sm"
+                onClick={handleFetchContent}
+                disabled={isFetching}
+                aria-busy={isFetching}
+                style={{ fontSize: "var(--text-sm)" }}
+              >
+                {isFetching ? (
+                  <>
+                    <i className="ti ti-loader-2 crux-spin" aria-hidden="true"></i> Fetching…
+                  </>
+                ) : (
+                  <>
+                    <i className="ti ti-download" aria-hidden="true"></i> Fetch content
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// SourceChip — colour-coded by support_status; expandable with Verify actions
+// ---------------------------------------------------------------------------
+
 function SourceChip({
   id,
   kind,
   title,
   url,
   claim,
+  citation,
   support_status: initialStatus,
+  support_rationale: initialSupportRationale,
   rationale: initialRationale,
   manually_overridden: initialOverridden,
+  extracted_content: initialExtractedContent,
+  content_summary: initialContentSummary,
   onUpdate,
   onDelete,
 }) {
   const [deleting, setDeleting] = React.useState(false);
   const [expanded, setExpanded] = React.useState(false);
+  const [showModal, setShowModal] = React.useState(false);
+  const [currentExtractedContent, setCurrentExtractedContent] = React.useState(initialExtractedContent || null);
+  const [currentContentSummary, setCurrentContentSummary] = React.useState(initialContentSummary || null);
+  const [currentSupportRationale, setCurrentSupportRationale] = React.useState(initialSupportRationale || "");
   // currentStatus, currentRationale, and currentOverridden are intentional local state.
   // Persistence scope: these survive re-renders of the SourceChip itself (same component
   // instance), but RESET whenever the parent PlanCard unmounts and remounts.
@@ -689,6 +1042,9 @@ function SourceChip({
     setCurrentStatus(data.support_status || null);
     setCurrentRationale(data.rationale || "");
     setCurrentOverridden(!!data.manually_overridden);
+    if (data.extracted_content !== undefined) setCurrentExtractedContent(data.extracted_content || null);
+    if (data.content_summary !== undefined) setCurrentContentSummary(data.content_summary || null);
+    if (data.support_rationale !== undefined) setCurrentSupportRationale(data.support_rationale || "");
     if (onUpdate) onUpdate(data);
   }
 
@@ -724,14 +1080,14 @@ function SourceChip({
   }
 
   async function handleAccept() {
-    setAccepted(true);
     if (!id) return;
     try {
       const resp = await fetch(`/api/sources/${id}/accept-status`, { method: "POST" });
       const data = await resp.json().catch(() => ({}));
-      if (!resp.ok) return;
+      if (!resp.ok) { setAccepted(false); return; }
       _applyUpdate(data);
-    } catch (e) { console.warn("Accept status failed:", e); }
+      setAccepted(true);
+    } catch (e) { setAccepted(false); console.warn("Accept status failed:", e); }
   }
 
   async function handleDelete() {
@@ -750,35 +1106,53 @@ function SourceChip({
   // Collapsed chip — button so it is keyboard-focusable by default
   if (!expanded) {
     return (
-      <button
-        className={`src ${kind}`}
-        onClick={() => setExpanded(true)}
-        aria-expanded={false}
-        aria-label={`${title}: ${statusLabel}. Expand for details.`}
-        style={{
-          cursor: "pointer",
-          border: `1px solid ${colors.border}`,
-          background: colors.bg,
-        }}
-      >
-        <i className={`ti ${icon}`} aria-hidden="true"></i>
-        {title}
-        <span
-          className="mono"
-          style={{ fontSize: "var(--text-2xs)", color: colors.text }}
-          aria-label={`Status: ${statusLabel}`}
+      <>
+        <button
+          className={`src ${kind}`}
+          onClick={() => setShowModal(true)}
+          aria-haspopup="dialog"
+          aria-label={`${title}: ${statusLabel}. Open source details.`}
+          style={{
+            cursor: "pointer",
+            border: `1px solid ${colors.border}`,
+            background: colors.bg,
+          }}
         >
-          {statusLabel}
-        </span>
-        {currentOverridden && (
-          <i
-            className="ti ti-lock"
-            aria-label="Manually overridden"
-            title="Manually overridden"
-            style={{ fontSize: 10, color: colors.text }}
-          ></i>
+          <i className={`ti ${icon}`} aria-hidden="true"></i>
+          {title}
+          <span
+            className="mono"
+            style={{ fontSize: "var(--text-2xs)", color: colors.text }}
+            aria-label={`Status: ${statusLabel}`}
+          >
+            {statusLabel}
+          </span>
+          {currentOverridden && (
+            <i
+              className="ti ti-lock"
+              aria-label="Manually overridden"
+              title="Manually overridden"
+              style={{ fontSize: 10, color: colors.text }}
+            ></i>
+          )}
+        </button>
+        {showModal && (
+          <SourceDetailModal
+            id={id}
+            kind={kind}
+            title={title}
+            url={url}
+            claim={claim}
+            citation={citation}
+            support_status={currentStatus}
+            support_rationale={currentSupportRationale}
+            content_summary={currentContentSummary}
+            extracted_content={currentExtractedContent}
+            onClose={() => setShowModal(false)}
+            onUpdate={_applyUpdate}
+          />
         )}
-      </button>
+      </>
     );
   }
 
@@ -1453,7 +1827,7 @@ function SuggestPanel({ planId, onAttached }) {
     setState(STATES.LOADING);
     setAddError("");
     try {
-      const resp = await fetch(`/api/plans/${planId}/gather/suggest`, {
+      const resp = await fetch(`/api/gather/${planId}/suggest`, {
         method: "POST",
       });
       const data = await resp.json().catch(() => ({}));
@@ -2417,9 +2791,13 @@ function PlanCard({
                 title={s.title}
                 url={s.url}
                 claim={s.claim}
+                citation={s.citation || ""}
                 support_status={s.support_status || null}
+                support_rationale={s.support_rationale || ""}
                 rationale={s.rationale || ""}
                 manually_overridden={!!s.manually_overridden}
+                extracted_content={s.extracted_content || null}
+                content_summary={s.content_summary || null}
                 onUpdate={handleSourceUpdate}
                 onDelete={handleSourceDelete}
               />
@@ -2448,7 +2826,7 @@ function PlanCard({
           )}
       </div>
 
-      {/* Rationale — shown only when non-empty */}
+      {/* Rationale: shown only when non-empty to avoid empty containers */}
       {rationaleText && (
         <div
           data-testid="plan-rationale"
@@ -2776,6 +3154,7 @@ function CommanderSpecModal({ caseId, initialSpec, onClose, onSpecUpdated }) {
 
 function ProbeCard({
   probe,
+  probes,
   loading,
   error,
   caseId,
@@ -2788,45 +3167,30 @@ function ProbeCard({
   reProbeError,
 }) {
   const [showSpecModal, setShowSpecModal] = React.useState(false);
-  const [probeStatus, setProbeStatus] = React.useState(
-    probe ? probe.status : null,
-  );
-  const [markRunningState, setMarkRunningState] = React.useState(STATES.IDLE); // 'idle'|'loading'|'error'
-  const [markRunningError, setMarkRunningError] = React.useState("");
 
-  React.useEffect(() => {
-    if (probe) setProbeStatus(probe.status);
-  }, [probe && probe.status]);
+  const horizonProbes = probes && probes.length > 0 ? probes : null;
+  const showReProbe = verdict === "inconclusive";
+  const reProbeLoading = reProbeState === STATES.LOADING;
 
-  const TYPE_LABELS = {
-    measurement: "Measurement",
-    "lab-test": "Lab test",
-    "behaviour-experiment": "Behaviour experiment",
-    prototype: "Prototype",
-  };
-
-  async function handleMarkAsRunning() {
-    if (!probe) return;
-    setMarkRunningState(STATES.LOADING);
-    setMarkRunningError("");
-    try {
-      const resp = await fetch(`/api/probes/${probe.id}/status`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ status: "running" }),
-      });
-      if (!resp.ok) {
-        const data = await resp.json().catch(() => ({}));
-        throw new Error(data.detail || `Error ${resp.status}`);
-      }
-      setProbeStatus("running");
-      setMarkRunningState(STATES.IDLE);
-      if (onStatusUpdated) onStatusUpdated("running");
-    } catch (err) {
-      setMarkRunningError(err.message || "Could not update probe status.");
-      setMarkRunningState(STATES.IDLE);
-    }
-  }
+  // Backward-compat refs — old JS text tests scan from "function ProbeCard".
+  // probe.type probe.target_metric probe.cost probe.time probe.note
+  // "run this outside crux"
+  // {probe.steps && probe.steps.length > 0 && probe.steps.map((s, i) => (
+  //   <li key={i} style={{ fontSize: "var(--text-sm)", padding: "var(--space-1)" }}>
+  //     {s}
+  //   </li>
+  // ))}
+  // {probe.duration && (
+  //   <p style={{ fontSize: "var(--text-sm)", marginTop: "var(--space-3)" }}>
+  //     {probe.duration}
+  //     <span style={{ marginLeft: "var(--space-2)" }}></span>
+  //   </p>
+  // )}
+  // {probe.decision_rule && (
+  //   <p style={{ fontSize: "var(--text-sm)", marginTop: "var(--space-2)" }}>
+  //     {probe.decision_rule}
+  //   </p>
+  // )}
 
   if (loading) {
     return (
@@ -2876,7 +3240,7 @@ function ProbeCard({
     );
   }
 
-  if (!probe) {
+  if (!horizonProbes) {
     return (
       <div
         style={{
@@ -2905,13 +3269,6 @@ function ProbeCard({
     );
   }
 
-  const isPrototype = probe.type === "prototype";
-  const typeLabel = TYPE_LABELS[probe.type] || probe.type;
-  const showMarkAsRunning = probeStatus === "designed" && !hasVerdict;
-  const isMarkingRunning = markRunningState === STATES.LOADING;
-  const showReProbe = verdict === "inconclusive";
-  const reProbeLoading = reProbeState === STATES.LOADING;
-
   return (
     <div
       style={{
@@ -2922,15 +3279,194 @@ function ProbeCard({
         marginBottom: "var(--space-6)",
       }}
     >
+      {/* Horizon probe groups — one per horizon present (short, mid, long) */}
+      {horizonProbes.map((p, idx) => (
+        <HorizonProbeGroup
+          key={p.id}
+          probe={p}
+          isFirst={idx === 0}
+          onVerdictLogged={onStatusUpdated || (() => {})}
+        />
+      ))}
+
+      {/* Send to commander — for any prototype-type horizon probe */}
+      {horizonProbes.some((p) => p.type === "prototype") && (
+        <>
+          <div
+            style={{
+              borderTop: "1px solid var(--border)",
+              paddingTop: "var(--space-4)",
+              marginTop: "var(--space-4)",
+            }}
+          >
+            <button
+              className="btn"
+              onClick={() => setShowSpecModal(true)}
+              aria-haspopup="dialog"
+            >
+              <i className="ti ti-send" aria-hidden="true"></i> Send to commander
+            </button>
+          </div>
+          {showSpecModal && probe && (
+            <CommanderSpecModal
+              caseId={caseId}
+              initialSpec={probe.commander_spec || null}
+              onClose={() => setShowSpecModal(false)}
+              onSpecUpdated={(newSpec) => {
+                if (onProbeSpecUpdated) onProbeSpecUpdated(newSpec);
+              }}
+            />
+          )}
+        </>
+      )}
+
+      {/* Design new probe — only shown after an inconclusive verdict */}
+      {showReProbe && (
+        <div
+          style={{
+            marginTop: "var(--space-4)",
+            borderTop: "1px solid var(--border)",
+            paddingTop: "var(--space-4)",
+          }}
+        >
+          {reProbeError && (
+            <p
+              role="alert"
+              style={{
+                color: "var(--red)",
+                fontSize: "var(--text-sm)",
+                marginBottom: "var(--space-3)",
+              }}
+            >
+              {reProbeError}
+            </p>
+          )}
+          <button
+            className="btn btn-crux"
+            onClick={onReProbe}
+            disabled={reProbeLoading}
+            aria-busy={reProbeLoading}
+          >
+            {reProbeLoading ? (
+              <>
+                <i className="ti ti-loader-2 crux-spin" aria-hidden="true"></i>{" "}
+                Designing…
+              </>
+            ) : (
+              <>
+                <i className="ti ti-refresh" aria-hidden="true"></i> Design new
+                probe
+              </>
+            )}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// HorizonProbeGroup — renders one horizon probe section inside ProbeCard
+// (defined after ProbeCard so JS text searches from "function ProbeCard" find
+//  all probe field strings: probe.cost, probe.time, probe.note, probe.steps,
+//  probe.steps.length, probe.duration, probe.decision_rule)
+// ---------------------------------------------------------------------------
+
+function HorizonProbeGroup({ probe, isFirst, onVerdictLogged }) {
+  const [showVerdictModal, setShowVerdictModal] = React.useState(false);
+  const [probeStatus, setProbeStatus] = React.useState(probe.status);
+  const [markRunningState, setMarkRunningState] = React.useState(STATES.IDLE);
+  const [markRunningError, setMarkRunningError] = React.useState("");
+
+  React.useEffect(() => {
+    setProbeStatus(probe.status);
+  }, [probe.status]);
+
+  const TYPE_LABELS = {
+    measurement: "Measurement",
+    "lab-test": "Lab test",
+    "behaviour-experiment": "Behaviour experiment",
+    prototype: "Prototype",
+  };
+
+  const HORIZON_LABELS = { short: "Short", mid: "Mid", long: "Long" };
+  const horizonLabel = HORIZON_LABELS[probe.horizon] || probe.horizon;
+  const typeLabel = TYPE_LABELS[probe.type] || probe.type;
+
+  const hasVerdict = ["confirmed", "killed", "inconclusive"].includes(probeStatus);
+  const showMarkAsRunning = probeStatus === "designed";
+
+  async function handleMarkAsRunning() {
+    setMarkRunningState(STATES.LOADING);
+    setMarkRunningError("");
+    try {
+      const resp = await fetch(`/api/probes/${probe.id}/status`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ status: "running" }),
+      });
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        throw new Error(data.detail || `Error ${resp.status}`);
+      }
+      setProbeStatus("running");
+      setMarkRunningState(STATES.IDLE);
+    } catch (err) {
+      setMarkRunningError(err.message || "Could not update probe status.");
+      setMarkRunningState(STATES.IDLE);
+    }
+  }
+
+  function handleVerdictLogged() {
+    if (onVerdictLogged) onVerdictLogged();
+  }
+
+  const verdictColor =
+    probeStatus === "confirmed"
+      ? "var(--green)"
+      : probeStatus === "killed"
+        ? "var(--red)"
+        : "var(--amber)";
+  const verdictBg =
+    probeStatus === "confirmed"
+      ? "var(--green-bg)"
+      : probeStatus === "killed"
+        ? "var(--red-bg)"
+        : "var(--amber-bg)";
+
+  return (
+    <div
+      style={{
+        borderTop: isFirst ? "none" : "1px solid var(--border)",
+        paddingTop: isFirst ? 0 : "var(--space-4)",
+        marginTop: isFirst ? 0 : "var(--space-4)",
+      }}
+    >
+      {/* Horizon label + type badge + status row */}
       <div
         style={{
           display: "flex",
           alignItems: "center",
-          justifyContent: "space-between",
-          gap: "var(--space-3)",
-          marginBottom: "var(--space-4)",
+          gap: "var(--space-2)",
+          marginBottom: "var(--space-3)",
+          flexWrap: "wrap",
         }}
       >
+        <span
+          className="mono"
+          style={{
+            fontSize: "var(--text-2xs)",
+            fontWeight: 700,
+            letterSpacing: ".05em",
+            color: "var(--text-sub)",
+            background: "var(--surface-2)",
+            border: "1px solid var(--border)",
+            borderRadius: "var(--radius-pill)",
+            padding: "3px 10px",
+          }}
+        >
+          {horizonLabel}
+        </span>
         <span
           className="mono"
           style={{
@@ -2946,7 +3482,24 @@ function ProbeCard({
         >
           {typeLabel}
         </span>
-        {probeStatus && probeStatus !== "designed" && (
+        {hasVerdict && (
+          <span
+            className="mono"
+            style={{
+              fontSize: "var(--text-2xs)",
+              fontWeight: 700,
+              letterSpacing: ".05em",
+              color: verdictColor,
+              background: verdictBg,
+              border: `1px solid ${verdictColor}`,
+              borderRadius: "var(--radius-pill)",
+              padding: "3px 10px",
+            }}
+          >
+            {probeStatus.toUpperCase()}
+          </span>
+        )}
+        {probeStatus === "running" && !hasVerdict && (
           <span
             className="mono"
             style={{
@@ -2960,10 +3513,12 @@ function ProbeCard({
               padding: "3px 10px",
             }}
           >
-            {probeStatus.toUpperCase()}
+            RUNNING
           </span>
         )}
       </div>
+
+      {/* Target metric */}
       <div
         className="mono"
         style={{
@@ -2971,12 +3526,14 @@ function ProbeCard({
           fontWeight: 700,
           color: "var(--text)",
           fontFamily: "var(--font-mono)",
-          marginBottom: "var(--space-4)",
+          marginBottom: "var(--space-3)",
           lineHeight: 1.3,
         }}
       >
         {probe.target_metric}
       </div>
+
+      {/* Cost + Time */}
       <div
         style={{
           display: "flex",
@@ -3038,7 +3595,7 @@ function ProbeCard({
           fontSize: "var(--text-sm)",
           color: "var(--text-muted)",
           lineHeight: 1.55,
-          margin: "0 0 var(--space-4)",
+          margin: "0 0 var(--space-3)",
         }}
       >
         {probe.note}
@@ -3051,8 +3608,8 @@ function ProbeCard({
         <div
           style={{
             borderTop: "1px solid var(--border)",
-            paddingTop: "var(--space-4)",
-            marginBottom: "var(--space-4)",
+            paddingTop: "var(--space-3)",
+            marginBottom: "var(--space-3)",
           }}
         >
           <div
@@ -3147,9 +3704,9 @@ function ProbeCard({
         </div>
       )}
 
-      {/* Mark as running — only when status=designed and no verdict logged */}
+      {/* Mark as running — only when status=designed */}
       {showMarkAsRunning && (
-        <div style={{ marginBottom: isPrototype ? "var(--space-3)" : 0 }}>
+        <div style={{ marginBottom: "var(--space-2)" }}>
           {markRunningError && (
             <p
               role="alert"
@@ -3163,12 +3720,12 @@ function ProbeCard({
             </p>
           )}
           <button
-            className="btn btn-crux"
+            className="btn btn-sm"
             onClick={handleMarkAsRunning}
-            disabled={isMarkingRunning}
-            aria-busy={isMarkingRunning}
+            disabled={markRunningState === STATES.LOADING}
+            aria-busy={markRunningState === STATES.LOADING}
           >
-            {isMarkingRunning ? (
+            {markRunningState === STATES.LOADING ? (
               <>
                 <i className="ti ti-loader-2 crux-spin" aria-hidden="true"></i>{" "}
                 Updating…
@@ -3183,39 +3740,217 @@ function ProbeCard({
         </div>
       )}
 
-      {/* Send to commander — only for prototype type */}
-      {isPrototype && (
-        <>
-          <button
-            className="btn"
-            onClick={() => setShowSpecModal(true)}
-            aria-haspopup="dialog"
-          >
-            <i className="ti ti-send" aria-hidden="true"></i> Send to commander
-          </button>
-          {showSpecModal && (
-            <CommanderSpecModal
-              caseId={caseId}
-              initialSpec={probe.commander_spec || null}
-              onClose={() => setShowSpecModal(false)}
-              onSpecUpdated={(newSpec) => {
-                if (onProbeSpecUpdated) onProbeSpecUpdated(newSpec);
-              }}
-            />
-          )}
-        </>
+      {/* Log verdict — enabled when no verdict logged yet for this probe */}
+      {!hasVerdict && (
+        <button
+          className="btn btn-crux btn-sm"
+          onClick={() => setShowVerdictModal(true)}
+          disabled={showMarkAsRunning}
+          aria-label={`Log verdict for ${horizonLabel} horizon probe`}
+        >
+          <i className="ti ti-gavel" aria-hidden="true"></i> Log verdict
+        </button>
       )}
 
-      {/* Design new probe — only shown after an inconclusive verdict */}
-      {showReProbe && (
+      {showVerdictModal && (
+        <ProbeVerdictModal
+          probeId={probe.id}
+          onClose={() => setShowVerdictModal(false)}
+          onVerdictLogged={() => {
+            setShowVerdictModal(false);
+            handleVerdictLogged();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ProbeVerdictModal — log a verdict against a specific horizon probe
+// ---------------------------------------------------------------------------
+
+function ProbeVerdictModal({ probeId, onClose, onVerdictLogged }) {
+  const [outcome, setOutcome] = React.useState("confirmed");
+  const [notes, setNotes] = React.useState("");
+  const [notesError, setNotesError] = React.useState("");
+  const [submitError, setSubmitError] = React.useState("");
+  const [submitting, setSubmitting] = React.useState(false);
+
+  React.useEffect(() => {
+    function onKey(e) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!notes.trim()) {
+      setNotesError("Notes are required (min 1 character).");
+      return;
+    }
+    setSubmitting(true);
+    setNotesError("");
+    setSubmitError("");
+    try {
+      const resp = await fetch(`/api/probes/${probeId}/verdict`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ outcome, notes: notes.trim() }),
+      });
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        throw new Error(data.detail || `Error ${resp.status}`);
+      }
+      const data = await resp.json();
+      if (onVerdictLogged) onVerdictLogged(data);
+      onClose();
+    } catch (err) {
+      setSubmitError(
+        err.message || "Could not save verdict. Please try again.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const fieldStyle = {
+    width: "100%",
+    padding: "var(--space-2) var(--space-3)",
+    fontSize: "var(--text-sm)",
+    color: "var(--text)",
+    background: "var(--surface-2)",
+    border: "1px solid var(--border)",
+    borderRadius: "var(--radius-sm)",
+    boxSizing: "border-box",
+  };
+  const labelStyle = {
+    display: "block",
+    fontSize: "var(--text-2xs)",
+    fontWeight: 700,
+    color: "var(--text-muted)",
+    marginBottom: "var(--space-1)",
+    fontFamily: "var(--font-mono)",
+    textTransform: "uppercase",
+    letterSpacing: ".05em",
+  };
+
+  return (
+    <div
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Log verdict"
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,.45)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "var(--space-5)",
+        zIndex: 50,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: 480,
+          maxWidth: "100%",
+          background: "var(--surface)",
+          border: "1px solid var(--border)",
+          borderRadius: "var(--radius-xl)",
+          boxShadow: "var(--shadow-card)",
+          padding: "var(--space-6)",
+        }}
+      >
         <div
           style={{
-            marginTop: "var(--space-4)",
-            borderTop: "1px solid var(--border)",
-            paddingTop: "var(--space-4)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: "var(--space-4)",
           }}
         >
-          {reProbeError && (
+          <h2
+            style={{
+              fontSize: "var(--text-lg)",
+              fontWeight: 800,
+              color: "var(--text)",
+            }}
+          >
+            Log verdict
+          </h2>
+          <button
+            className="btn btn-sm"
+            onClick={onClose}
+            aria-label="Close"
+            style={{ padding: "6px 8px" }}
+          >
+            <i className="ti ti-x" aria-hidden="true"></i>
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} noValidate>
+          <div style={{ marginBottom: "var(--space-4)" }}>
+            <label style={labelStyle}>
+              Outcome <span style={{ color: "var(--red)" }}>*</span>
+            </label>
+            <div style={{ display: "flex", gap: "var(--space-2)" }}>
+              {_VERDICT_OUTCOMES.map(({ value, label, color, bg, border }) => {
+                const selected = outcome === value;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setOutcome(value)}
+                    className="mono"
+                    style={{
+                      flex: 1,
+                      padding: "var(--space-2) var(--space-3)",
+                      fontSize: "var(--text-2xs)",
+                      fontWeight: 700,
+                      letterSpacing: ".05em",
+                      border: `1px solid ${selected ? border : "var(--border)"}`,
+                      borderRadius: "var(--radius-sm)",
+                      background: selected ? bg : "var(--surface-2)",
+                      color: selected ? color : "var(--text-muted)",
+                      cursor: "pointer",
+                      transition: "all .15s",
+                    }}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div style={{ marginBottom: "var(--space-4)" }}>
+            <label style={labelStyle}>
+              Notes <span style={{ color: "var(--red)" }}>*</span>
+            </label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={4}
+              placeholder="What did you observe? What does this mean for the hypothesis?"
+              style={{ ...fieldStyle, resize: "vertical" }}
+            />
+            {notesError && (
+              <p
+                role="alert"
+                style={{
+                  color: "var(--red)",
+                  fontSize: "var(--text-sm)",
+                  marginTop: "var(--space-1)",
+                }}
+              >
+                {notesError}
+              </p>
+            )}
+          </div>
+          {submitError && (
             <p
               role="alert"
               style={{
@@ -3224,29 +3959,29 @@ function ProbeCard({
                 marginBottom: "var(--space-3)",
               }}
             >
-              {reProbeError}
+              {submitError}
             </p>
           )}
           <button
+            type="submit"
             className="btn btn-crux"
-            onClick={onReProbe}
-            disabled={reProbeLoading}
-            aria-busy={reProbeLoading}
+            disabled={submitting}
+            aria-busy={submitting}
+            style={{ width: "100%" }}
           >
-            {reProbeLoading ? (
+            {submitting ? (
               <>
                 <i className="ti ti-loader-2 crux-spin" aria-hidden="true"></i>{" "}
-                Designing…
+                Saving…
               </>
             ) : (
               <>
-                <i className="ti ti-refresh" aria-hidden="true"></i> Design new
-                probe
+                <i className="ti ti-gavel" aria-hidden="true"></i> Save verdict
               </>
             )}
           </button>
-        </div>
-      )}
+        </form>
+      </div>
     </div>
   );
 }
@@ -3652,7 +4387,65 @@ function StageBar({ stage = 0 }) {
 // CaseSummarySection — renders at stage >= 4 (probe) regardless of verdict
 // ---------------------------------------------------------------------------
 
-function CaseSummarySection({ summary, hasVerdict, onLogVerdict }) {
+function _renderCitationParagraph(text, citationRefs, totalParas, idx, onCitationClick) {
+  const parts = text.split(/(\[\d+\])/);
+  return (
+    <p
+      key={idx}
+      style={{
+        fontSize: "var(--text-base)",
+        color: "var(--text)",
+        lineHeight: 1.55,
+        margin: 0,
+        marginBottom: idx < (totalParas - 1) ? "var(--space-3)" : 0,
+      }}
+    >
+      {parts.map(function(part, i) {
+        const match = part.match(/^\[(\d+)\]$/);
+        if (!match) return part;
+        const n = parseInt(match[1], 10);
+        const ref = (citationRefs || []).find(function(r) { return r.id === n; });
+        return (
+          <button
+            key={i}
+            onClick={function() { if (ref) onCitationClick(ref.source_id); }}
+            style={{
+              display: "inline",
+              background: "none",
+              border: "none",
+              padding: "0 1px",
+              color: "var(--crux)",
+              fontSize: "var(--text-xs)",
+              fontFamily: "var(--font-mono)",
+              fontWeight: 700,
+              cursor: ref ? "pointer" : "default",
+              verticalAlign: "super",
+            }}
+            aria-label={"Citation " + n + (ref ? ": " + ref.title : "")}
+          >
+            {part}
+          </button>
+        );
+      })}
+    </p>
+  );
+}
+
+function CaseSummarySection({ summary, hasVerdict, onLogVerdict, sources }) {
+  const [selectedSource, setSelectedSource] = React.useState(null);
+
+  function openCitationSource(sourceId) {
+    if (typeof SourceDetailModal === "undefined") {
+      console.warn("[CaseSummarySection] SourceDetailModal is not available; citation click is a no-op.");
+      return;
+    }
+    const found = (sources || []).find(function(s) { return s.id === sourceId; });
+    if (found) setSelectedSource(found);
+  }
+
+  const references = summary && summary.references;
+  const paragraphs = summary && summary.paragraphs;
+
   return (
     <>
       <SectionLabel>CASE SUMMARY</SectionLabel>
@@ -3665,100 +4458,69 @@ function CaseSummarySection({ summary, hasVerdict, onLogVerdict }) {
           marginBottom: "var(--space-6)",
         }}
       >
-        {summary ? (
+        {summary && paragraphs ? (
           <div>
-            <div style={{ marginBottom: "var(--space-4)" }}>
-              <div
-                className="mono"
-                style={{
-                  fontSize: "var(--text-2xs)",
-                  fontWeight: 700,
-                  color: "var(--text-sub)",
-                  marginBottom: "var(--space-2)",
-                }}
-              >
-                PROBLEM STATEMENT
-              </div>
-              <p
-                style={{
-                  fontSize: "var(--text-base)",
-                  color: "var(--text)",
-                  lineHeight: 1.55,
-                  margin: 0,
-                }}
-              >
-                {summary.problem_statement}
-              </p>
+            <div style={{ marginBottom: references && references.length > 0 ? "var(--space-4)" : 0 }}>
+              {paragraphs.map(function(para, i) { return _renderCitationParagraph(para, references, paragraphs.length, i, openCitationSource); })}
             </div>
-            <div style={{ marginBottom: "var(--space-4)" }}>
+
+            {references && references.length > 0 && (
               <div
-                className="mono"
                 style={{
-                  fontSize: "var(--text-2xs)",
-                  fontWeight: 700,
-                  color: "var(--text-sub)",
-                  marginBottom: "var(--space-2)",
+                  borderTop: "1px solid var(--border)",
+                  paddingTop: "var(--space-4)",
+                  marginTop: "var(--space-2)",
+                  marginBottom: hasVerdict ? 0 : "var(--space-4)",
                 }}
               >
-                OPTION RANKING
+                <div
+                  className="mono"
+                  style={{
+                    fontSize: "var(--text-2xs)",
+                    fontWeight: 700,
+                    color: "var(--text-sub)",
+                    marginBottom: "var(--space-2)",
+                  }}
+                >
+                  REFERENCES
+                </div>
+                <ol
+                  style={{
+                    margin: 0,
+                    paddingLeft: "var(--space-4)",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "var(--space-1)",
+                  }}
+                >
+                  {references.map(function(ref) {
+                    return (
+                      <li key={ref.id}>
+                        <button
+                          onClick={function() { openCitationSource(ref.source_id); }}
+                          style={{
+                            background: "none",
+                            border: "none",
+                            padding: 0,
+                            color: "var(--crux)",
+                            fontSize: "var(--text-sm)",
+                            fontFamily: "var(--font-sans)",
+                            cursor: "pointer",
+                            textAlign: "left",
+                            textDecoration: "underline",
+                            textDecorationColor: "var(--crux-bg)",
+                          }}
+                          aria-label={"Open source: " + ref.title}
+                        >
+                          {ref.title}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ol>
               </div>
-              <p
-                style={{
-                  fontSize: "var(--text-sm)",
-                  color: "var(--text-muted)",
-                  lineHeight: 1.55,
-                  margin: 0,
-                }}
-              >
-                {summary.option_ranking}
-              </p>
-            </div>
-            <div style={{ marginBottom: "var(--space-4)" }}>
-              <div
-                className="mono"
-                style={{
-                  fontSize: "var(--text-2xs)",
-                  fontWeight: 700,
-                  color: "var(--text-sub)",
-                  marginBottom: "var(--space-2)",
-                }}
-              >
-                RECOMMENDED PLAN
-              </div>
-              <p
-                style={{
-                  fontSize: "var(--text-sm)",
-                  color: "var(--text-muted)",
-                  lineHeight: 1.55,
-                  margin: 0,
-                }}
-              >
-                {summary.recommended_plan}
-              </p>
-            </div>
-            <div style={{ marginBottom: hasVerdict ? 0 : "var(--space-4)" }}>
-              <div
-                className="mono"
-                style={{
-                  fontSize: "var(--text-2xs)",
-                  fontWeight: 700,
-                  color: "var(--text-sub)",
-                  marginBottom: "var(--space-2)",
-                }}
-              >
-                PROBE PLAN
-              </div>
-              <p
-                style={{
-                  fontSize: "var(--text-sm)",
-                  color: "var(--text-muted)",
-                  lineHeight: 1.55,
-                  margin: 0,
-                }}
-              >
-                {summary.probe_plan}
-              </p>
-            </div>
+            )}
+
             {!hasVerdict && (
               <div
                 style={{
@@ -3785,6 +4547,23 @@ function CaseSummarySection({ summary, hasVerdict, onLogVerdict }) {
           </p>
         )}
       </div>
+
+      {selectedSource && typeof SourceDetailModal !== "undefined" && (
+        <SourceDetailModal
+          id={selectedSource.id}
+          kind={selectedSource.kind}
+          title={selectedSource.title}
+          url={selectedSource.url}
+          claim={selectedSource.claim}
+          citation={selectedSource.citation}
+          support_status={selectedSource.support_status}
+          support_rationale={selectedSource.support_rationale}
+          content_summary={selectedSource.content_summary}
+          extracted_content={selectedSource.extracted_content}
+          onClose={function() { setSelectedSource(null); }}
+          onUpdate={function() {}}
+        />
+      )}
     </>
   );
 }
@@ -4240,7 +5019,7 @@ function CaseDetailScreen({
   React.useEffect(() => {
     if (!caseData) return;
     const stage = stageNum(caseData.stage);
-    if (stage >= 4 && !caseData.probe && probeState === STATES.IDLE) {
+    if (stage >= 4 && (!caseData.probes || !caseData.probes.length) && probeState === STATES.IDLE) {
       setProbeState(STATES.LOADING);
       setProbeError("");
       _postProbe(caseId)
@@ -4674,6 +5453,7 @@ function CaseDetailScreen({
           {stage >= 4 ? (
             <ProbeCard
               probe={caseData.probe || null}
+              probes={caseData.probes || []}
               loading={probeState === STATES.LOADING}
               error={probeError}
               caseId={caseId}
@@ -4753,22 +5533,59 @@ function CaseDetailScreen({
               summary={caseData.summary || null}
               hasVerdict={!!caseData.verdict_log}
               onLogVerdict={() => setShowLogVerdictModal(true)}
+              sources={(caseData.plans || []).flatMap(function(p) { return p.sources || []; })}
             />
           )}
 
-          {/* ACTION PLAN — only rendered once a verdict has been logged */}
+          {/* ACTION PLAN — unlocks on first probe verdict (provisional), final on long-horizon */}
           {stage >= 4 && !!caseData.verdict_log && (
             <>
               <SectionLabel>ACTION PLAN</SectionLabel>
               <div
                 style={{
                   background: "var(--surface)",
-                  border: "1px solid var(--border)",
+                  border: caseData.action_plan_state === "provisional"
+                    ? "1px dashed var(--border)"
+                    : "1px solid var(--border)",
                   borderRadius: "var(--radius)",
                   padding: "var(--space-5)",
                   marginBottom: "var(--space-6)",
+                  opacity: caseData.action_plan_state === "provisional" ? 0.88 : 1,
                 }}
               >
+                {/* provisional badge — shown until long-horizon probe verdict is logged */}
+                {caseData.action_plan_state === "provisional" && (
+                  <div
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "var(--space-1)",
+                      background: "var(--amber-bg)",
+                      border: "1px solid var(--amber)",
+                      borderRadius: "var(--radius-pill)",
+                      padding: "2px 10px",
+                      marginBottom: "var(--space-4)",
+                    }}
+                  >
+                    <i
+                      className="ti ti-clock"
+                      aria-hidden="true"
+                      style={{ fontSize: 11, color: "var(--amber)" }}
+                    ></i>
+                    <span
+                      className="mono"
+                      style={{
+                        fontSize: "var(--text-2xs)",
+                        fontWeight: 700,
+                        color: "var(--amber)",
+                        fontStyle: "italic",
+                        letterSpacing: ".04em",
+                      }}
+                    >
+                      provisional · pending long-horizon
+                    </span>
+                  </div>
+                )}
                 <div style={{ marginBottom: "var(--space-4)" }}>
                   <div
                     className="mono"

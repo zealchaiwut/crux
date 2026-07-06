@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 os.environ.setdefault("AUTH_SECRET", "test_auth_secret_12345678901")
 
-from app.models import Base, Case, Plan, Source, _SUPPORT_STATUS
+from app.models import Base, Case, Plan, Source, _SUPPORT_STATUS  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -168,7 +168,7 @@ def test_all_four_enum_variants_persist(plan, status):
     session.add(src)
     session.commit()
     result = session.execute(
-        text(f"SELECT support_status FROM source WHERE id='{src_id}'")
+        text("SELECT support_status FROM source WHERE id=:id").bindparams(id=src_id)
     ).scalar()
     assert result == status
 

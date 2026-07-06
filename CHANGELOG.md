@@ -3,6 +3,37 @@
 Per-sprint changelog for crux. Entries are written by the documentor when a
 sprint finishes. Dated per-sprint files live under [docs/changelog/](docs/changelog/).
 
+## Sprint 56.1 (2026-07-05)
+
+- #125: [follow-up] Add clarifying comment to _STAGE_ORDER definition
+- #141: [follow-up] Improve PlanCard rationale comment in cases.js
+- #161: [follow-up] Align source_verifier.py status vocabulary with Source model enum (partially_supports vs partial)
+
+## Sprint 56 (2026-07-05)
+
+- #124: [follow-up] Centralize verdict validation logic
+- #126: [follow-up] Add semicolon to .chip-expanded CSS rule
+- #137: [follow-up] Consolidate rationale validation in weigh.py
+- #138: [follow-up] Clarify rationale content requirements in weigh.py prompt
+- #139: [follow-up] Add explicit comment for rationale None handling in cases.py
+- #140: [follow-up] Resolve weigh context validation mismatch in #134
+- #142: [follow-up] Verify WeighPanel error messages don't reference 'required context' in #134
+- #160: [follow-up] Use SQLAlchemy bindparams instead of f-string in SQL query in test_issue_153.py
+- #162: [follow-up] handleAccept sets accepted=true before API call succeeds in SourceChip
+- #176: [follow-up] Return focus to SourceChip and trap focus in source detail modal
+- #177: [follow-up] Reject falsy source_id in summary reference validation
+- #178: [follow-up] Extract duplicated horizon sort-key helper in cases.py
+
+## Sprint 55 (2026-07-04)
+
+- #163: [follow-up] Remove redundant dict comprehension in summary.py json.dumps call
+- #168: Add horizon enum and generate three probes per case
+- #169: Render three horizon probes as grouped set in ProbeCard
+- #170: Gate action plan provisionally on first probe verdict
+- #171: Store extracted content and summary per source
+- #172: Add source detail modal to SourceChip click
+- #173: Rewrite case summary as cited literature-review JSON
+
 ## Sprint 54 (2026-06-29)
 
 - #153: Add source-verification fields to Source model

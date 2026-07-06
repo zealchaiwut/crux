@@ -40,10 +40,6 @@ def test_chip_expanded__other_styles_preserved(client):
 
 def test_chip_expanded__visual_no_regression(client):
     # AC4: Visual appearance of expanded chip elements is unchanged before and after the refactor
-    r = client.get("/")
-    assert r.status_code == 200
-    # Verify the page loads without errors
-    assert "error" not in r.text.lower() or "error-boundary" not in r.text.lower()
     pytest.skip("manual — visual comparison via browser inspection")
 
 

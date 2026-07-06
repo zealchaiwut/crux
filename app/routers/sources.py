@@ -172,6 +172,8 @@ def _source_to_dict(source: models.Source) -> dict:
         "rationale": source.rationale,
         "support_rationale": source.support_rationale,
         "manually_overridden": bool(source.manually_overridden),
+        "extracted_content": source.extracted_content,
+        "content_summary": source.content_summary,
     }
 
 
@@ -185,6 +187,7 @@ _SUPPORT_STATUS_VALUES = ("supports", "partial", "contradicts", "unverified")
 class VerifySourceRequest(BaseModel):
     support_status: Literal["supports", "partial", "contradicts", "unverified"]
     support_rationale: str | None = Field(None, max_length=4000)
+    rationale: str | None = Field(None, max_length=4000)
 
 
 # ---------------------------------------------------------------------------
@@ -203,6 +206,8 @@ def verify_source(
 
     source.support_status = body.support_status
     source.support_rationale = body.support_rationale
+    if body.rationale is not None:
+        source.rationale = body.rationale
     db.commit()
     db.refresh(source)
     return _source_to_dict(source)
@@ -395,6 +400,12 @@ def run_verify_all_sources(plan_id: str, db: Session = Depends(get_db)):
     return {"results": [_source_to_dict(s) for s in sources]}
 
 
+@router.post("/verify-all/{plan_id}")
+def run_verify_all_sources_alias(plan_id: str, db: Session = Depends(get_db)):
+    """Frontend alias for run_verify_all_sources; keeps /api/plans out of the SPA JS bundle."""
+    return run_verify_all_sources(plan_id, db)
+
+
 # ---------------------------------------------------------------------------
 # PATCH /api/sources/{id}/status-override
 # ---------------------------------------------------------------------------
@@ -436,5 +447,37 @@ def accept_status(source_id: str, db: Session = Depends(get_db)):
 
     source.manually_overridden = False
     db.commit()
+    db.refresh(source)
+    return _source_to_dict(source)
+
+
+# ---------------------------------------------------------------------------
+# POST /api/sources/{id}/fetch-content
+# ---------------------------------------------------------------------------
+
+def _do_fetch_content(source: models.Source, db: Session) -> None:
+    """Fetch, cap, and summarize source content then persist on the source row.
+
+    Extracted to a named function so tests can monkeypatch it without touching
+    the underlying HTTP/Claude machinery.
+    """
+    from app.services.fetch_content import fetch_and_store_content
+    fetch_and_store_content(db=db, source=source)
+
+
+@router.post("/sources/{source_id}/fetch-content")
+def fetch_source_content(source_id: str, db: Session = Depends(get_db)):
+    """Fetch the raw content and generate a Claude summary for a source.
+
+    Uses ArticleReaderFetcher for article/web sources and YouTubeTranscriptFetcher
+    for YouTube sources. Content is capped at 50,000 characters before storage.
+    On fetch failure (paywall, geo-block, unavailable transcript) both
+    extracted_content and content_summary remain null.
+    """
+    source = db.query(models.Source).filter(models.Source.id == source_id).first()
+    if source is None:
+        raise HTTPException(status_code=404, detail="Source not found")
+
+    _do_fetch_content(source, db)
     db.refresh(source)
     return _source_to_dict(source)
