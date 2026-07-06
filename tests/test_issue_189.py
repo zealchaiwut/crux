@@ -71,10 +71,14 @@ def test_factory_unknown_provider_raises(monkeypatch):
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
-def groq_provider(monkeypatch):
+def groq_provider(tmp_path, monkeypatch):
     monkeypatch.setenv("GROQ_API_KEY", "gsk-test")
     monkeypatch.setenv("CRUX_BULK_MODEL", "llama-3.1-8b-instant")
     monkeypatch.setenv("CRUX_JUDGMENT_MODEL", "openai/gpt-oss-120b")
+    # Isolate settings store so _check_budget() never reads a stale on-disk file.
+    monkeypatch.setenv("CRUX_SETTINGS_FILE", str(tmp_path / "settings.local.json"))
+    import app.settings_store as ss
+    importlib.reload(ss)
     import app.llm_providers as lp
     importlib.reload(lp)
     return lp.GroqProvider()
@@ -121,19 +125,19 @@ def test_custom_bulk_model_env_var(monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_groq_complete_uses_bulk_model_for_haiku(groq_provider):
-    with patch.object(groq_provider, "_post", new_callable=AsyncMock, return_value="ok") as mock:
+    with patch.object(groq_provider, "_post", new_callable=AsyncMock, return_value=("ok", {})) as mock:
         asyncio.run(groq_provider.complete("sys", "user", "claude-haiku-4-5-20251001"))
     assert mock.call_args[0][0] == "llama-3.1-8b-instant"
 
 
 def test_groq_complete_uses_judgment_model_for_sonnet(groq_provider):
-    with patch.object(groq_provider, "_post", new_callable=AsyncMock, return_value="ok") as mock:
+    with patch.object(groq_provider, "_post", new_callable=AsyncMock, return_value=("ok", {})) as mock:
         asyncio.run(groq_provider.complete("sys", "user", "claude-sonnet-4-6"))
     assert mock.call_args[0][0] == "openai/gpt-oss-120b"
 
 
 def test_groq_complete_includes_system_and_user_messages(groq_provider):
-    with patch.object(groq_provider, "_post", new_callable=AsyncMock, return_value="ok") as mock:
+    with patch.object(groq_provider, "_post", new_callable=AsyncMock, return_value=("ok", {})) as mock:
         asyncio.run(groq_provider.complete("my system", "my user", None))
     messages = mock.call_args[0][1]
     roles = [m["role"] for m in messages]
@@ -145,7 +149,7 @@ def test_groq_complete_includes_system_and_user_messages(groq_provider):
 
 
 def test_groq_complete_omits_system_when_empty(groq_provider):
-    with patch.object(groq_provider, "_post", new_callable=AsyncMock, return_value="ok") as mock:
+    with patch.object(groq_provider, "_post", new_callable=AsyncMock, return_value=("ok", {})) as mock:
         asyncio.run(groq_provider.complete("", "user only", None))
     messages = mock.call_args[0][1]
     roles = [m["role"] for m in messages]
@@ -153,13 +157,13 @@ def test_groq_complete_omits_system_when_empty(groq_provider):
 
 
 def test_groq_complete_strips_code_fences(groq_provider):
-    with patch.object(groq_provider, "_post", new_callable=AsyncMock, return_value='```json\n{"k": 1}\n```'):
+    with patch.object(groq_provider, "_post", new_callable=AsyncMock, return_value=('```json\n{"k": 1}\n```', {})):
         result = asyncio.run(groq_provider.complete("s", "u", None))
     assert result == '{"k": 1}'
 
 
 def test_groq_complete_sync_uses_bulk_model(groq_provider):
-    with patch.object(groq_provider, "_post_sync", return_value="ok") as mock:
+    with patch.object(groq_provider, "_post_sync", return_value=("ok", {})) as mock:
         groq_provider.complete_sync("sys", "user", "claude-haiku-4-5-20251001")
     assert mock.call_args[0][0] == "llama-3.1-8b-instant"
 
@@ -179,7 +183,7 @@ def test_groq_post_sends_to_groq_url(groq_provider):
 
         result = asyncio.run(groq_provider._post("llama-3.1-8b-instant", [{"role": "user", "content": "hi"}]))
 
-    assert result == "hello"
+    assert result[0] == "hello"
     call_url = mock_client.post.call_args[0][0]
     assert "api.groq.com" in call_url
     assert "/chat/completions" in call_url

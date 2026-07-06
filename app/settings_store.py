@@ -27,7 +27,13 @@ _PATH = Path(
     )
 )
 _LOCK = threading.Lock()
-_DEFAULTS = {"provider": "cli", "api_usd_budget": 5.0, "api_usd_spent": 0.0}
+_DEFAULTS = {
+    "provider": "cli",
+    "api_usd_budget": 5.0,
+    "api_usd_spent": 0.0,
+    "groq_usd_spent": 0.0,
+    "groq_rates": {},
+}
 
 
 def _coerce(data: dict) -> dict:
@@ -41,6 +47,12 @@ def _coerce(data: dict) -> dict:
         merged["api_usd_spent"] = max(0.0, float(merged.get("api_usd_spent") or 0.0))
     except (TypeError, ValueError):
         merged["api_usd_spent"] = 0.0
+    try:
+        merged["groq_usd_spent"] = max(0.0, float(merged.get("groq_usd_spent") or 0.0))
+    except (TypeError, ValueError):
+        merged["groq_usd_spent"] = 0.0
+    if not isinstance(merged.get("groq_rates"), dict):
+        merged["groq_rates"] = {}
     return merged
 
 
@@ -65,19 +77,25 @@ def get_settings() -> dict:
         return _load()
 
 
-def update_settings(provider: str | None = None, api_usd_budget: float | None = None) -> dict:
+def update_settings(
+    provider: str | None = None,
+    api_usd_budget: float | None = None,
+    groq_rates: dict | None = None,
+) -> dict:
     with _LOCK:
         data = _load()
         if provider is not None:
             data["provider"] = "api" if provider == "api" else "cli"
         if api_usd_budget is not None:
             data["api_usd_budget"] = max(0.0, float(api_usd_budget))
+        if groq_rates is not None:
+            data["groq_rates"] = groq_rates
         _save(data)
         return data
 
 
 def add_spend(usd: float) -> None:
-    """Accumulate API spend (USD). No-op for non-positive amounts."""
+    """Accumulate Anthropic API spend (USD). No-op for non-positive amounts."""
     if not usd or usd <= 0:
         return
     with _LOCK:
@@ -86,14 +104,26 @@ def add_spend(usd: float) -> None:
         _save(data)
 
 
+def add_groq_spend(usd: float) -> None:
+    """Accumulate Groq API spend (USD). No-op for non-positive amounts."""
+    if not usd or usd <= 0:
+        return
+    with _LOCK:
+        data = _load()
+        data["groq_usd_spent"] = round(data["groq_usd_spent"] + float(usd), 6)
+        _save(data)
+
+
 def reset_spend() -> dict:
     with _LOCK:
         data = _load()
         data["api_usd_spent"] = 0.0
+        data["groq_usd_spent"] = 0.0
         _save(data)
         return data
 
 
 def budget_remaining(data: dict | None = None) -> float:
     d = data if data is not None else get_settings()
-    return max(0.0, d["api_usd_budget"] - d["api_usd_spent"])
+    total_spent = d["api_usd_spent"] + d.get("groq_usd_spent", 0.0)
+    return max(0.0, d["api_usd_budget"] - total_spent)
