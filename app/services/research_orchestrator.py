@@ -8,7 +8,6 @@ Engine selection is controlled by RESEARCH_ENGINE config (§11):
 from __future__ import annotations
 
 import logging
-import uuid as _uuid_mod
 from typing import Protocol, runtime_checkable
 
 from app.research.types import (

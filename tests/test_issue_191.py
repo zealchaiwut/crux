@@ -13,7 +13,6 @@ import asyncio
 import inspect
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 
 import os
 os.environ.setdefault("AUTH_SECRET", "test_auth_secret_12345678901")
@@ -337,7 +336,6 @@ def test_changing_judgment_model_does_not_affect_bulk_model(monkeypatch):
     monkeypatch.setenv("CRUX_BULK_MODEL", "llama-3.1-8b-instant")
 
     monkeypatch.setenv("CRUX_JUDGMENT_MODEL", "openai/gpt-oss-120b")
-    from app.llm_providers import GroqProvider
     import importlib
     import app.llm_providers as lp
     importlib.reload(lp)
@@ -496,9 +494,7 @@ def test_call_bulk_stage_sync_exists_in_llm_providers():
 
 def test_call_bulk_stage_sync_falls_back_without_structured(monkeypatch):
     """call_bulk_stage_sync falls back to complete_sync when provider lacks structured bulk method."""
-    import json
     from app.llm_providers import call_bulk_stage_sync
-    from app.claude_cli import _strip_fences
 
     mock_provider = MagicMock()
     mock_provider.supports_structured_output = False
@@ -629,7 +625,7 @@ def test_orchestrator_skips_bulk_stages_when_no_provider():
 def test_orchestrator_calls_dedup_when_provider_set():
     """AC2: _CustomEngine.run() calls dedup_candidates_sync after collecting candidates."""
     from app.services.research_orchestrator import _CustomEngine
-    from app.research.types import Plan, SearchResult, ArticleDocument, Source, SearchQuery
+    from app.research.types import Plan, SearchResult, ArticleDocument, SearchQuery
 
     plan = Plan(mechanism="mechanism", prior="prior")
 
