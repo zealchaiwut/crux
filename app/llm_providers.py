@@ -35,6 +35,10 @@ _GROQ_TIMEOUT = httpx.Timeout(60.0, connect=10.0, read=30.0, write=5.0, pool=5.0
 _log = logging.getLogger(__name__)
 
 
+class GroqBudgetExhaustedError(Exception):
+    """Raised when the combined USD budget (Anthropic + Groq spend) is exhausted."""
+
+
 class GroqProvider:
     """OpenAI-compatible provider backed by the Groq API."""
 
@@ -65,7 +69,7 @@ class GroqProvider:
         messages.append({"role": "user", "content": user})
         return messages
 
-    async def _post(self, model: str, messages: list) -> str:
+    async def _post(self, model: str, messages: list) -> tuple[str, dict]:
         async with httpx.AsyncClient(timeout=_GROQ_TIMEOUT) as client:
             resp = await client.post(
                 f"{_GROQ_BASE_URL}/chat/completions",
@@ -73,9 +77,10 @@ class GroqProvider:
                 headers=self._headers(),
             )
         resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"]
+        data = resp.json()
+        return data["choices"][0]["message"]["content"], data.get("usage", {})
 
-    def _post_sync(self, model: str, messages: list) -> str:
+    def _post_sync(self, model: str, messages: list) -> tuple[str, dict]:
         with httpx.Client(timeout=_GROQ_TIMEOUT) as client:
             resp = client.post(
                 f"{_GROQ_BASE_URL}/chat/completions",
@@ -83,19 +88,62 @@ class GroqProvider:
                 headers=self._headers(),
             )
         resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"]
+        data = resp.json()
+        return data["choices"][0]["message"]["content"], data.get("usage", {})
+
+    def _groq_cost_usd(self, model: str, usage: dict) -> float:
+        from app import settings_store
+        rates = settings_store.get_settings().get("groq_rates", {})
+        model_rates = rates.get(model)
+        if model_rates is None:
+            _log.warning(
+                "No Groq rate configured for model %s; cost counted as $0.00", model
+            )
+            return 0.0
+        prompt_tokens = usage.get("prompt_tokens", 0) or 0
+        completion_tokens = usage.get("completion_tokens", 0) or 0
+        return (prompt_tokens / 1_000_000) * model_rates.get("input_per_1m", 0) + \
+               (completion_tokens / 1_000_000) * model_rates.get("output_per_1m", 0)
+
+    def _check_budget(self) -> None:
+        from app import settings_store
+        settings = settings_store.get_settings()
+        if settings["api_usd_budget"] > 0 and settings_store.budget_remaining(settings) <= 0:
+            spent = settings["api_usd_spent"] + settings.get("groq_usd_spent", 0.0)
+            raise GroqBudgetExhaustedError(
+                f"USD budget exhausted (limit=${settings['api_usd_budget']:.4f}, "
+                f"combined_spent=${spent:.6f}); halting Groq call. "
+                f"Groq spend: ${settings.get('groq_usd_spent', 0.0):.6f}, "
+                f"Anthropic spend: ${settings['api_usd_spent']:.6f}"
+            )
+
+    def _record_spend(self, model: str, usage: dict) -> float:
+        from app import settings_store
+        cost = self._groq_cost_usd(model, usage)
+        prompt_tokens = usage.get("prompt_tokens", 0) or 0
+        completion_tokens = usage.get("completion_tokens", 0) or 0
+        _log.info(
+            "Groq stage: model=%s tokens_in=%d tokens_out=%d cost_usd=%.8f",
+            model, prompt_tokens, completion_tokens, cost,
+        )
+        settings_store.add_groq_spend(cost)
+        return cost
 
     async def complete(self, system: str, user: str, model: str | None = None) -> str:
         from app.claude_cli import _strip_fences
+        self._check_budget()
         groq_model = self._resolve_model(model)
-        text = await self._post(groq_model, self._build_messages(system, user))
-        return _strip_fences(text)
+        content, usage = await self._post(groq_model, self._build_messages(system, user))
+        self._record_spend(groq_model, usage)
+        return _strip_fences(content)
 
     def complete_sync(self, system: str, user: str, model: str | None = None) -> str:
         from app.claude_cli import _strip_fences
+        self._check_budget()
         groq_model = self._resolve_model(model)
-        text = self._post_sync(groq_model, self._build_messages(system, user))
-        return _strip_fences(text)
+        content, usage = self._post_sync(groq_model, self._build_messages(system, user))
+        self._record_spend(groq_model, usage)
+        return _strip_fences(content)
 
     async def complete_structured(
         self,
@@ -106,6 +154,7 @@ class GroqProvider:
         json_schema: dict,
     ) -> dict | list:
         """POST with response_format json_schema; return a parsed Python object."""
+        self._check_budget()
         groq_model = self._resolve_model(model)
         payload = {
             "model": groq_model,
@@ -126,7 +175,9 @@ class GroqProvider:
                 headers=self._headers(),
             )
         resp.raise_for_status()
-        content = resp.json()["choices"][0]["message"]["content"]
+        data = resp.json()
+        self._record_spend(groq_model, data.get("usage", {}))
+        content = data["choices"][0]["message"]["content"]
         return _json.loads(content)
 
     async def complete_bulk_structured(
@@ -141,6 +192,7 @@ class GroqProvider:
         Unlike complete_structured(), this method never inspects the caller's model
         name to decide routing; it always dispatches to self._bulk_model.
         """
+        self._check_budget()
         payload = {
             "model": self._bulk_model,
             "messages": self._build_messages(system, user),
@@ -160,7 +212,9 @@ class GroqProvider:
                 headers=self._headers(),
             )
         resp.raise_for_status()
-        content = resp.json()["choices"][0]["message"]["content"]
+        data = resp.json()
+        self._record_spend(self._bulk_model, data.get("usage", {}))
+        content = data["choices"][0]["message"]["content"]
         return _json.loads(content)
 
     def complete_bulk_structured_sync(
@@ -171,6 +225,7 @@ class GroqProvider:
         json_schema: dict,
     ) -> dict | list:
         """Synchronous version of complete_bulk_structured."""
+        self._check_budget()
         payload = {
             "model": self._bulk_model,
             "messages": self._build_messages(system, user),
@@ -190,7 +245,9 @@ class GroqProvider:
                 headers=self._headers(),
             )
         resp.raise_for_status()
-        content = resp.json()["choices"][0]["message"]["content"]
+        data = resp.json()
+        self._record_spend(self._bulk_model, data.get("usage", {}))
+        content = data["choices"][0]["message"]["content"]
         return _json.loads(content)
 
 
