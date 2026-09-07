@@ -24,6 +24,7 @@ from app.routers import (
     action_plan_router,
     cases_router,
     gather_router,
+    hub_router,
     notebooklm_router,
     probes_router,
     related_cases_router,
@@ -75,6 +76,7 @@ app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 app.include_router(action_plan_router)
 app.include_router(cases_router)
 app.include_router(gather_router)
+app.include_router(hub_router)
 app.include_router(notebooklm_router)
 app.include_router(probes_router)
 app.include_router(related_cases_router)
