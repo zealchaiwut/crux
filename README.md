@@ -56,17 +56,41 @@ GET /healthz  →  {"status": "ok", "env": "development"}
 
 ## Authentication
 
-All routes except `/login` require a valid session cookie. The login password is the value of `AUTH_SECRET`.
+Authentication is **on by default**. All routes except `/login` require a valid session (browser cookie) or a Bearer token (service-to-service). Set `CRUX_REQUIRE_AUTH=0` to disable for local single-user use.
+
+### Browser login
+
+The login password is the value of `AUTH_SECRET`. A successful login sets an `httponly` session cookie.
 
 ```bash
 # Generate a strong secret
 python3 -c "import secrets; print(secrets.token_hex(32))"
 ```
 
+### Service tokens (Bearer auth)
+
+Machine callers authenticate with `Authorization: Bearer <token>`. Two token scopes are available:
+
+| Variable | Scope |
+|---|---|
+| `CRUX_SERVICE_TOKEN` | Full read + write access to all routes |
+| `CRUX_VERDICT_TOKEN` | `POST /api/cases/{id}/verdict` only — no general write access |
+
+Use `CRUX_VERDICT_TOKEN` for callers that only need to settle verdicts (e.g. viral-radar settling content-post verdicts) so they never hold broader write access.
+
+**Token rotation**: generate a new token (`python3 -c "import secrets; print(secrets.token_hex(32))"`), update the caller's env var and `CRUX_SERVICE_TOKEN` / `CRUX_VERDICT_TOKEN` in the deployed environment, then restart both services.
+
 ```bash
 # Required env vars
 AUTH_SECRET=<min 16 chars — server exits at startup if missing>
 DATABASE_URL=<Neon Postgres connection string>
+
+# Auth gate — on by default; set 0 to disable
+CRUX_REQUIRE_AUTH=1
+
+# Service tokens — optional; enable Bearer token auth
+# CRUX_SERVICE_TOKEN=<full read+write token>
+# CRUX_VERDICT_TOKEN=<verdict-submission-only token>
 
 # Optional
 ANTHROPIC_API_KEY=<Claude API key>          # needed for related-case embeddings, and for the optional "Anthropic API" provider

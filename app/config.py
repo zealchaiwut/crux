@@ -20,6 +20,12 @@ if len(_raw_secret) < 16:
 
 AUTH_SECRET: str = _raw_secret
 
+# Service-token auth (issue #202). Optional; Bearer token access.
+# CRUX_SERVICE_TOKEN grants full read+write access.
+# CRUX_VERDICT_TOKEN grants POST /api/cases/{id}/verdict only.
+CRUX_SERVICE_TOKEN: str = os.environ.get("CRUX_SERVICE_TOKEN", "")
+CRUX_VERDICT_TOKEN: str = os.environ.get("CRUX_VERDICT_TOKEN", "")
+
 # §11: research engine selection — "custom" (default) or "fallback".
 # Switch without any code change: set RESEARCH_ENGINE=fallback in the environment.
 RESEARCH_ENGINE: str = os.environ.get("RESEARCH_ENGINE", "custom")

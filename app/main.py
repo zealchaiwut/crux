@@ -1,5 +1,7 @@
 # ruff: noqa: E402
+import hmac
 import os
+import re
 from pathlib import Path
 
 # Load .env before importing app.config (which reads env at import time).
@@ -8,7 +10,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from fastapi import FastAPI, Form, Request
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -19,7 +21,7 @@ from app.auth import (
     record_attempt,
     verify_session_cookie,
 )
-from app.config import AUTH_SECRET, ENV
+from app.config import AUTH_SECRET, CRUX_SERVICE_TOKEN, CRUX_VERDICT_TOKEN, ENV
 from app.routers import (
     action_plan_router,
     cases_router,
@@ -52,16 +54,30 @@ _LOGIN_PAGE = """\
 
 _UNPROTECTED = {"/login"}
 
+# Auth is ON by default. Set CRUX_REQUIRE_AUTH=0 to disable for local single-user use.
+_REQUIRE_AUTH = os.environ.get("CRUX_REQUIRE_AUTH", "1") != "0"
 
-# Auth disabled for single-user local use. Set CRUX_REQUIRE_AUTH=1 to re-enable
-# the session-cookie gate (login page + AUTH_SECRET password).
-_REQUIRE_AUTH = os.environ.get("CRUX_REQUIRE_AUTH", "") == "1"
+_VERDICT_PATH_RE = re.compile(r"^/api/cases/[^/]+/verdict$")
 
 
 class _AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         if not _REQUIRE_AUTH or request.url.path in _UNPROTECTED:
             return await call_next(request)
+
+        # Bearer token auth (service-to-service)
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            bearer = auth_header[7:]
+            if CRUX_SERVICE_TOKEN and hmac.compare_digest(bearer, CRUX_SERVICE_TOKEN):
+                return await call_next(request)
+            if CRUX_VERDICT_TOKEN and hmac.compare_digest(bearer, CRUX_VERDICT_TOKEN):
+                if request.method == "POST" and _VERDICT_PATH_RE.match(request.url.path):
+                    return await call_next(request)
+                return Response(status_code=403, content="Forbidden: token scope insufficient")
+            return Response(status_code=401, content="Unauthorized: invalid token")
+
+        # Cookie session auth (browser)
         token = request.cookies.get("session", "")
         if not token or not verify_session_cookie(token, AUTH_SECRET):
             return RedirectResponse(url="/login", status_code=302)
