@@ -114,6 +114,23 @@ Added in sprint 11 (issue #99). Stores raw pipeline results from the fetch→Cla
 | `CRUX_JUDGMENT_MODEL` | model id (default `openai/gpt-oss-120b`) | Groq model for judgment stages (sharpen, plans, weigh, probe, summary), called with structured outputs (issues #189, #190). |
 | `CRUX_BULK_MODEL` | model id (default `llama-3.1-8b-instant`) | Groq model for high-volume bulk stages (content summary, dedup, candidate summarization); bulk stages always route here regardless of caller (issue #191). |
 
+## Verdict gate
+
+`GET /api/cases/{id}` enforces a server-side verdict gate on the `plans` field (issue #201):
+
+| Condition | `plans` value |
+|---|---|
+| Case has **no probe** yet (stages: sharpened, bake_off, gather, weigh) | Full ranked plan list |
+| Case has a probe but **no verdict** has been logged | `null` — plans are locked |
+| Case has a probe and **a verdict exists** | Full ranked plan list |
+
+This is a **server guarantee**, not a UI convention. The JavaScript layer enforces the same
+rule visually, but machine callers (e.g. viral-radar) that call the API directly are also
+subject to this gate. Clients must handle `plans: null` and treat it as a locked state.
+
+The `summary` field is **not** gated by verdict — it is available once the case reaches the
+probe stage regardless of verdict state (see issue #148).
+
 ### `case_embedding`
 
 Added in sprint 7 (issue #68). Stores pre-computed Claude embedding vectors for semantic related-case matching.
