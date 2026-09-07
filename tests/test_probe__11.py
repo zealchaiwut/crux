@@ -194,11 +194,14 @@ def test_probe_model_has_note_column():
 
 
 def test_probe_type_enum_has_four_values():
-    """AC2: Probe type enum must contain exactly the four valid types."""
+    """AC2: Probe type enum must contain the four original valid types (and may include
+    additional types added by later issues, e.g. 'content-post' from issue #204)."""
     from app import models
-    valid = {"measurement", "lab-test", "behaviour-experiment", "prototype"}
+    required = {"measurement", "lab-test", "behaviour-experiment", "prototype"}
     actual = set(models._PROBE_TYPE)
-    assert actual == valid, f"Expected probe types {valid}, got {actual}"
+    assert required.issubset(actual), (
+        f"Probe type enum must include all of {required}; got {actual}"
+    )
 
 
 # ---------------------------------------------------------------------------

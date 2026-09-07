@@ -3387,6 +3387,7 @@ function HorizonProbeGroup({ probe, isFirst, onVerdictLogged }) {
     "lab-test": "Lab test",
     "behaviour-experiment": "Behaviour experiment",
     prototype: "Prototype",
+    "content-post": "Content post",
   };
 
   const HORIZON_LABELS = { short: "Short", mid: "Mid", long: "Long" };

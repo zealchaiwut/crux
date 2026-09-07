@@ -10,6 +10,7 @@ from sqlalchemy import (
     Column,
     Date,
     Enum,
+    Float,
     ForeignKey,
     Integer,
     Text,
@@ -23,7 +24,7 @@ _STAGE = ("sharpened", "bake_off", "gather", "weigh", "probe", "verdict")
 _PLAN_LABEL = ("A", "B", "C")
 _SOURCE_KIND = ("book", "article", "youtube", "podcast")
 _SUPPORT_STATUS = ("supports", "partial", "contradicts", "unverified")
-_PROBE_TYPE = ("measurement", "lab-test", "behaviour-experiment", "prototype")
+_PROBE_TYPE = ("measurement", "lab-test", "behaviour-experiment", "prototype", "content-post")
 _PROBE_STATUS = ("designed", "running", "confirmed", "killed", "inconclusive")
 _PROBE_HORIZON = ("short", "mid", "long")
 _VERDICT_OUTCOME = ("confirmed", "killed", "inconclusive")
@@ -195,6 +196,8 @@ class Verdict(Base):
     notes = Column(Text)
     decided_at = Column(TIMESTAMP(timezone=True))
     created_at = Column(TIMESTAMP(timezone=True))
+
+    metric_value = Column(Float, nullable=True)
 
     probe = relationship("Probe", back_populates="verdicts")
 

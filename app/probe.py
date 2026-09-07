@@ -7,7 +7,7 @@ from app.llm_providers import call_stage
 
 _MODEL = "claude-haiku-4-5-20251001"
 
-_VALID_TYPES = {"measurement", "lab-test", "behaviour-experiment", "prototype"}
+_VALID_TYPES = {"measurement", "lab-test", "behaviour-experiment", "prototype", "content-post"}
 
 _SYSTEM = (
     "You are a probe designer. Given a falsifiable problem statement and one or more competing "
@@ -19,7 +19,9 @@ _SYSTEM = (
     "direct the user to see an appropriate professional\n"
     '  "behaviour-experiment"   — change a behaviour and observe the outcome (e.g. deload week, '
     "dietary change, sleep intervention)\n"
-    '  "prototype"              — build a minimal product to test a hypothesis\n\n'
+    '  "prototype"              — build a minimal product to test a hypothesis\n'
+    '  "content-post"           — post a piece of content and measure engagement (e.g. views, '
+    "clicks, shares) to decide which angle or variant wins\n\n"
     "Rules:\n"
     "- Be honest: if the right answer is a blood test, say 'lab-test' and direct the user "
     "to see a doctor. Do NOT suggest a fictional app or invented solution.\n"
@@ -88,7 +90,9 @@ _SYSTEM_THREE = (
     '  "measurement"            — measure something already observable (e.g. resting HRV, bodyweight)\n'
     '  "lab-test"               — requires a professional or lab test; direct the user to a professional\n'
     '  "behaviour-experiment"   — change a behaviour and observe the outcome\n'
-    '  "prototype"              — build a minimal product to test a hypothesis\n\n'
+    '  "prototype"              — build a minimal product to test a hypothesis\n'
+    '  "content-post"           — post a piece of content and measure engagement (views, clicks, '
+    "shares) to decide which angle or variant wins\n\n"
     "Horizon definitions:\n"
     '  "short" — fast early signal, duration expressed in DAYS (e.g. "5 days", "1 week").\n'
     "             Decision rule reflects an early go/no-go threshold — cheap and quick.\n"
