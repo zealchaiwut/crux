@@ -214,6 +214,11 @@ def get_case(case_id: str, db: Session = Depends(get_db)):
     _verdict_probe = _long_with_verdict or (_probes_with_verdict[0] if _probes_with_verdict else None)
     verdict_obj = _verdict_probe.verdicts[0] if _verdict_probe else None
 
+    # Verdict gate: plans are locked when a probe exists but no verdict has been logged.
+    # This prevents machine callers (e.g. viral-radar) from reading plan data before a
+    # verdict is confirmed — the same constraint the JS layer enforces for browser clients.
+    _plans_locked = probe is not None and verdict_obj is None
+
     not_investigating = []
     if case.not_investigating:
         try:
@@ -221,41 +226,44 @@ def get_case(case_id: str, db: Session = Depends(get_db)):
         except (ValueError, TypeError):
             not_investigating = []
 
-    plans_out = []
-    for plan in sorted(case.plans, key=lambda p: p.current_rank or 99):
-        rank = plan.current_rank or 99
-        status_data = gather_status_store.get(plan.id)
-        plans_out.append({
-            "id": plan.id,
-            "label": plan.label,
-            "name": plan.name or f"Plan {plan.label}",
-            "mechanism": plan.mechanism or "",
-            "prior": plan.prior or "0",
-            "bar_weight": _STANDING_BY_RANK.get(rank, 0.15),
-            "standing": plan.standing,
-            "rationale": plan.rationale,
-            "current_rank": plan.current_rank,
-            "state": _plan_state(plan, probe, verdict_obj),
-            "gather_status": status_data["status"],
-            "gather_error": status_data["error"],
-            "sources": [
-                {
-                    "id": s.id,
-                    "kind": s.kind,
-                    "title": s.title,
-                    "url": s.url,
-                    "claim": s.claim,
-                    "citation": s.citation,
-                    "support_status": s.support_status,
-                    "rationale": s.rationale,
-                    "support_rationale": s.support_rationale,
-                    "manually_overridden": bool(s.manually_overridden),
-                    "extracted_content": s.extracted_content,
-                    "content_summary": s.content_summary,
-                }
-                for s in (plan.sources or [])
-            ],
-        })
+    if _plans_locked:
+        plans_out = None
+    else:
+        plans_out = []
+        for plan in sorted(case.plans, key=lambda p: p.current_rank or 99):
+            rank = plan.current_rank or 99
+            status_data = gather_status_store.get(plan.id)
+            plans_out.append({
+                "id": plan.id,
+                "label": plan.label,
+                "name": plan.name or f"Plan {plan.label}",
+                "mechanism": plan.mechanism or "",
+                "prior": plan.prior or "0",
+                "bar_weight": _STANDING_BY_RANK.get(rank, 0.15),
+                "standing": plan.standing,
+                "rationale": plan.rationale,
+                "current_rank": plan.current_rank,
+                "state": _plan_state(plan, probe, verdict_obj),
+                "gather_status": status_data["status"],
+                "gather_error": status_data["error"],
+                "sources": [
+                    {
+                        "id": s.id,
+                        "kind": s.kind,
+                        "title": s.title,
+                        "url": s.url,
+                        "claim": s.claim,
+                        "citation": s.citation,
+                        "support_status": s.support_status,
+                        "rationale": s.rationale,
+                        "support_rationale": s.support_rationale,
+                        "manually_overridden": bool(s.manually_overridden),
+                        "extracted_content": s.extracted_content,
+                        "content_summary": s.content_summary,
+                    }
+                    for s in (plan.sources or [])
+                ],
+            })
 
     probe_out = None
     if probe:
