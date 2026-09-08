@@ -687,6 +687,11 @@ function SourceDetailModal({
     onClose();
   }
 
+  // Keep a ref to the latest handleClose so the bind-once keydown listener below
+  // always invokes the current version without a stale closure.
+  const handleCloseRef = React.useRef(handleClose);
+  handleCloseRef.current = handleClose;
+
   // Focusable element selector used for the focus trap (AC3, AC4).
   const FOCUSABLE = 'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])';
 
@@ -699,7 +704,7 @@ function SourceDetailModal({
 
     function onKey(e) {
       if (e.key === "Escape") {
-        handleClose();
+        handleCloseRef.current();
         return;
       }
       // Focus trap: confine Tab / Shift+Tab to the modal's focusable elements (AC3, AC4).
@@ -727,7 +732,6 @@ function SourceDetailModal({
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const isFetching = fetchState === "loading";
