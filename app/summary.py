@@ -303,18 +303,6 @@ def _format_plans(plans: list) -> str:
     return "\n".join(lines)
 
 
-def _parse_literature_review(raw: str) -> dict:
-    """Parse the literature-review JSON text from a text-completion fallback path."""
-    raw = raw.strip()
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise SummaryError(
-            f"LLM returned non-JSON response: {raw[:200]!r}"
-        ) from exc
-    return _validate_literature_review_dict(data)
-
-
 def _validate_literature_review_dict(data: dict) -> dict:
     """Structurally validate an already-parsed literature-review response dict."""
     if "paragraphs" not in data or not isinstance(data["paragraphs"], list):
