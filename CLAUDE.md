@@ -47,6 +47,18 @@ the tester said "both test suites are running in the background, I'll pick
 this back up once they finish" — but headless dispatch has no "once they
 finish," so nothing ever did.
 
+## Linting
+
+Project-wide flake8 config lives in `.flake8` (root of the repo):
+
+- `max-line-length = 120` — confirmed as the project convention (see issue #187 review of #161).
+- **Exclude list**: `venv`, `.venv`, `.git`, `__pycache__`, `alembic/versions`.
+
+These values are intentional. **Tooling-config changes** (editing `.flake8`,
+`pyproject.toml`, `setup.cfg`, etc.) are project-level changes and must land as
+their own standalone ticket — never bundled into a narrow feature or vocabulary
+ticket — so they can be reviewed on their own merits.
+
 ## Tests
 
 Tests must not make live HTTP calls — use an in-process test client. The bar
