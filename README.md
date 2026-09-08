@@ -56,12 +56,26 @@ GET /healthz  →  {"status": "ok", "env": "development"}
 
 ## Authentication
 
-All routes except `/login` require a valid session cookie. The login password is the value of `AUTH_SECRET`.
+Auth is **on by default**. All routes except `/login` require either:
+- a valid session cookie (browser flow — login via `POST /login` with `AUTH_SECRET` as the password), or
+- an `Authorization: Bearer <token>` header (service-to-service — three scopes: read, write, verdict).
+
+To disable auth entirely (single-user local dev), set `CRUX_DISABLE_AUTH=1`.
 
 ```bash
-# Generate a strong secret
+# Generate a strong secret or token
 python3 -c "import secrets; print(secrets.token_hex(32))"
 ```
+
+**Service token scopes:**
+
+| Token env var | Scope | Allowed requests |
+|---|---|---|
+| `CRUX_TOKEN_WRITE` | write | all requests |
+| `CRUX_TOKEN_READ` | read | GET requests only |
+| `CRUX_TOKEN_VERDICT` | verdict | POST to `/api/cases/{id}/verdict`, `/api/probes/{id}/verdict`, `/api/hub/verify-claim` |
+
+Rotate tokens by generating a new value, updating the caller, then updating the env var.
 
 ```bash
 # Required env vars

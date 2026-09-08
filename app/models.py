@@ -202,6 +202,19 @@ class Verdict(Base):
     probe = relationship("Probe", back_populates="verdicts")
 
 
+class ClaimVerification(Base):
+    """Persisted result of a hub claim-verification request."""
+
+    __tablename__ = "claim_verification"
+
+    id = Column(String(36), primary_key=True, default=_uuid)
+    claim = Column(Text, nullable=False)
+    claim_hash = Column(String(64), nullable=False, index=True)  # sha256 of stripped lower claim
+    context_json = Column(JSON, nullable=True)
+    sources_json = Column(JSON, nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=True)
+
+
 class CaseEmbedding(Base):
     __tablename__ = "case_embedding"
 
