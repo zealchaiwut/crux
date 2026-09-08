@@ -201,7 +201,7 @@ def test_verdict_token_allows_probe_verdict_post(monkeypatch):
 def test_verdict_token_allows_hub_verify_claim(monkeypatch):
     """Verdict-scoped token can POST to /api/hub/verify-claim (content-post verdicts)."""
     monkeypatch.setattr("app.main._TOKEN_VERDICT", _VERDICT_TOKEN)
-    client = fresh_client()
+    client = fresh_client(raise_server_exceptions=False)
     resp = client.post(
         "/api/hub/verify-claim",
         json={"claim": "some claim text"},
