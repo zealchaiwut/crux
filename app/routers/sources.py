@@ -187,7 +187,6 @@ _SUPPORT_STATUS_VALUES = ("supports", "partial", "contradicts", "unverified")
 class VerifySourceRequest(BaseModel):
     support_status: Literal["supports", "partial", "contradicts", "unverified"]
     support_rationale: str | None = Field(None, max_length=4000)
-    rationale: str | None = Field(None, max_length=4000)
 
 
 # ---------------------------------------------------------------------------
@@ -206,8 +205,7 @@ def verify_source(
 
     source.support_status = body.support_status
     source.support_rationale = body.support_rationale
-    if body.rationale is not None:
-        source.rationale = body.rationale
+    source.rationale = body.support_rationale
     db.commit()
     db.refresh(source)
     return _source_to_dict(source)
