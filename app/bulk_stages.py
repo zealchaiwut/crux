@@ -26,6 +26,8 @@ _log = logging.getLogger(__name__)
 
 _VALID_KINDS = frozenset({"book", "article", "youtube"})
 
+CRUX_BULK_SOURCE_CHARS: int = 4000
+
 
 # ---------------------------------------------------------------------------
 # Per-source content summary
@@ -55,7 +57,7 @@ async def content_summary(source_text: str, source_title: str) -> str:
 
     Returns a 1-3 sentence factual summary string.
     """
-    user = f"Source title: {source_title}\n\nSource text:\n{source_text[:4000]}"
+    user = f"Source title: {source_title}\n\nSource text:\n{source_text[:CRUX_BULK_SOURCE_CHARS]}"
     result = await call_bulk_stage(
         _CONTENT_SUMMARY_SYSTEM, user, "content_summary", _CONTENT_SUMMARY_SCHEMA
     )
@@ -66,7 +68,7 @@ async def content_summary(source_text: str, source_title: str) -> str:
 
 def content_summary_sync(source_text: str, source_title: str) -> str:
     """Synchronous version of content_summary."""
-    user = f"Source title: {source_title}\n\nSource text:\n{source_text[:4000]}"
+    user = f"Source title: {source_title}\n\nSource text:\n{source_text[:CRUX_BULK_SOURCE_CHARS]}"
     result = call_bulk_stage_sync(
         _CONTENT_SUMMARY_SYSTEM, user, "content_summary", _CONTENT_SUMMARY_SCHEMA
     )
