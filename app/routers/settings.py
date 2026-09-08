@@ -22,6 +22,7 @@ class SettingsResponse(BaseModel):
     api_usd_spent: float
     api_usd_remaining: float
     api_key_present: bool
+    groq_usd_spent: float
 
 
 class UpdateSettingsRequest(BaseModel):
@@ -50,6 +51,7 @@ def _view(s: dict) -> SettingsResponse:
         api_usd_spent=s["api_usd_spent"],
         api_usd_remaining=settings_store.budget_remaining(s),
         api_key_present=api_key_present(),
+        groq_usd_spent=s.get("groq_usd_spent", 0.0),
     )
 
 

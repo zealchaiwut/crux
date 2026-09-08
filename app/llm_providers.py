@@ -117,7 +117,7 @@ class GroqProvider:
                 f"Anthropic spend: ${settings['api_usd_spent']:.6f}"
             )
 
-    def _record_spend(self, model: str, usage: dict) -> float:
+    def _record_spend(self, model: str, usage: dict) -> dict:
         from app import settings_store
         cost = self._groq_cost_usd(model, usage)
         prompt_tokens = usage.get("prompt_tokens", 0) or 0
@@ -127,7 +127,7 @@ class GroqProvider:
             model, prompt_tokens, completion_tokens, cost,
         )
         settings_store.add_groq_spend(cost)
-        return cost
+        return {"tokens_in": prompt_tokens, "tokens_out": completion_tokens, "usd": cost}
 
     async def complete(self, system: str, user: str, model: str | None = None) -> str:
         from app.claude_cli import _strip_fences
