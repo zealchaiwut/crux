@@ -13,3 +13,11 @@ services:
         value: "3.12.0"
       - key: AUTH_SECRET
         sync: false
+      - key: CRUX_DISABLE_AUTH
+        value: "0"
+      - key: CRUX_TOKEN_READ
+        sync: false
+      - key: CRUX_TOKEN_WRITE
+        sync: false
+      - key: CRUX_TOKEN_VERDICT
+        sync: false
