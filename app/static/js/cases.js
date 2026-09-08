@@ -688,7 +688,7 @@ function SourceDetailModal({
   }
 
   // Keep a ref to the latest handleClose so the bind-once keydown listener below
-  // always invokes the current version without a stale closure (issue #183).
+  // always invokes the current version without a stale closure.
   const handleCloseRef = React.useRef(handleClose);
   handleCloseRef.current = handleClose;
 
