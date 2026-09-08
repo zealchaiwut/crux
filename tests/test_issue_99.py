@@ -122,7 +122,7 @@ def test_verify_source_success(api_client, db_session):
 
     r = api_client.post(
         f"/api/sources/{source.id}/verify",
-        json={"support_status": "supports", "rationale": "Directly cites the statistic."},
+        json={"support_status": "supports", "support_rationale": "Directly cites the statistic."},
     )
     assert r.status_code == 200, r.text
     data = r.json()
@@ -166,11 +166,11 @@ def test_verify_source_overwrites_prior(api_client, db_session):
 
     api_client.post(
         f"/api/sources/{source.id}/verify",
-        json={"support_status": "supports", "rationale": "Initial rationale."},
+        json={"support_status": "supports", "support_rationale": "Initial rationale."},
     )
     r2 = api_client.post(
         f"/api/sources/{source.id}/verify",
-        json={"support_status": "contradicts", "rationale": "Updated rationale."},
+        json={"support_status": "contradicts", "support_rationale": "Updated rationale."},
     )
     assert r2.status_code == 200, r2.text
     assert r2.json()["support_status"] == "contradicts"
@@ -186,7 +186,7 @@ def test_verify_source_persisted_to_db(api_client, db_session):
 
     api_client.post(
         f"/api/sources/{source.id}/verify",
-        json={"support_status": "unverified", "rationale": "Ambiguous results."},
+        json={"support_status": "unverified", "support_rationale": "Ambiguous results."},
     )
     db_session.expire_all()
     src = db_session.query(models.Source).filter_by(id=source.id).first()

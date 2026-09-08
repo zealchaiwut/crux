@@ -136,7 +136,7 @@ class TestGetSourcesIncludesVerificationFields:
         sid = source_ids[0]
         api_client.post(
             f"/api/sources/{sid}/verify",
-            json={"support_status": "supports", "rationale": "Strongly supports the claim."},
+            json={"support_status": "supports", "support_rationale": "Strongly supports the claim."},
         )
         resp = api_client.get(f"/api/sources?plan_id={plan_id}")
         assert resp.status_code == 200
@@ -156,7 +156,7 @@ class TestCaseDetailIncludesVerificationFields:
         sid = source_ids[0]
         api_client.post(
             f"/api/sources/{sid}/verify",
-            json={"support_status": "contradicts", "rationale": "Does not align."},
+            json={"support_status": "contradicts", "support_rationale": "Does not align."},
         )
         resp = api_client.get(f"/api/cases/{case_id}")
         assert resp.status_code == 200
