@@ -1,11 +1,10 @@
-"""Stage 3 weigh service — calls Claude API to re-rank Plans against user context.
+"""Stage 3 weigh service — calls the judgment model to re-rank Plans against user context.
 
 PRODUCT.md §9: "LLM: Claude API for the stage prompts (sharpen, plans, weigh, probe design)."
 Stage 3 (weigh): plans + user context → re-ranked plans with ruled-in/ruled-out flags.
 """
-import json
 
-from app.claude_cli import ClaudeCLIError, complete
+from app.llm_providers import call_stage
 
 _MODEL = "claude-haiku-4-5-20251001"
 
@@ -18,22 +17,100 @@ _SYSTEM = (
     "Output ONLY a JSON array with one object per Plan. Each object must have these fields:\n"
     '  "label": the plan label ("A", "B", or "C")\n'
     '  "rank": integer 1–3 (1 = best fit for this user)\n'
-    '  "standing": one of "ruled-in", "ruled-out", or null (null = neutral/uncertain)\n\n'
+    '  "standing": one of "ruled-in", "ruled-out", or null (null = neutral/uncertain)\n'
+    '  "rationale": non-empty text explaining why this plan holds its rank position, '
+    "explicitly citing a specific source, document, URL, or data point gathered during research where relevant\n\n"
     "Rules:\n"
     "- Every plan must appear exactly once.\n"
     "- Ranks must be unique integers from 1 to the number of plans.\n"
     "- Use 'ruled-in' only when the evidence strongly supports this plan as the cause.\n"
     "- Use 'ruled-out' only when the evidence clearly contradicts this plan.\n"
+    "- The 'rationale' field is required on every plan object and must not be empty.\n"
     "- Return only the JSON array — no markdown fences, no commentary."
 )
+
+_SCHEMA_NAME = "weigh_output"
+_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "rankings": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "label": {"type": "string"},
+                    "rank": {"type": "integer"},
+                    "standing": {"type": ["string", "null"]},
+                    "rationale": {"type": "string"},
+                },
+                "required": ["label", "rank", "standing", "rationale"],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["rankings"],
+    "additionalProperties": False,
+}
+
+
+CONTRADICTED_MULTIPLIER = 0.5
+"""Score multiplier applied per 'contradicts' source when applying verification penalties."""
 
 
 class WeighError(Exception):
     """Raised when the Claude call fails or returns unparseable output."""
 
 
+def apply_source_penalties(
+    ranked: list[dict],
+    plans_with_sources: list[dict],
+) -> list[dict]:
+    """Re-rank plans by applying a penalty for each 'contradicts' source.
+
+    Args:
+        ranked: Output from rerank_plans — list of {label, rank, standing, rationale}.
+        plans_with_sources: Plans with source lists — [{label, sources: [{support_status, ...}]}].
+
+    Returns:
+        Re-sorted list with additional per-item fields:
+          raw_score          — score derived from the original Claude rank (higher = better)
+          adjusted_score     — score after applying CONTRADICTED_MULTIPLIER per contradicted source
+          contradicted_sources — list of titles/ids of sources with support_status='contradicts'
+    """
+    n = len(ranked)
+    sources_by_label: dict[str, list[dict]] = {
+        p["label"]: p.get("sources") or [] for p in plans_with_sources
+    }
+
+    enriched = []
+    for item in ranked:
+        label = item["label"]
+        raw_score = float(n - item["rank"] + 1)
+        sources = sources_by_label.get(label, [])
+        contradicted = [s for s in sources if s.get("support_status") == "contradicts"]
+        multiplier = CONTRADICTED_MULTIPLIER ** len(contradicted)
+        adjusted_score = raw_score * multiplier
+        enriched.append({
+            **item,
+            "raw_score": raw_score,
+            "adjusted_score": adjusted_score,
+            "contradicted_sources": [
+                s.get("title") or s.get("id") or "untitled" for s in contradicted
+            ],
+        })
+
+    # Sort by adjusted_score descending; break ties by original rank (ascending)
+    enriched.sort(key=lambda x: (-x["adjusted_score"], x["rank"]))
+
+    # Reassign ranks based on new order
+    for new_rank, item in enumerate(enriched, start=1):
+        item["rank"] = new_rank
+
+    return enriched
+
+
 async def rerank_plans(sharpened: str, plans: list[dict], context: str | None) -> list[dict]:
-    """Call Claude to re-rank plans against user context.
+    """Call the judgment model to re-rank plans against user context.
 
     context may be None or empty — in that case ranking is done on gathered sources alone.
     Returns list of dicts with keys: label, rank, standing (null|"ruled-in"|"ruled-out").
@@ -52,12 +129,19 @@ async def rerank_plans(sharpened: str, plans: list[dict], context: str | None) -
     )
 
     try:
-        text = await complete(_SYSTEM, user_message, _MODEL)
-    except ClaudeCLIError as exc:
-        raise WeighError(f"Claude call failed: {exc}") from exc
+        data = await call_stage(_SYSTEM, user_message, _MODEL, _SCHEMA_NAME, _JSON_SCHEMA)
+    except Exception as exc:
+        raise WeighError(f"LLM call failed: {exc}") from exc
 
     try:
-        result = json.loads(text)
+        # Structured output wraps rankings in {"rankings": [...]}; fallback returns bare list.
+        if isinstance(data, dict) and "rankings" in data:
+            result = data["rankings"]
+        elif isinstance(data, list):
+            result = data
+        else:
+            raise ValueError(f"unexpected response shape: {type(data).__name__}")
+
         if not isinstance(result, list) or len(result) != len(plans):
             raise ValueError(
                 f"expected list of {len(plans)} items, got {type(result).__name__} "
@@ -74,6 +158,11 @@ async def rerank_plans(sharpened: str, plans: list[dict], context: str | None) -
                 raise ValueError(f"invalid rank: {item['rank']}")
             if item["standing"] not in valid_standings:
                 raise ValueError(f"invalid standing: {item['standing']}")
+            # Policy: non-empty only. The _SYSTEM prompt requires non-empty rationale text;
+            # no sentence-count constraint is enforced here or in the prompt.
+            rationale = item.get("rationale")
+            if not (isinstance(rationale, str) and rationale.strip()):
+                raise ValueError("rationale is required and must be a non-empty string")
         return result
-    except (KeyError, IndexError, ValueError, json.JSONDecodeError) as exc:
-        raise WeighError(f"Failed to parse Claude response: {exc}") from exc
+    except (KeyError, IndexError, ValueError) as exc:
+        raise WeighError(f"Failed to validate response: {exc}") from exc

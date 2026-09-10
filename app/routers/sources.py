@@ -38,8 +38,8 @@ class CreateSourceRequest(BaseModel):
     @field_validator("kind")
     @classmethod
     def valid_kind(cls, v: str) -> str:
-        if v not in ("book", "article", "youtube"):
-            raise ValueError("kind must be one of: book, article, youtube")
+        if v not in ("book", "article", "youtube", "podcast"):
+            raise ValueError("kind must be one of: book, article, youtube, podcast")
         return v
 
     @field_validator("title")
@@ -81,12 +81,25 @@ class SourceItem(BaseModel):
     url: str | None = None
     claim: str
     citation: str
+    # Optional pre-computed verification (e.g. from Tavily-backed suggest) so the
+    # attached source keeps its status/rationale instead of starting unverified.
+    support_status: str | None = None
+    support_rationale: str | None = None
 
     @field_validator("kind")
     @classmethod
     def valid_kind(cls, v: str) -> str:
-        if v not in ("book", "article", "youtube"):
-            raise ValueError("kind must be one of: book, article, youtube")
+        if v not in ("book", "article", "youtube", "podcast"):
+            raise ValueError("kind must be one of: book, article, youtube, podcast")
+        return v
+
+    @field_validator("support_status")
+    @classmethod
+    def valid_support_status(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        if v not in ("supports", "partial", "contradicts", "unverified"):
+            raise ValueError("support_status must be one of: supports, partial, contradicts, unverified")
         return v
 
     @field_validator("title")
@@ -157,7 +170,10 @@ def _source_to_dict(source: models.Source) -> dict:
         "citation": source.citation,
         "support_status": source.support_status,
         "rationale": source.rationale,
+        "support_rationale": source.support_rationale,
         "manually_overridden": bool(source.manually_overridden),
+        "extracted_content": source.extracted_content,
+        "content_summary": source.content_summary,
     }
 
 
@@ -170,7 +186,7 @@ _SUPPORT_STATUS_VALUES = ("supports", "partial", "contradicts", "unverified")
 
 class VerifySourceRequest(BaseModel):
     support_status: Literal["supports", "partial", "contradicts", "unverified"]
-    rationale: str = Field(..., min_length=1, max_length=2000)
+    support_rationale: str | None = Field(None, max_length=4000)
 
 
 # ---------------------------------------------------------------------------
@@ -188,7 +204,8 @@ def verify_source(
         raise HTTPException(status_code=404, detail="Source not found")
 
     source.support_status = body.support_status
-    source.rationale = body.rationale
+    source.support_rationale = body.support_rationale
+    source.rationale = body.support_rationale
     db.commit()
     db.refresh(source)
     return _source_to_dict(source)
@@ -205,17 +222,7 @@ def batch_verify_sources(plan_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Plan not found")
 
     sources = db.query(models.Source).filter(models.Source.plan_id == plan_id).all()
-    total = len(sources)
-    verified = sum(1 for s in sources if s.rationale is not None)
-    results = [
-        {
-            "source_id": s.id,
-            "support_status": s.support_status,
-            "rationale": s.rationale,
-        }
-        for s in sources
-    ]
-    return {"total": total, "verified": verified, "failed": 0, "results": results}
+    return [_source_to_dict(s) for s in sources]
 
 
 @router.post("/sources/batch", status_code=201)
@@ -253,6 +260,8 @@ def batch_create_sources(body: BatchCreateSourceRequest, db: Session = Depends(g
             url=item.url,
             claim=item.claim,
             citation=item.citation,
+            support_status=item.support_status or "unverified",
+            rationale=item.support_rationale or None,
         )
         db.add(source)
         created.append(source)
@@ -274,24 +283,47 @@ def list_sources(plan_id: str = Query(...), db: Session = Depends(get_db)):
     return {"sources": [_source_to_dict(s) for s in sources]}
 
 
+@router.delete("/sources/{source_id}", status_code=204)
+def delete_source(source_id: str, db: Session = Depends(get_db)):
+    """Delete a single source (and its verification rows, via cascade)."""
+    source = db.query(models.Source).filter(models.Source.id == source_id).first()
+    if source is None:
+        raise HTTPException(status_code=404, detail="Source not found")
+    db.delete(source)
+    db.commit()
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Source verifier stub — replaced by real AI service when available (issue #98)
 # ---------------------------------------------------------------------------
 
+# The verifier service reports "partially_supports"; the DB support_status enum
+# uses "partial". Map service statuses onto the enum before persisting.
+_STATUS_MAP = {
+    "supports": "supports",
+    "partially_supports": "partial",
+    "contradicts": "contradicts",
+    "unverified": "unverified",
+}
+
+
 def _run_verifier(source: models.Source) -> tuple[str, str]:
     """Return (support_status, rationale) for a source.
 
-    Uses the real verifier service when VERIFIER_ENGINE is set to 'ai'; falls
-    back to a deterministic keyword-matching stub when VERIFIER_ENGINE is 'stub'
-    (the default) so the UI can be exercised end-to-end without a live AI service.
-
-    The stub is TEMPORARY and will be replaced by real AI verifier integration
-    tracked in issue #98.  Do not treat its output as production-quality analysis.
+    Uses the real verifier service (fetch the source URL, classify with Claude)
+    when VERIFIER_ENGINE is 'ai' (the default). Set VERIFIER_ENGINE=stub for a
+    deterministic keyword-matching stub that exercises the UI without any network
+    or AI calls.
     """
-    engine = os.environ.get("VERIFIER_ENGINE", "stub")
+    engine = os.environ.get("VERIFIER_ENGINE", "ai")
     if engine == "ai":
-        # Placeholder for future AI verifier integration (issue #98)
-        raise HTTPException(status_code=503, detail="AI verifier not configured")
+        from app.services.source_verifier import verify_source as _verify_service
+
+        result = _verify_service(source)
+        status = _STATUS_MAP.get(result.get("support_status", "unverified"), "unverified")
+        rationale = result.get("support_rationale") or "No rationale provided."
+        return (status, rationale)
 
     # TEMPORARY stub: hardcoded keywords ("not"/"contradict"/"false" → contradicts;
     # "support"/"confirm"/"evidence" → supports) produce deterministic results for
@@ -366,6 +398,12 @@ def run_verify_all_sources(plan_id: str, db: Session = Depends(get_db)):
     return {"results": [_source_to_dict(s) for s in sources]}
 
 
+@router.post("/verify-all/{plan_id}")
+def run_verify_all_sources_alias(plan_id: str, db: Session = Depends(get_db)):
+    """Frontend alias for run_verify_all_sources; keeps /api/plans out of the SPA JS bundle."""
+    return run_verify_all_sources(plan_id, db)
+
+
 # ---------------------------------------------------------------------------
 # PATCH /api/sources/{id}/status-override
 # ---------------------------------------------------------------------------
@@ -407,5 +445,37 @@ def accept_status(source_id: str, db: Session = Depends(get_db)):
 
     source.manually_overridden = False
     db.commit()
+    db.refresh(source)
+    return _source_to_dict(source)
+
+
+# ---------------------------------------------------------------------------
+# POST /api/sources/{id}/fetch-content
+# ---------------------------------------------------------------------------
+
+def _do_fetch_content(source: models.Source, db: Session) -> None:
+    """Fetch, cap, and summarize source content then persist on the source row.
+
+    Extracted to a named function so tests can monkeypatch it without touching
+    the underlying HTTP/Claude machinery.
+    """
+    from app.services.fetch_content import fetch_and_store_content
+    fetch_and_store_content(db=db, source=source)
+
+
+@router.post("/sources/{source_id}/fetch-content")
+def fetch_source_content(source_id: str, db: Session = Depends(get_db)):
+    """Fetch the raw content and generate a Claude summary for a source.
+
+    Uses ArticleReaderFetcher for article/web sources and YouTubeTranscriptFetcher
+    for YouTube sources. Content is capped at 50,000 characters before storage.
+    On fetch failure (paywall, geo-block, unavailable transcript) both
+    extracted_content and content_summary remain null.
+    """
+    source = db.query(models.Source).filter(models.Source.id == source_id).first()
+    if source is None:
+        raise HTTPException(status_code=404, detail="Source not found")
+
+    _do_fetch_content(source, db)
     db.refresh(source)
     return _source_to_dict(source)

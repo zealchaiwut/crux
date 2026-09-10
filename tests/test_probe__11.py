@@ -133,6 +133,43 @@ _MOCK_PROBE_RESULT_PROTOTYPE = {
     "note": "Build a minimal prototype and measure task completion rate against baseline.",
 }
 
+# Three-probe mock for design_probes (issue #168)
+_MOCK_THREE_PROBES = [
+    {
+        "horizon": "short",
+        "type": "measurement",
+        "target_metric": "resting HRV (7-day average)",
+        "cost": "free",
+        "time": "7 days",
+        "note": "Measure resting HRV each morning for 7 days and compare to baseline.",
+        "steps": ["Download HRV app", "Measure each morning at wake-up", "Log readings"],
+        "duration": "7 days",
+        "decision_rule": "If HRV drops >10% vs baseline → early signal of overtraining",
+    },
+    {
+        "horizon": "mid",
+        "type": "behaviour-experiment",
+        "target_metric": "weekly average run pace at same heart rate",
+        "cost": "free",
+        "time": "3 weeks",
+        "note": "Reduce training load by 20% for 3 weeks and track pace recovery.",
+        "steps": ["Reduce weekly mileage by 20%", "Keep heart rate zones identical", "Log pace weekly"],
+        "duration": "3 weeks",
+        "decision_rule": "If pace improves >5% vs baseline week → overtraining confirmed",
+    },
+    {
+        "horizon": "long",
+        "type": "lab-test",
+        "target_metric": "serum ferritin + full blood count",
+        "cost": "~£40",
+        "time": "6 weeks",
+        "note": "See GP for full blood count; supplement if ferritin < 30 µg/L.",
+        "steps": ["Book GP appointment", "Request full blood count", "If ferritin low, start supplement", "Retest after 6 weeks"],
+        "duration": "6 weeks",
+        "decision_rule": "If ferritin rises to ≥50 µg/L and pace recovers → iron deficiency confirmed",
+    },
+]
+
 
 # ---------------------------------------------------------------------------
 # Model / schema tests (AC2, AC4, AC5)
@@ -157,11 +194,14 @@ def test_probe_model_has_note_column():
 
 
 def test_probe_type_enum_has_four_values():
-    """AC2: Probe type enum must contain exactly the four valid types."""
+    """AC2: Probe type enum must contain the four original valid types (and may include
+    additional types added by later issues, e.g. 'content-post' from issue #204)."""
     from app import models
-    valid = {"measurement", "lab-test", "behaviour-experiment", "prototype"}
+    required = {"measurement", "lab-test", "behaviour-experiment", "prototype"}
     actual = set(models._PROBE_TYPE)
-    assert actual == valid, f"Expected probe types {valid}, got {actual}"
+    assert required.issubset(actual), (
+        f"Probe type enum must include all of {required}; got {actual}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -183,8 +223,8 @@ def test_probe_service_module_exists():
 def test_probe_endpoint_exists(api_client, db_session):
     """AC1: POST /api/cases/{id}/probe must exist and return 200."""
     c, _ = _seed_case_with_plans(db_session, stage="weigh")
-    with patch("app.routers.cases.design_probe", new_callable=AsyncMock,
-               return_value=_MOCK_PROBE_RESULT):
+    with patch("app.routers.cases.design_probes", new_callable=AsyncMock,
+               return_value=_MOCK_THREE_PROBES):
         r = api_client.post(f"/api/cases/{c.id}/probe")
     assert r.status_code == 200, r.text
 
@@ -218,15 +258,16 @@ def test_probe_endpoint_422_for_case_without_plans(api_client, db_session):
 # ---------------------------------------------------------------------------
 
 def test_probe_response_type_is_valid(api_client, db_session):
-    """AC2: The probe type in the API response must be one of the four valid types."""
+    """AC2: Each probe's type in the API response must be one of the four valid types."""
     c, _ = _seed_case_with_plans(db_session, stage="weigh")
-    with patch("app.routers.cases.design_probe", new_callable=AsyncMock,
-               return_value=_MOCK_PROBE_RESULT):
+    with patch("app.routers.cases.design_probes", new_callable=AsyncMock,
+               return_value=_MOCK_THREE_PROBES):
         r = api_client.post(f"/api/cases/{c.id}/probe")
     assert r.status_code == 200
     data = r.json()
     valid = {"measurement", "lab-test", "behaviour-experiment", "prototype"}
-    assert data["type"] in valid, f"probe type {data['type']!r} not in {valid}"
+    for probe in data["probes"]:
+        assert probe["type"] in valid, f"probe type {probe['type']!r} not in {valid}"
 
 
 # ---------------------------------------------------------------------------
@@ -234,16 +275,17 @@ def test_probe_response_type_is_valid(api_client, db_session):
 # ---------------------------------------------------------------------------
 
 def test_probe_response_includes_all_fields(api_client, db_session):
-    """AC4: Response must include type, target_metric, cost, time, note."""
+    """AC4: Each probe in response must include type, target_metric, cost, time, note."""
     c, _ = _seed_case_with_plans(db_session, stage="weigh")
-    with patch("app.routers.cases.design_probe", new_callable=AsyncMock,
-               return_value=_MOCK_PROBE_RESULT):
+    with patch("app.routers.cases.design_probes", new_callable=AsyncMock,
+               return_value=_MOCK_THREE_PROBES):
         r = api_client.post(f"/api/cases/{c.id}/probe")
     assert r.status_code == 200
     data = r.json()
-    for field in ("type", "target_metric", "cost", "time", "note"):
-        assert field in data, f"Response missing field: {field}"
-        assert data[field], f"Field {field!r} must be non-empty"
+    for probe in data["probes"]:
+        for field in ("type", "target_metric", "cost", "time", "note"):
+            assert field in probe, f"Probe {probe.get('horizon')!r} missing field: {field}"
+            assert probe[field], f"Probe {probe.get('horizon')!r} field {field!r} must be non-empty"
 
 
 # ---------------------------------------------------------------------------
@@ -251,57 +293,59 @@ def test_probe_response_includes_all_fields(api_client, db_session):
 # ---------------------------------------------------------------------------
 
 def test_probe_persisted_to_db(api_client, db_session):
-    """AC5: After POST /api/cases/{id}/probe, a Probe row exists in the DB."""
+    """AC5: After POST /api/cases/{id}/probe, three Probe rows exist in the DB."""
     from app import models
     c, _ = _seed_case_with_plans(db_session, stage="weigh")
-    with patch("app.routers.cases.design_probe", new_callable=AsyncMock,
-               return_value=_MOCK_PROBE_RESULT):
+    with patch("app.routers.cases.design_probes", new_callable=AsyncMock,
+               return_value=_MOCK_THREE_PROBES):
         r = api_client.post(f"/api/cases/{c.id}/probe")
     assert r.status_code == 200
 
     db_session.expire_all()
-    probe = db_session.query(models.Probe).filter_by(case_id=c.id).first()
-    assert probe is not None, "A Probe row must be created in the DB"
+    count = db_session.query(models.Probe).filter_by(case_id=c.id).count()
+    assert count == 3, f"Three Probe rows must be created in the DB; found {count}"
 
 
 def test_probe_status_is_designed(api_client, db_session):
-    """AC5: The persisted Probe must have status='designed'."""
+    """AC5: All persisted Probes must have status='designed'."""
     from app import models
     c, _ = _seed_case_with_plans(db_session, stage="weigh")
-    with patch("app.routers.cases.design_probe", new_callable=AsyncMock,
-               return_value=_MOCK_PROBE_RESULT):
+    with patch("app.routers.cases.design_probes", new_callable=AsyncMock,
+               return_value=_MOCK_THREE_PROBES):
         api_client.post(f"/api/cases/{c.id}/probe")
 
     db_session.expire_all()
-    probe = db_session.query(models.Probe).filter_by(case_id=c.id).first()
-    assert probe is not None
-    assert probe.status == "designed", f"Expected status='designed', got {probe.status!r}"
+    probes = db_session.query(models.Probe).filter_by(case_id=c.id).all()
+    assert len(probes) == 3
+    for probe in probes:
+        assert probe.status == "designed", f"Expected status='designed', got {probe.status!r}"
 
 
 def test_probe_all_fields_persisted(api_client, db_session):
-    """AC5: All probe fields (type, target_metric, cost, time, note) are persisted."""
+    """AC5: All probe fields (type, target_metric, cost, time, note) are persisted for the short probe."""
     from app import models
     c, _ = _seed_case_with_plans(db_session, stage="weigh")
-    with patch("app.routers.cases.design_probe", new_callable=AsyncMock,
-               return_value=_MOCK_PROBE_RESULT):
+    with patch("app.routers.cases.design_probes", new_callable=AsyncMock,
+               return_value=_MOCK_THREE_PROBES):
         api_client.post(f"/api/cases/{c.id}/probe")
 
     db_session.expire_all()
-    probe = db_session.query(models.Probe).filter_by(case_id=c.id).first()
+    short_mock = next(p for p in _MOCK_THREE_PROBES if p["horizon"] == "short")
+    probe = db_session.query(models.Probe).filter_by(case_id=c.id, horizon="short").first()
     assert probe is not None
-    assert probe.type == _MOCK_PROBE_RESULT["type"]
-    assert probe.target_metric == _MOCK_PROBE_RESULT["target_metric"]
-    assert probe.cost == _MOCK_PROBE_RESULT["cost"]
-    assert probe.time == _MOCK_PROBE_RESULT["time"]
-    assert probe.note == _MOCK_PROBE_RESULT["note"]
+    assert probe.type == short_mock["type"]
+    assert probe.target_metric == short_mock["target_metric"]
+    assert probe.cost == short_mock["cost"]
+    assert probe.time == short_mock["time"]
+    assert probe.note == short_mock["note"]
 
 
 def test_probe_stage_advances_to_probe(api_client, db_session):
-    """AC5: After designing a probe, the Case stage advances to 'probe'."""
+    """AC5: After designing probes, the Case stage advances to 'probe'."""
     from app import models
     c, _ = _seed_case_with_plans(db_session, stage="weigh")
-    with patch("app.routers.cases.design_probe", new_callable=AsyncMock,
-               return_value=_MOCK_PROBE_RESULT):
+    with patch("app.routers.cases.design_probes", new_callable=AsyncMock,
+               return_value=_MOCK_THREE_PROBES):
         api_client.post(f"/api/cases/{c.id}/probe")
 
     db_session.expire_all()
@@ -310,21 +354,21 @@ def test_probe_stage_advances_to_probe(api_client, db_session):
 
 
 def test_probe_idempotent_second_call(api_client, db_session):
-    """AC5: A second POST /api/cases/{id}/probe returns the existing probe without creating a new one."""
+    """AC5: A second POST /api/cases/{id}/probe returns 200 and replaces probes (total stays at 3)."""
     from app import models
     c, _ = _seed_case_with_plans(db_session, stage="weigh")
-    with patch("app.routers.cases.design_probe", new_callable=AsyncMock,
-               return_value=_MOCK_PROBE_RESULT):
+    with patch("app.routers.cases.design_probes", new_callable=AsyncMock,
+               return_value=_MOCK_THREE_PROBES):
         api_client.post(f"/api/cases/{c.id}/probe")
 
-    with patch("app.routers.cases.design_probe", new_callable=AsyncMock,
-               return_value=_MOCK_PROBE_RESULT):
+    with patch("app.routers.cases.design_probes", new_callable=AsyncMock,
+               return_value=_MOCK_THREE_PROBES):
         r2 = api_client.post(f"/api/cases/{c.id}/probe")
     assert r2.status_code == 200
 
     db_session.expire_all()
     count = db_session.query(models.Probe).filter_by(case_id=c.id).count()
-    assert count == 1, f"Only one Probe row should exist; found {count}"
+    assert count == 3, f"Exactly 3 Probe rows must exist after re-probe; found {count}"
 
 
 # ---------------------------------------------------------------------------
@@ -332,20 +376,22 @@ def test_probe_idempotent_second_call(api_client, db_session):
 # ---------------------------------------------------------------------------
 
 def test_get_case_returns_probe_data(api_client, db_session):
-    """AC5: GET /api/cases/{id} returns probe data after probe is designed."""
+    """AC5: GET /api/cases/{id} returns probe data (probes list) after probe design."""
     c, _ = _seed_case_with_plans(db_session, stage="weigh")
-    with patch("app.routers.cases.design_probe", new_callable=AsyncMock,
-               return_value=_MOCK_PROBE_RESULT):
+    with patch("app.routers.cases.design_probes", new_callable=AsyncMock,
+               return_value=_MOCK_THREE_PROBES):
         api_client.post(f"/api/cases/{c.id}/probe")
 
     r = api_client.get(f"/api/cases/{c.id}")
     assert r.status_code == 200
     data = r.json()
-    assert "probe" in data, "GET /api/cases/{id} must include 'probe' field"
-    probe = data["probe"]
-    assert probe is not None
-    assert probe["type"] == _MOCK_PROBE_RESULT["type"]
-    assert probe["target_metric"] == _MOCK_PROBE_RESULT["target_metric"]
+    assert "probes" in data, "GET /api/cases/{id} must include 'probes' list"
+    probes = data["probes"]
+    assert len(probes) == 3, f"Expected 3 probes in GET response, got {len(probes)}"
+    short_mock = next(p for p in _MOCK_THREE_PROBES if p["horizon"] == "short")
+    short_probe = next(p for p in probes if p["horizon"] == "short")
+    assert short_probe["type"] == short_mock["type"]
+    assert short_probe["target_metric"] == short_mock["target_metric"]
 
 
 def test_get_case_probe_null_before_design(api_client, db_session):
@@ -366,7 +412,7 @@ def test_probe_502_on_claude_failure(api_client, db_session):
     """AC9: If Claude API fails, endpoint returns 502."""
     from app.probe import ProbeError
     c, _ = _seed_case_with_plans(db_session, stage="weigh")
-    with patch("app.routers.cases.design_probe", new_callable=AsyncMock,
+    with patch("app.routers.cases.design_probes", new_callable=AsyncMock,
                side_effect=ProbeError("API timeout")):
         r = api_client.post(f"/api/cases/{c.id}/probe")
     assert r.status_code == 502, f"Expected 502 on Claude failure, got {r.status_code}"
@@ -377,7 +423,7 @@ def test_probe_not_persisted_on_failure(api_client, db_session):
     from app import models
     from app.probe import ProbeError
     c, _ = _seed_case_with_plans(db_session, stage="weigh")
-    with patch("app.routers.cases.design_probe", new_callable=AsyncMock,
+    with patch("app.routers.cases.design_probes", new_callable=AsyncMock,
                side_effect=ProbeError("network error")):
         api_client.post(f"/api/cases/{c.id}/probe")
 
@@ -391,7 +437,7 @@ def test_probe_stage_unchanged_on_failure(api_client, db_session):
     from app import models
     from app.probe import ProbeError
     c, _ = _seed_case_with_plans(db_session, stage="weigh")
-    with patch("app.routers.cases.design_probe", new_callable=AsyncMock,
+    with patch("app.routers.cases.design_probes", new_callable=AsyncMock,
                side_effect=ProbeError("bad key")):
         api_client.post(f"/api/cases/{c.id}/probe")
 
@@ -407,7 +453,6 @@ def test_probe_stage_unchanged_on_failure(api_client, db_session):
 
 def test_probe_service_rejects_invalid_type():
     """AC2: ProbeError raised when Claude returns an invalid type."""
-    from app.probe import design_probe
 
     bad_response = {
         "type": "app",  # not in valid types

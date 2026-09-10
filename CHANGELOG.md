@@ -3,7 +3,74 @@
 Per-sprint changelog for crux. Entries are written by the documentor when a
 sprint finishes. Dated per-sprint files live under [docs/changelog/](docs/changelog/).
 
-<<<<<<< HEAD
+## Sprint 58 (2026-07-06)
+
+- #189: Add Groq as a switchable LLM provider
+- #190: Route judgment stages to provider with structured outputs
+- #191: Route bulk pipeline stages to CRUX_BULK_MODEL
+- #192: Wire Groq token spend into USD budget tracker
+- #193: Add Groq regression gate for known-deficit test case
+- #160: [follow-up] Use SQLAlchemy bindparams instead of f-string in SQL query in test_issue_153.py
+
+## Sprint 56.1 (2026-07-05)
+
+- #125: [follow-up] Add clarifying comment to _STAGE_ORDER definition
+- #141: [follow-up] Improve PlanCard rationale comment in cases.js
+- #161: [follow-up] Align source_verifier.py status vocabulary with Source model enum (partially_supports vs partial)
+
+## Sprint 56 (2026-07-05)
+
+- #124: [follow-up] Centralize verdict validation logic
+- #126: [follow-up] Add semicolon to .chip-expanded CSS rule
+- #137: [follow-up] Consolidate rationale validation in weigh.py
+- #138: [follow-up] Clarify rationale content requirements in weigh.py prompt
+- #139: [follow-up] Add explicit comment for rationale None handling in cases.py
+- #140: [follow-up] Resolve weigh context validation mismatch in #134
+- #142: [follow-up] Verify WeighPanel error messages don't reference 'required context' in #134
+- #160: [follow-up] Use SQLAlchemy bindparams instead of f-string in SQL query in test_issue_153.py
+- #162: [follow-up] handleAccept sets accepted=true before API call succeeds in SourceChip
+- #176: [follow-up] Return focus to SourceChip and trap focus in source detail modal
+- #177: [follow-up] Reject falsy source_id in summary reference validation
+- #178: [follow-up] Extract duplicated horizon sort-key helper in cases.py
+
+## Sprint 55 (2026-07-04)
+
+- #163: [follow-up] Remove redundant dict comprehension in summary.py json.dumps call
+- #168: Add horizon enum and generate three probes per case
+- #169: Render three horizon probes as grouped set in ProbeCard
+- #170: Gate action plan provisionally on first probe verdict
+- #171: Store extracted content and summary per source
+- #172: Add source detail modal to SourceChip click
+- #173: Rewrite case summary as cited literature-review JSON
+
+## Sprint 54 (2026-06-29)
+
+- #153: Add source-verification fields to Source model
+- #154: Add source verifier service to validate claims against fetched content
+- #155: Add source verification endpoints to sources router
+- #156: Colour SourceChip by support_status with verify actions
+- #157: Factor source verification status into ranking and summary
+- #158: Add unit tests for source verification and plan re-ranking
+
+## Sprint 53 (2026-06-27)
+
+- #144: Add summary column to Case model with migration
+- #145: Add app/summary.py: Claude-backed case conclusion synthesiser
+- #146: Add POST /api/cases/{id}/summary endpoint with caching
+- #147: Show Case Summary section at probe stage
+- #148: Split case summary from locked action plan gate
+- #149: Display steps, duration, and decision_rule in ProbeCard
+- #150: Add tests for summary endpoint and gate logic
+
+## Sprint 52 (2026-06-26)
+
+- #130: Fix WeighPanel not rendering in CaseDetailScreen
+- #131: Add rationale field to Weigh plan output
+- #132: Persist plan rationale from Weigh rerank response
+- #133: Render per-plan rationale text in PlanCard
+- #134: Make weigh context optional in WeighPanel UI
+- #135: Add tests for rerank rationale and WeighPanel regression
+
 ## Sprint 13 (2026-06-26)
 
 - #71: Wire _VALID_VERDICT_PARAMS into verdict query validation
@@ -19,7 +86,7 @@ sprint finishes. Dated per-sprint files live under [docs/changelog/](docs/change
 - #113: Extract inline font-size styles to .chip-expanded CSS class
 - #114: Move os import to module level in routers/sources.py
 - #115: Document VERIFIER_ENGINE env var and stub verifier in SCHEMA.md
-=======
+
 ## Sprint 12 (2026-06-25)
 
 - #36: [follow-up] Clarify httpx timeout semantics in commander spec generation
@@ -33,7 +100,6 @@ sprint finishes. Dated per-sprint files live under [docs/changelog/](docs/change
 - #54: [follow-up] GET /api/verdicts keyword search should filter at database layer
 - #55: [follow-up] GET /api/verdicts timestamp field null-handling
 - #56: [follow-up] GET /api/verdicts inconsistent empty-string vs None defaults
->>>>>>> origin/develop
 
 ## Sprint 11.1 (2026-06-24)
 

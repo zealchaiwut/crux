@@ -1,6 +1,6 @@
 # crux
 
-A personal research-and-diagnosis tool. It sharpens a messy problem into a falsifiable statement, generates competing root-cause hypotheses (A/B/C), researches each with cited sources, re-ranks them against your own data, designs the single cheapest experiment that settles it — then refuses to show an action plan until you log a test result.
+A personal research-and-diagnosis tool. It sharpens a messy problem into a falsifiable statement, generates competing root-cause hypotheses (A/B/C), researches each with cited sources, re-ranks them against your own data, designs three experiments that settle it across short/mid/long time horizons — then keeps the action plan locked until you log a probe verdict, showing it provisionally after the first verdict and finalising it once the long-horizon probe resolves.
 
 Companion to [commander](https://github.com/zealchaiwut/commander) (which builds the probe prototypes) and perf-coach (where winning prototypes graduate).
 
@@ -15,11 +15,7 @@ Companion to [commander](https://github.com/zealchaiwut/commander) (which builds
 
 ## Status
 
-<<<<<<< HEAD
-Thirteen sprints complete. All five pipeline stages are live:
-=======
-Twelve sprints complete. All five pipeline stages are live:
->>>>>>> origin/develop
+Sixteen sprints complete. All five pipeline stages are live:
 
 | Stage | Status |
 |---|---|
@@ -27,7 +23,7 @@ Twelve sprints complete. All five pipeline stages are live:
 | 1 — Bake-off (Plans A/B/C) | ✓ |
 | 2 — Gather (custom research loop) | ✓ |
 | 3 — Weigh (re-rank against your data) | ✓ |
-| 4 — Probe design + Commander spec | ✓ |
+| 4 — Probe design (short/mid/long horizons) + Commander spec | ✓ |
 | 5 — Verdict gate + action plan | ✓ |
 | Prior learnings (related-case recall) | ✓ |
 
@@ -60,12 +56,26 @@ GET /healthz  →  {"status": "ok", "env": "development"}
 
 ## Authentication
 
-All routes except `/login` require a valid session cookie. The login password is the value of `AUTH_SECRET`.
+Auth is **on by default**. All routes except `/login` require either:
+- a valid session cookie (browser flow — login via `POST /login` with `AUTH_SECRET` as the password), or
+- an `Authorization: Bearer <token>` header (service-to-service — three scopes: read, write, verdict).
+
+To disable auth entirely (single-user local dev), set `CRUX_DISABLE_AUTH=1`.
 
 ```bash
-# Generate a strong secret
+# Generate a strong secret or token
 python3 -c "import secrets; print(secrets.token_hex(32))"
 ```
+
+**Service token scopes:**
+
+| Token env var | Scope | Allowed requests |
+|---|---|---|
+| `CRUX_TOKEN_WRITE` | write | all requests |
+| `CRUX_TOKEN_READ` | read | GET requests only |
+| `CRUX_TOKEN_VERDICT` | verdict | POST to `/api/cases/{id}/verdict`, `/api/probes/{id}/verdict`, `/api/hub/verify-claim` |
+
+Rotate tokens by generating a new value, updating the caller, then updating the env var.
 
 ```bash
 # Required env vars
@@ -76,7 +86,19 @@ DATABASE_URL=<Neon Postgres connection string>
 ANTHROPIC_API_KEY=<Claude API key>          # needed for related-case embeddings, and for the optional "Anthropic API" provider
 EMBEDDING_MODEL=claude-haiku-4-5-20251001   # model used for related-case embeddings (issue #68)
 VERIFIER_ENGINE=stub                        # verification backend: stub (default, dev/testing only) or ai (issue #115)
+
+# LLM provider selection (issue #189) — default unset, uses the in-app Settings toggle
+CRUX_LLM_PROVIDER=groq                       # one of: groq | anthropic_api | claude_cli (issue #189)
+GROQ_API_KEY=<Groq API key>                  # required when CRUX_LLM_PROVIDER=groq; from console.groq.com (issue #189)
+CRUX_JUDGMENT_MODEL=openai/gpt-oss-120b      # Groq model for judgment stages: sharpen, plans, weigh, probe, summary (issues #189, #190)
+CRUX_BULK_MODEL=llama-3.1-8b-instant         # Groq model for high-volume bulk stages: content summary, dedup, candidate summarization (issue #191)
 ```
+
+When `CRUX_LLM_PROVIDER=groq`, the Groq (OpenAI-compatible) API is used exclusively:
+judgment stages use structured outputs (`response_format` JSON schema) via
+`CRUX_JUDGMENT_MODEL`, and bulk stages always route to `CRUX_BULK_MODEL`. Groq token
+spend is priced from per-model rates and counted against the same USD budget as the
+Anthropic API (issue #192).
 
 After migrating an existing database, backfill embeddings for pre-existing cases:
 
@@ -99,19 +121,21 @@ POST /api/cases                        # create a case
 POST /api/cases/sharpen                # sharpen a raw problem statement
 POST /api/cases/{case_id}/bake-off     # generate competing plans A/B/C
 POST /api/cases/{case_id}/rerank       # re-rank plans against user context
-POST /api/cases/{case_id}/probe        # design the cheapest decisive test (returns steps, duration, decision_rule)
-POST /api/cases/{case_id}/summary      # generate/cache AI case summary (probe stage onward); ?force=true regenerates
+POST /api/cases/{case_id}/probe        # design three probes (short/mid/long horizon) for the leading plan (issue #168)
+GET  /api/cases/{case_id}/summary      # cited literature-review case summary (probe stage onward); ?force=true regenerates (issue #173)
+GET  /api/cases/{case_id}/action-plan  # action-plan gate: 403 until a probe verdict is logged, else provisional/final state (issue #170)
 POST /api/cases/{case_id}/verdict      # log a verdict for the active probe
 
 GET  /api/sources?plan_id={id}         # list sources for a plan
 POST /api/sources                      # manually add a source
 POST /api/sources/batch                # add multiple sources in one transaction
-POST /api/sources/{id}/verify          # set support_status + rationale manually (issue #99)
-POST /api/plans/{plan_id}/verify-sources  # batch-set support_status for all sources in a plan (issue #99)
+POST /api/sources/{id}/verify          # set support_status + support_rationale (optional) manually (issues #99, #155)
+POST /api/plans/{plan_id}/verify-sources  # return full source objects for all sources in a plan (issues #99, #155)
 POST /api/sources/{id}/run-verify      # run fetch→Claude pipeline on one source; stores result in source_verification (issue #100)
 POST /api/plans/{plan_id}/run-verify-all  # run pipeline on all sources in a plan (issue #100)
 PATCH /api/sources/{id}/status-override   # override support_status, sets manually_overridden=true (issue #100)
 POST /api/sources/{id}/accept-status   # accept pipeline verdict onto the source row (issue #100)
+POST /api/sources/{id}/fetch-content   # fetch raw content + Claude summary; stores extracted_content, content_summary (issue #171)
 
 POST /api/plans/{plan_id}/gather         # run research loop for a plan
 POST /api/plans/{plan_id}/gather/suggest # return up to 5 ranked candidates without persisting
@@ -123,6 +147,7 @@ POST /api/cases/related-text               # find related cases by raw text (pre
 POST /api/cases/{case_id}/probe/commander-spec  # generate/cache commander spec; ?force=true regenerates
 
 PATCH /api/probes/{probe_id}/status        # update probe status; only designed→running is supported
+POST /api/probes/{probe_id}/verdict        # log a verdict against one horizon probe independently (issues #168, #170)
 
 GET  /api/verdicts                         # list all verdicts; ?outcome=confirmed|killed|inconclusive  ?q=keyword  ?keyword=keyword
 ```

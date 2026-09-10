@@ -1,3 +1,4 @@
+# ruff: noqa: E402
 import os
 from pathlib import Path
 
@@ -7,11 +8,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from fastapi import FastAPI, Form, Request
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.auth import (
+    check_bearer_scope,
     check_password,
     create_session_cookie,
     is_rate_limited,
@@ -20,8 +22,11 @@ from app.auth import (
 )
 from app.config import AUTH_SECRET, ENV
 from app.routers import (
+    action_plan_router,
     cases_router,
     gather_router,
+    hub_router,
+    notebooklm_router,
     probes_router,
     related_cases_router,
     settings_router,
@@ -49,28 +54,54 @@ _LOGIN_PAGE = """\
 
 _UNPROTECTED = {"/login"}
 
+# Auth is on by default. Set CRUX_DISABLE_AUTH=1 to turn it off (single-user local use).
+_REQUIRE_AUTH = os.environ.get("CRUX_DISABLE_AUTH", "") != "1"
 
-# Auth disabled for single-user local use. Set CRUX_REQUIRE_AUTH=1 to re-enable
-# the session-cookie gate (login page + AUTH_SECRET password).
-_REQUIRE_AUTH = os.environ.get("CRUX_REQUIRE_AUTH", "") == "1"
+# Service tokens for machine-to-machine auth (loaded from env at startup).
+_TOKEN_READ: str = os.environ.get("CRUX_TOKEN_READ", "")
+_TOKEN_WRITE: str = os.environ.get("CRUX_TOKEN_WRITE", "")
+_TOKEN_VERDICT: str = os.environ.get("CRUX_TOKEN_VERDICT", "")
 
 
 class _AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         if not _REQUIRE_AUTH or request.url.path in _UNPROTECTED:
             return await call_next(request)
-        token = request.cookies.get("session", "")
-        if not token or not verify_session_cookie(token, AUTH_SECRET):
-            return RedirectResponse(url="/login", status_code=302)
-        return await call_next(request)
+
+        # Browser session cookie
+        session_token = request.cookies.get("session", "")
+        if session_token and verify_session_cookie(session_token, AUTH_SECRET):
+            return await call_next(request)
+
+        # Service-to-service Bearer token
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            bearer = auth_header[7:]
+            known, allowed = check_bearer_scope(
+                bearer, request.method, request.url.path,
+                _TOKEN_READ, _TOKEN_WRITE, _TOKEN_VERDICT,
+            )
+            if known and allowed:
+                return await call_next(request)
+            if known and not allowed:
+                return JSONResponse(
+                    {"detail": "Token scope insufficient for this endpoint"},
+                    status_code=403,
+                )
+            return JSONResponse({"detail": "Invalid service token"}, status_code=401)
+
+        return RedirectResponse(url="/login", status_code=302)
 
 
 app = FastAPI(title="crux", version="0.1.0")
 app.add_middleware(_AuthMiddleware)
 
 app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
+app.include_router(action_plan_router)
 app.include_router(cases_router)
 app.include_router(gather_router)
+app.include_router(hub_router)
+app.include_router(notebooklm_router)
 app.include_router(probes_router)
 app.include_router(related_cases_router)
 app.include_router(settings_router)

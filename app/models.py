@@ -10,6 +10,7 @@ from sqlalchemy import (
     Column,
     Date,
     Enum,
+    Float,
     ForeignKey,
     Integer,
     Text,
@@ -21,10 +22,11 @@ Base = declarative_base()
 
 _STAGE = ("sharpened", "bake_off", "gather", "weigh", "probe", "verdict")
 _PLAN_LABEL = ("A", "B", "C")
-_SOURCE_KIND = ("book", "article", "youtube")
+_SOURCE_KIND = ("book", "article", "youtube", "podcast")
 _SUPPORT_STATUS = ("supports", "partial", "contradicts", "unverified")
-_PROBE_TYPE = ("measurement", "lab-test", "behaviour-experiment", "prototype")
+_PROBE_TYPE = ("measurement", "lab-test", "behaviour-experiment", "prototype", "content-post")
 _PROBE_STATUS = ("designed", "running", "confirmed", "killed", "inconclusive")
+_PROBE_HORIZON = ("short", "mid", "long")
 _VERDICT_OUTCOME = ("confirmed", "killed", "inconclusive")
 
 
@@ -44,6 +46,10 @@ class Case(Base):
     weigh_context = Column(Text)
 
     summary = Column(Text)
+
+    # NotebookLM debate-podcast artifacts (optional; set once generated).
+    notebooklm_url = Column(Text)
+    notebooklm_audio = Column(Text)
 
     plans = relationship(
         "Plan",
@@ -71,6 +77,7 @@ class Plan(Base):
     prior = Column(Text)
     current_rank = Column(Integer)
     standing = Column(Text)
+    rationale = Column(Text, nullable=True)
 
     case = relationship("Case", back_populates="plans")
     sources = relationship(
@@ -106,6 +113,8 @@ class Source(Base):
     rationale = Column(Text, nullable=True)
     support_rationale = Column(Text, nullable=True)
     manually_overridden = Column(Boolean, nullable=False, default=False)
+    extracted_content = Column(Text, nullable=True)
+    content_summary = Column(Text, nullable=True)
 
     plan = relationship("Plan", back_populates="sources")
     verifications = relationship(
@@ -157,12 +166,16 @@ class Probe(Base):
         nullable=False,
         default="designed",
     )
+    horizon = Column(
+        Enum(*_PROBE_HORIZON, name="probe_horizon_enum"),
+        nullable=True,
+    )
     due_date = Column(Date)
     commander_spec = Column(Text)
     created_at = Column(TIMESTAMP(timezone=True))
 
     case = relationship("Case", back_populates="probes")
-    verdicts = relationship("Verdict", back_populates="probe")
+    verdicts = relationship("Verdict", back_populates="probe", passive_deletes=True)
 
 
 class Verdict(Base):
@@ -184,7 +197,22 @@ class Verdict(Base):
     decided_at = Column(TIMESTAMP(timezone=True))
     created_at = Column(TIMESTAMP(timezone=True))
 
+    metric_value = Column(Float, nullable=True)
+
     probe = relationship("Probe", back_populates="verdicts")
+
+
+class ClaimVerification(Base):
+    """Persisted result of a hub claim-verification request."""
+
+    __tablename__ = "claim_verification"
+
+    id = Column(String(36), primary_key=True, default=_uuid)
+    claim = Column(Text, nullable=False)
+    claim_hash = Column(String(64), nullable=False, index=True)  # sha256 of stripped lower claim
+    context_json = Column(JSON, nullable=True)
+    sources_json = Column(JSON, nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=True)
 
 
 class CaseEmbedding(Base):

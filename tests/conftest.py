@@ -4,9 +4,9 @@ import pytest
 
 # Must be set before any app module is imported at collection time
 os.environ.setdefault("AUTH_SECRET", "test_auth_secret_12345678901")
-# Auth is off by default in the app (single-user local use); keep it ON for the
-# test suite so the session-cookie gate stays under test.
-os.environ.setdefault("CRUX_REQUIRE_AUTH", "1")
+# Auth is ON by default (issue #202). CRUX_DISABLE_AUTH=1 would turn it off;
+# we leave it unset in tests so the session-cookie and Bearer-token gates stay
+# under test.
 
 
 @pytest.fixture(autouse=True)

@@ -127,6 +127,50 @@ def _strip_fences(text: str) -> str:
     return text
 
 
+def extract_json(text: str) -> str:
+    """Return the first balanced JSON object/array found in ``text``.
+
+    ``claude -p`` runs as the full agent and, on vague input, sometimes replies
+    with prose or clarifying questions instead of the requested JSON — or wraps
+    the JSON in a sentence. Fenced blocks are handled by ``_strip_fences``; this
+    additionally digs a bare ``{...}`` / ``[...]`` object out of surrounding
+    prose so callers don't choke on a leading char-0 parse error.
+
+    Raises ``ValueError`` when no balanced JSON structure is present.
+    """
+    text = _strip_fences(text)
+    start = min(
+        (i for i in (text.find("{"), text.find("[")) if i != -1),
+        default=-1,
+    )
+    if start == -1:
+        raise ValueError("no JSON object found in response")
+    open_ch = text[start]
+    close_ch = "}" if open_ch == "{" else "]"
+    depth = 0
+    in_str = False
+    escaped = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if in_str:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == open_ch:
+            depth += 1
+        elif ch == close_ch:
+            depth -= 1
+            if depth == 0:
+                return text[start : i + 1]
+    raise ValueError("unterminated JSON object in response")
+
+
 def _build_args(system: str, model: str | None) -> list[str]:
     # --system-prompt REPLACES Claude Code's default agent prompt. We need that:
     # appending leaves the conversational coding-agent prompt in control, which
@@ -222,6 +266,39 @@ def _api_complete_sync(system: str, user: str, model: str | None) -> tuple[str, 
 
 
 # ---------------------------------------------------------------------------
+# Named provider classes (issue #189)
+# ---------------------------------------------------------------------------
+
+
+class ClaudeCLIProvider:
+    """Provider that dispatches to the local ``claude -p`` CLI subprocess."""
+
+    supports_structured_output: bool = False
+
+    async def complete(self, system: str, user: str, model: str | None = None) -> str:
+        return await _cli_complete(system, user, model)
+
+    def complete_sync(self, system: str, user: str, model: str | None = None) -> str:
+        return _cli_complete_sync(system, user, model)
+
+
+class AnthropicAPIProvider:
+    """Provider that calls the Anthropic HTTP API directly."""
+
+    supports_structured_output: bool = False
+
+    async def complete(self, system: str, user: str, model: str | None = None) -> str:
+        text, cost = await _api_complete(system, user, model)
+        settings_store.add_spend(cost)
+        return text
+
+    def complete_sync(self, system: str, user: str, model: str | None = None) -> str:
+        text, cost = _api_complete_sync(system, user, model)
+        settings_store.add_spend(cost)
+        return text
+
+
+# ---------------------------------------------------------------------------
 # Provider dispatch
 # ---------------------------------------------------------------------------
 
@@ -229,10 +306,15 @@ def _api_complete_sync(system: str, user: str, model: str | None) -> tuple[str, 
 async def complete(system: str, user: str, model: str | None = None) -> str:
     """Run a one-shot prompt via the configured provider; fall back to CLI.
 
-    API path is used when selected, keyed, and under budget; on success its USD
-    cost is recorded. Any API failure (or exhausted budget) falls through to the
-    CLI so the pipeline keeps working.
+    When CRUX_LLM_PROVIDER is set, the named provider is used exclusively.
+    Otherwise falls back to the settings_store runtime toggle (api vs cli)
+    with automatic CLI fallback on API failure or budget exhaustion.
     """
+    from app.llm_providers import get_provider
+    provider = get_provider()
+    if provider is not None:
+        return await provider.complete(system, user, model)
+
     settings = settings_store.get_settings()
     if _use_api(settings):
         try:
@@ -247,6 +329,11 @@ async def complete(system: str, user: str, model: str | None = None) -> str:
 
 def complete_sync(system: str, user: str, model: str | None = None) -> str:
     """Blocking variant of :func:`complete` with the same provider dispatch."""
+    from app.llm_providers import get_provider
+    provider = get_provider()
+    if provider is not None:
+        return provider.complete_sync(system, user, model)
+
     settings = settings_store.get_settings()
     if _use_api(settings):
         try:

@@ -1,6 +1,6 @@
 # Schema
 
-Database: Neon Postgres. Migrations managed by Alembic (revision `n4o5p6q7r8s9`).
+Database: Neon Postgres. Migrations managed by Alembic (revision `q7r8s9t0u1v2`).
 
 ## Enum types
 
@@ -9,9 +9,10 @@ Database: Neon Postgres. Migrations managed by Alembic (revision `n4o5p6q7r8s9`)
 | `stage_enum` | `sharpened`, `bake_off`, `gather`, `weigh`, `probe`, `verdict` |
 | `plan_label_enum` | `A`, `B`, `C` |
 | `source_kind_enum` | `book`, `article`, `youtube` |
-| `support_status_enum` | `supports`, `contradicts`, `neutral`, `inconclusive` |
+| `support_status_enum` | `supports`, `partial`, `contradicts`, `unverified` |
 | `probe_type_enum` | `measurement`, `lab-test`, `behaviour-experiment`, `prototype` |
 | `probe_status_enum` | `designed`, `running`, `confirmed`, `killed`, `inconclusive` |
+| `probe_horizon_enum` | `short`, `mid`, `long` (issue #168) |
 | `verdict_outcome_enum` | `confirmed`, `killed`, `inconclusive` |
 
 ## Tables
@@ -41,6 +42,7 @@ Database: Neon Postgres. Migrations managed by Alembic (revision `n4o5p6q7r8s9`)
 | `prior` | text | |
 | `current_rank` | integer | |
 | `standing` | text | Qualitative re-rank status: `ruled-in`, `ruled-out`, or null (issue #10) |
+| `rationale` | text | nullable — 1–2 sentence LLM-generated explanation of why this plan holds its rank, citing a specific source or data point where relevant (issues #131, #132) |
 
 ### `source`
 
@@ -53,9 +55,11 @@ Database: Neon Postgres. Migrations managed by Alembic (revision `n4o5p6q7r8s9`)
 | `url` | text | |
 | `claim` | text | |
 | `citation` | text | |
-| `support_status` | support_status_enum | nullable — set via POST /api/sources/{id}/verify (issue #99) |
-| `rationale` | text | nullable — free-text explanation of verification result (issue #99) |
+| `support_status` | support_status_enum | NOT NULL, default `unverified` — updated enum values in sprint 54 (issue #153) |
+| `support_rationale` | text | nullable — free-text explanation of verification result; replaces `rationale` column (issues #99, #155) |
 | `manually_overridden` | boolean | NOT NULL, default false — true when support_status was set by user override (issue #100) |
+| `extracted_content` | text | nullable — raw fetched source content, capped at 50,000 chars with a `[TRUNCATED]` sentinel; stays null on fetch failure (issue #171) |
+| `content_summary` | text | nullable — Claude-generated neutral 2–4 sentence summary of the source's own content, independent of support status (issue #171) |
 
 ### `source_verification`
 
@@ -85,6 +89,7 @@ Added in sprint 11 (issue #99). Stores raw pipeline results from the fetch→Cla
 | `duration` | text | How long to run the probe, e.g. "7 days" (issue #93) |
 | `decision_rule` | text | Confirmatory outcome and kill condition, e.g. "if X ≥ Y → proceed" (issue #93) |
 | `status` | probe_status_enum | NOT NULL, default `designed` |
+| `horizon` | probe_horizon_enum | nullable — `short`, `mid`, or `long`; each case now holds three probes, one per horizon (issue #168) |
 | `due_date` | date | |
 | `commander_spec` | text | |
 
@@ -104,6 +109,27 @@ Added in sprint 11 (issue #99). Stores raw pipeline results from the fetch→Cla
 | Variable | Values | Notes |
 |---|---|---|
 | `VERIFIER_ENGINE` | `stub` (default), `ai` | Controls which verification backend is used. **`stub` is for development and testing only — it is not production-ready.** The stub uses hardcoded keyword matching to produce deterministic results so the UI can be exercised without a live AI service. Set to `ai` when a real AI verifier is configured (tracked in issue #98). |
+| `CRUX_LLM_PROVIDER` | `""` (default), `groq`, `anthropic_api`, `claude_cli` | Selects the LLM backend for pipeline stages. When unset, falls through to the in-app Settings toggle (`cli` vs `api`). When set, that provider is used exclusively. Invalid values or `groq` without `GROQ_API_KEY` abort startup (issue #189). |
+| `GROQ_API_KEY` | Groq API key | Required when `CRUX_LLM_PROVIDER=groq`. Obtain from console.groq.com (issue #189). |
+| `CRUX_JUDGMENT_MODEL` | model id (default `openai/gpt-oss-120b`) | Groq model for judgment stages (sharpen, plans, weigh, probe, summary), called with structured outputs (issues #189, #190). |
+| `CRUX_BULK_MODEL` | model id (default `llama-3.1-8b-instant`) | Groq model for high-volume bulk stages (content summary, dedup, candidate summarization); bulk stages always route here regardless of caller (issue #191). |
+
+## Verdict gate
+
+`GET /api/cases/{id}` enforces a server-side verdict gate on the `plans` field (issue #201):
+
+| Condition | `plans` value |
+|---|---|
+| Case has **no probe** yet (stages: sharpened, bake_off, gather, weigh) | Full ranked plan list |
+| Case has a probe but **no verdict** has been logged | `null` — plans are locked |
+| Case has a probe and **a verdict exists** | Full ranked plan list |
+
+This is a **server guarantee**, not a UI convention. The JavaScript layer enforces the same
+rule visually, but machine callers (e.g. viral-radar) that call the API directly are also
+subject to this gate. Clients must handle `plans: null` and treat it as a locked state.
+
+The `summary` field is **not** gated by verdict — it is available once the case reaches the
+probe stage regardless of verdict state (see issue #148).
 
 ### `case_embedding`
 

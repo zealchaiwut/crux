@@ -8,6 +8,7 @@ psycopg2-binary==2.9.12
 itsdangerous==2.2.0
 python-multipart==0.0.32
 aiofiles==24.1.0
+notebooklm-py==0.7.3
 
 # Transitive dependencies
 annotated-types==0.7.0

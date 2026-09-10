@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Callable
 
 from .types import Plan, SearchQuery
@@ -23,7 +24,13 @@ class LLMQueryPlanner:
             f"Return one search query per line."
         )
         response = self._llm(prompt)
-        lines = [line.strip() for line in response.splitlines() if line.strip()]
+        # Strip common list markers ("- ", "* ", "1. ") the model prepends so
+        # they don't pollute the search query text.
+        lines = []
+        for line in response.splitlines():
+            cleaned = re.sub(r"^\s*(?:[-*•]|\d+[.)])\s+", "", line).strip()
+            if cleaned:
+                lines.append(cleaned)
         if not lines:
             return []
         return [SearchQuery(query=line) for line in lines]
